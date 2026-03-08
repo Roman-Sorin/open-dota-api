@@ -1,4 +1,5 @@
 ﻿from pathlib import Path
+import inspect
 import sys
 
 import streamlit as st
@@ -70,6 +71,11 @@ st.title("Turbo Buff")
 st.caption("Turbo-only Dota 2 personal analytics based on OpenDota")
 
 service = build_service()
+service_overview_sig = inspect.signature(service.get_turbo_hero_overview)
+supports_patch_overview = "patch_names" in service_overview_sig.parameters
+supports_patch_options = hasattr(service, "get_patch_options")
+supports_patch_filters = "patch_names" in getattr(QueryFilters, "__dataclass_fields__", {})
+supports_patch_mode = supports_patch_overview and supports_patch_options and supports_patch_filters
 
 with st.sidebar:
     st.header("Filters")
@@ -77,11 +83,12 @@ with st.sidebar:
         "Player ID or OpenDota URL",
         value=st.session_state.get("player_raw", "1233793238"),
     )
-    time_mode_options = ["Days", "Patches"]
+    time_mode_options = ["Days", "Patches"] if supports_patch_mode else ["Days"]
+    default_mode = st.session_state.get("time_filter_mode", "Days")
     time_filter_mode = st.radio(
         "Time filter mode",
         options=time_mode_options,
-        index=time_mode_options.index(st.session_state.get("time_filter_mode", "Days")),
+        index=time_mode_options.index(default_mode) if default_mode in time_mode_options else 0,
     )
 
     days = st.session_state.get("days", 60)
@@ -126,11 +133,13 @@ if load:
 
         player_id = parse_player_id(player_raw)
         service.ensure_player_exists(player_id)
-        overview = service.get_turbo_hero_overview(
-            player_id=player_id,
-            days=active_days,
-            patch_names=active_patches,
-        )
+        overview_kwargs: dict[str, object] = {
+            "player_id": player_id,
+            "days": active_days,
+        }
+        if supports_patch_mode and active_patches:
+            overview_kwargs["patch_names"] = active_patches
+        overview = service.get_turbo_hero_overview(**overview_kwargs)
 
         st.session_state["player_raw"] = player_raw
         st.session_state["player_id"] = player_id
@@ -214,15 +223,17 @@ selected_label = st.selectbox("Select Hero", options=list(hero_options.keys()))
 selected_hero_id = hero_options[selected_label]
 selected_hero_name = service.resolve_hero_name(selected_hero_id)
 
-filters = QueryFilters(
-    player_id=player_id,
-    hero_id=selected_hero_id,
-    hero_name=selected_hero_name,
-    game_mode=23,
-    game_mode_name="Turbo",
-    days=days,
-    patch_names=active_patches if active_patches else None,
-)
+filters_kwargs: dict[str, object] = {
+    "player_id": player_id,
+    "hero_id": selected_hero_id,
+    "hero_name": selected_hero_name,
+    "game_mode": 23,
+    "game_mode_name": "Turbo",
+    "days": days,
+}
+if supports_patch_mode and active_patches:
+    filters_kwargs["patch_names"] = active_patches
+filters = QueryFilters(**filters_kwargs)
 
 try:
     matches = service.fetch_matches(filters)

@@ -136,3 +136,13 @@ CLI remains available as a secondary interface.
 - Added OpenDota patch constants loading (`constants/patch`) via client + cache.
 - Added match-level filtering by selected patch names in service layer.
 - Hero overview and detailed hero stats now honor selected patches when patch mode is active.
+
+## 2026-03-08 production hotfix (patch-mode compatibility)
+
+- Added defensive compatibility logic in `webapp/turbo_dashboard.py`:
+  - detect whether running service/query model supports patch filtering.
+  - only pass `patch_names` when support is available.
+  - fallback to `Days`-only mode instead of crashing on mixed/stale deployments.
+- Purpose: prevent runtime errors like:
+  - `unexpected keyword argument 'patch_names'`
+  - missing `get_patch_options` attribute
