@@ -2,6 +2,7 @@ from pathlib import Path
 from bisect import bisect_right
 from datetime import datetime
 import inspect
+import re
 import sys
 
 import streamlit as st
@@ -186,6 +187,36 @@ def _resolve_patch_name(start_time: int, patch_timeline: list[tuple[int, str]]) 
     return patch_timeline[idx][1]
 
 
+def _patch_base(name: str) -> str:
+    match = re.match(r"^(\d+\.\d+)", name)
+    return match.group(1) if match else name
+
+
+def _is_lettered_patch(name: str) -> bool:
+    return any(ch.isalpha() for ch in name)
+
+
+def _build_patch_options(patch_timeline: list[tuple[int, str]]) -> list[str]:
+    if not patch_timeline:
+        return []
+
+    latest_patch_name = patch_timeline[-1][1]
+    latest_base = _patch_base(latest_patch_name)
+
+    seen: set[str] = set()
+    options: list[str] = []
+    for _, name in reversed(patch_timeline):
+        if name in seen:
+            continue
+        seen.add(name)
+
+        # Keep lettered subpatches only for the latest base patch (e.g. 7.40b/7.40c).
+        if _is_lettered_patch(name) and _patch_base(name) != latest_base:
+            continue
+        options.append(name)
+    return options
+
+
 def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnalyticsService) -> list[dict]:
     grouped: dict[int, dict[str, float]] = {}
     for match in matches:
@@ -242,7 +273,7 @@ except Exception:  # noqa: BLE001
     supports_patch_overview = False
 query_filters_supports_patch = "patch_names" in getattr(QueryFilters, "__dataclass_fields__", {})
 patch_timeline = _load_patch_timeline(service)
-patch_options = [name for _, name in reversed(patch_timeline)]
+patch_options = _build_patch_options(patch_timeline)
 
 with st.sidebar:
     st.header("Filters")

@@ -221,6 +221,15 @@ CLI remains available as a secondary interface.
   - Hero Overview: `Icon`, `Hero`, `Winrate`, `Avg K/D/A`, `KDA`, `Matches`, `Wins`, `Losses`, `Avg Kills`, `Avg Deaths`, `Avg Assists`.
   - Item table: `Icon`, `Item`, `Item Winrate`, `Matches With Item`, `Item Pick Rate`, `Wins With Item`.
 
+## 2026-03-08 patch dropdown simplification
+
+- Updated patch option builder logic:
+  - lettered subpatches are shown only for the latest base patch series.
+  - older base patches are shown as numeric patch names only.
+- Example intent:
+  - show `7.40`, `7.40b`, `7.40c`,
+  - do not show old lettered entries like `7.39b`, `7.38c`, etc.
+
 ## 2026-03-08 select-hero UX update
 
 - Improved `Select Hero` usability:
