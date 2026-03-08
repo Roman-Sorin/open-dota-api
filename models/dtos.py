@@ -18,6 +18,7 @@ class QueryFilters:
     game_mode: int | None = None
     game_mode_name: str | None = None
     days: int | None = None
+    patch_names: list[str] | None = None
     limit: int = 20
 
 

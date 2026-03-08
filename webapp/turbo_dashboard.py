@@ -77,7 +77,26 @@ with st.sidebar:
         "Player ID or OpenDota URL",
         value=st.session_state.get("player_raw", "1233793238"),
     )
-    days = st.slider("Period (days)", min_value=7, max_value=365, value=st.session_state.get("days", 60), step=1)
+    time_mode_options = ["Days", "Patches"]
+    time_filter_mode = st.radio(
+        "Time filter mode",
+        options=time_mode_options,
+        index=time_mode_options.index(st.session_state.get("time_filter_mode", "Days")),
+    )
+
+    days = st.session_state.get("days", 60)
+    selected_patches = st.session_state.get("selected_patches", [])
+    if time_filter_mode == "Days":
+        days = st.slider("Period (days)", min_value=7, max_value=365, value=days, step=1)
+    else:
+        patch_options = service.get_patch_options()
+        default_patches = selected_patches or (patch_options[:1] if patch_options else [])
+        selected_patches = st.multiselect(
+            "Patches (multi-select)",
+            options=patch_options,
+            default=[p for p in default_patches if p in patch_options],
+        )
+
     min_hero_matches = st.slider(
         "Min matches per hero",
         min_value=1,
@@ -98,13 +117,28 @@ if not st.session_state["auto_loaded"] and "overview" not in st.session_state:
 
 if load:
     try:
+        if time_filter_mode == "Patches" and not selected_patches:
+            st.warning("Select at least one patch.")
+            st.stop()
+
+        active_days = days if time_filter_mode == "Days" else None
+        active_patches = selected_patches if time_filter_mode == "Patches" else []
+
         player_id = parse_player_id(player_raw)
         service.ensure_player_exists(player_id)
-        overview = service.get_turbo_hero_overview(player_id=player_id, days=days)
+        overview = service.get_turbo_hero_overview(
+            player_id=player_id,
+            days=active_days,
+            patch_names=active_patches,
+        )
 
         st.session_state["player_raw"] = player_raw
         st.session_state["player_id"] = player_id
+        st.session_state["time_filter_mode"] = time_filter_mode
         st.session_state["days"] = days
+        st.session_state["active_days"] = active_days
+        st.session_state["selected_patches"] = selected_patches
+        st.session_state["active_patches"] = active_patches
         st.session_state["overview"] = overview
         st.session_state["min_hero_matches"] = min_hero_matches
         st.session_state["min_item_matches"] = min_item_matches
@@ -116,12 +150,17 @@ if "overview" not in st.session_state:
     st.stop()
 
 player_id = st.session_state["player_id"]
-days = st.session_state["days"]
+days = st.session_state.get("active_days")
+active_patches = st.session_state.get("active_patches", [])
 overview = st.session_state["overview"]
 min_hero_matches = st.session_state.get("min_hero_matches", min_hero_matches)
 min_item_matches = st.session_state.get("min_item_matches", min_item_matches)
 
-st.subheader(f"Player {player_id} · Turbo · Last {days} days")
+if active_patches:
+    selected_filter_text = f"Patches: {', '.join(active_patches)}"
+else:
+    selected_filter_text = f"Last {days} days"
+st.subheader(f"Player {player_id} · Turbo · {selected_filter_text}")
 
 if not overview:
     st.warning("No Turbo matches found for selected period.")
@@ -182,6 +221,7 @@ filters = QueryFilters(
     game_mode=23,
     game_mode_name="Turbo",
     days=days,
+    patch_names=active_patches if active_patches else None,
 )
 
 try:

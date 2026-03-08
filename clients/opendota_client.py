@@ -105,6 +105,10 @@ class OpenDotaClient:
         result = self._request("GET", "constants/items")
         return result if isinstance(result, dict) else {}
 
+    def get_constants_patch(self) -> list[dict[str, Any]]:
+        result = self._request("GET", "constants/patch")
+        return result if isinstance(result, list) else []
+
     def get_match_details(self, match_id: int) -> dict[str, Any]:
         result = self._request("GET", f"matches/{match_id}")
         return result if isinstance(result, dict) else {}

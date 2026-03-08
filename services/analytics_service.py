@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -29,6 +30,7 @@ class DotaAnalyticsService:
         self.cache = cache
         self.references = self._load_references()
         self._match_details_memory_cache: dict[int, dict[str, Any]] = {}
+        self._patch_starts, self._patch_names = self._load_patch_timeline()
 
     def _load_references(self) -> ReferenceData:
         def to_asset_url(path: str | None) -> str:
@@ -77,6 +79,47 @@ class DotaAnalyticsService:
             item_ids_by_key=item_ids_by_key,
         )
 
+    def _load_patch_timeline(self) -> tuple[list[int], list[str]]:
+        patches = self.cache.get("constants_patch")
+        if patches is None:
+            patches = self.client.get_constants_patch()
+            self.cache.set("constants_patch", patches)
+
+        timeline: list[tuple[int, str]] = []
+        if isinstance(patches, list):
+            for row in patches:
+                if not isinstance(row, dict):
+                    continue
+                name = str(row.get("name") or "").strip()
+                date_raw = str(row.get("date") or "").strip()
+                if not name or not date_raw:
+                    continue
+                try:
+                    start_dt = datetime.fromisoformat(date_raw.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                timeline.append((int(start_dt.timestamp()), name))
+
+        timeline.sort(key=lambda x: x[0])
+        if not timeline:
+            return [], []
+
+        starts = [row[0] for row in timeline]
+        names = [row[1] for row in timeline]
+        return starts, names
+
+    def get_patch_options(self) -> list[str]:
+        # Newest-first for UI convenience.
+        return list(reversed(self._patch_names))
+
+    def _resolve_patch_name_for_start_time(self, start_time: int) -> str | None:
+        if not self._patch_starts:
+            return None
+        idx = bisect_right(self._patch_starts, start_time) - 1
+        if idx < 0:
+            return None
+        return self._patch_names[idx]
+
     def ensure_player_exists(self, player_id: int) -> None:
         profile = self.client.get_player_profile(player_id)
         if not isinstance(profile, dict) or not profile.get("profile"):
@@ -84,6 +127,7 @@ class DotaAnalyticsService:
 
     def fetch_matches(self, filters: QueryFilters, limit: int | None = None) -> list[MatchSummary]:
         significant = 0 if filters.game_mode == 23 else None
+        selected_patches = set(filters.patch_names or [])
 
         min_start = None
         if filters.days:
@@ -95,6 +139,10 @@ class DotaAnalyticsService:
                 start_time = int(row.get("start_time") or 0)
                 if min_start is not None and start_time < min_start:
                     continue
+                if selected_patches:
+                    patch_name = self._resolve_patch_name_for_start_time(start_time)
+                    if patch_name not in selected_patches:
+                        continue
 
                 match = MatchSummary(
                     match_id=int(row.get("match_id") or 0),
@@ -391,12 +439,18 @@ class DotaAnalyticsService:
             return "Any"
         return self.references.hero_names_by_id.get(hero_id, f"Hero #{hero_id}")
 
-    def get_turbo_hero_overview(self, player_id: int, days: int = 60) -> list[dict[str, Any]]:
+    def get_turbo_hero_overview(
+        self,
+        player_id: int,
+        days: int | None = 60,
+        patch_names: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         filters = QueryFilters(
             player_id=player_id,
             game_mode=23,
             game_mode_name="Turbo",
             days=days,
+            patch_names=patch_names,
         )
         matches = self.fetch_matches(filters)
         if not matches:

@@ -9,6 +9,9 @@ This project now contains:
 
 Turbo-only dashboard for your account:
 
+- Flexible time filter:
+  - period in days, or
+  - multi-select patches (e.g. `7.40`, `7.40c`, `7.39b`)
 - Hero overview in Turbo (matches, wins, WR, avg K/D/A, KDA)
 - Detailed hero section in Turbo
 - Item winrates (when item appears in final slots)

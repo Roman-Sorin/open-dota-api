@@ -13,6 +13,9 @@ CLI remains available as a secondary interface.
 ## Dashboard capabilities
 
 - Turbo-only hero overview across selected period
+- Time filter supports:
+  - days period
+  - multi-select patch list (OpenDota patch constants)
 - Per-hero Turbo deep dive
 - Item winrate table (`wins with item / matches with item` based on final slots)
 
@@ -124,3 +127,12 @@ CLI remains available as a secondary interface.
 - Added one-time automatic dashboard load on first app open:
   - `Load Turbo Dashboard` request now runs automatically once when the page opens.
   - Manual button remains for explicit reloads after changing filters.
+
+## 2026-03-08 latest time-filter update
+
+- Added time filter mode toggle in dashboard sidebar:
+  - `Days` (existing behavior)
+  - `Patches` (new, multi-select)
+- Added OpenDota patch constants loading (`constants/patch`) via client + cache.
+- Added match-level filtering by selected patch names in service layer.
+- Hero overview and detailed hero stats now honor selected patches when patch mode is active.
