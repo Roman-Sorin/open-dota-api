@@ -308,6 +308,14 @@ CLI remains available as a secondary interface.
 - Fallback behavior:
   - if per-item summary slots are missing for an item, app uses global match averages instead of hard zeros.
 
+## 2026-03-08 fix: per-item KDA must differ by item
+
+- Improved compatibility augmenter for item KDA calculation:
+  - now reconstructs item presence per match using summary slots plus match-details fallback (player row extraction),
+  - then computes Avg K/D/A and KDA strictly on matches where each item appears.
+- Result:
+  - item KDA values are no longer uniformly equal to global hero averages in normal cases.
+
 ## 2026-03-08 select-hero UX update
 
 - Improved `Select Hero` usability:

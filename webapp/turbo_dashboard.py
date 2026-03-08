@@ -292,7 +292,12 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
     return rows
 
 
-def _ensure_item_rows_have_kda(item_rows: list[dict], matches: list[MatchSummary]) -> list[dict]:
+def _ensure_item_rows_have_kda(
+    item_rows: list[dict],
+    matches: list[MatchSummary],
+    service: DotaAnalyticsService,
+    player_id: int,
+) -> list[dict]:
     if not item_rows:
         return item_rows
     if all("avg_kills_with_item" in row and "kda_with_item" in row for row in item_rows):
@@ -314,15 +319,33 @@ def _ensure_item_rows_have_kda(item_rows: list[dict], matches: list[MatchSummary
     global_avg_d = global_deaths / total_matches
     global_avg_a = global_assists / total_matches
 
+    fallback_detail_calls = 0
+    max_fallback_detail_calls = 45
+
     for match in matches:
-        item_ids = {
+        item_ids = [
             int(getattr(match, "item_0", 0) or 0),
             int(getattr(match, "item_1", 0) or 0),
             int(getattr(match, "item_2", 0) or 0),
             int(getattr(match, "item_3", 0) or 0),
             int(getattr(match, "item_4", 0) or 0),
             int(getattr(match, "item_5", 0) or 0),
-        }
+        ]
+        if not any(item_ids) and fallback_detail_calls < max_fallback_detail_calls:
+            try:
+                details = service._get_match_details_cached(match.match_id)  # noqa: SLF001
+                fallback_detail_calls += 1
+                player_row = service._extract_player_from_match_details(  # noqa: SLF001
+                    details,
+                    player_id=player_id,
+                    player_slot=match.player_slot,
+                )
+                if player_row:
+                    item_ids = service._player_row_item_ids(player_row)  # noqa: SLF001
+            except OpenDotaRateLimitError:
+                pass
+
+        item_ids = set(item_ids)
         item_ids.discard(0)
         for item_id in item_ids:
             if item_id not in per_item:
@@ -341,7 +364,7 @@ def _ensure_item_rows_have_kda(item_rows: list[dict], matches: list[MatchSummary
             avg_d = bucket["deaths"] / bucket["appearances"]
             avg_a = bucket["assists"] / bucket["appearances"]
         else:
-            # Compatibility fallback for mixed runtimes / missing item slots in summary rows.
+            # Last-resort fallback for missing item-slot coverage.
             avg_k = global_avg_k
             avg_d = global_avg_d
             avg_a = global_avg_a
@@ -611,7 +634,7 @@ if not matches:
 stats = service.build_stats(matches)
 item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50)
 item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
-item_wr_rows = _ensure_item_rows_have_kda(item_wr_rows, matches)
+item_wr_rows = _ensure_item_rows_have_kda(item_wr_rows, matches, service, player_id)
 
 st.markdown(f"### {selected_hero_name} - Detailed Turbo Stats")
 stats_cards = [
