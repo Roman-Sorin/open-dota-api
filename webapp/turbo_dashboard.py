@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 import inspect
 import sys
 
@@ -9,7 +9,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from clients.opendota_client import OpenDotaClient
-from models.dtos import QueryFilters
+from models.dtos import MatchSummary, QueryFilters
 from services.analytics_service import DotaAnalyticsService
 from utils.cache import JsonFileCache
 from utils.config import get_cache_dir, get_settings
@@ -89,6 +89,86 @@ def show_error(exc: Exception) -> None:
         st.error(f"Unexpected error: {exc}")
 
 
+def _load_patch_timeline(service: DotaAnalyticsService) -> list[tuple[int, str]]:
+    raw: list[dict] = []
+    if hasattr(service.client, "get_constants_patch"):
+        raw = service.client.get_constants_patch()
+    elif hasattr(service.client, "_request"):
+        result = service.client._request("GET", "constants/patch")
+        raw = result if isinstance(result, list) else []
+
+    timeline: list[tuple[int, str]] = []
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip()
+        date_raw = str(row.get("date") or "").strip()
+        if not name or not date_raw:
+            continue
+        try:
+            ts = int(datetime.fromisoformat(date_raw.replace("Z", "+00:00")).timestamp())
+        except ValueError:
+            continue
+        timeline.append((ts, name))
+    timeline.sort(key=lambda x: x[0])
+    return timeline
+
+
+def _resolve_patch_name(start_time: int, patch_timeline: list[tuple[int, str]]) -> str | None:
+    if not patch_timeline:
+        return None
+    starts = [row[0] for row in patch_timeline]
+    idx = bisect_right(starts, start_time) - 1
+    if idx < 0:
+        return None
+    return patch_timeline[idx][1]
+
+
+def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnalyticsService) -> list[dict]:
+    grouped: dict[int, dict[str, float]] = {}
+    for match in matches:
+        hero_id = int(match.hero_id or 0)
+        if hero_id <= 0:
+            continue
+        bucket = grouped.setdefault(
+            hero_id,
+            {"matches": 0, "wins": 0, "kills": 0.0, "deaths": 0.0, "assists": 0.0},
+        )
+        bucket["matches"] += 1
+        bucket["wins"] += 1 if match.did_win else 0
+        bucket["kills"] += float(match.kills)
+        bucket["deaths"] += float(match.deaths)
+        bucket["assists"] += float(match.assists)
+
+    rows: list[dict] = []
+    for hero_id, agg in grouped.items():
+        games = int(agg["matches"])
+        wins = int(agg["wins"])
+        losses = games - wins
+        avg_k = agg["kills"] / games
+        avg_d = agg["deaths"] / games
+        avg_a = agg["assists"] / games
+        wr = (wins / games * 100.0) if games else 0.0
+        kda = (avg_k + avg_a) / avg_d if avg_d > 0 else (avg_k + avg_a)
+        rows.append(
+            {
+                "hero_id": hero_id,
+                "hero": service.resolve_hero_name(hero_id),
+                "hero_image": service.resolve_hero_image(hero_id),
+                "matches": games,
+                "wins": wins,
+                "losses": losses,
+                "winrate": wr,
+                "avg_kills": avg_k,
+                "avg_deaths": avg_d,
+                "avg_assists": avg_a,
+                "kda": kda,
+            }
+        )
+    rows.sort(key=lambda x: (-x["matches"], -x["winrate"]))
+    return rows
+
+
 st.title("Turbo Buff")
 st.caption("Turbo-only Dota 2 personal analytics based on OpenDota")
 
@@ -98,12 +178,9 @@ try:
     supports_patch_overview = "patch_names" in service_overview_sig.parameters
 except Exception:  # noqa: BLE001
     supports_patch_overview = False
-try:
-    supports_patch_options = callable(getattr(service, "get_patch_options"))
-except Exception:  # noqa: BLE001
-    supports_patch_options = False
 query_filters_supports_patch = "patch_names" in getattr(QueryFilters, "__dataclass_fields__", {})
-supports_patch_mode = supports_patch_overview and supports_patch_options
+patch_timeline = _load_patch_timeline(service)
+patch_options = [name for _, name in reversed(patch_timeline)]
 
 with st.sidebar:
     st.header("Filters")
@@ -124,17 +201,16 @@ with st.sidebar:
     if time_filter_mode == "Days":
         days = st.slider("Period (days)", min_value=7, max_value=365, value=days, step=1)
     else:
-        if supports_patch_mode:
-            patch_options = service.get_patch_options()
-            default_patches = selected_patches or (patch_options[:1] if patch_options else [])
+        if not patch_options:
+            st.warning("Patch list is temporarily unavailable (OpenDota constants).")
+            selected_patches = []
+        else:
+            default_patches = selected_patches or patch_options[:1]
             selected_patches = st.multiselect(
                 "Patches (multi-select)",
                 options=patch_options,
                 default=[p for p in default_patches if p in patch_options],
             )
-        else:
-            st.warning("Patch filter is temporarily unavailable in current runtime.")
-            selected_patches = []
 
     min_hero_matches = st.slider(
         "Min matches per hero",
@@ -165,13 +241,28 @@ if load:
 
         player_id = parse_player_id(player_raw)
         service.ensure_player_exists(player_id)
-        overview_kwargs: dict[str, object] = {
-            "player_id": player_id,
-            "days": active_days,
-        }
-        if supports_patch_mode and active_patches:
-            overview_kwargs["patch_names"] = active_patches
-        overview = service.get_turbo_hero_overview(**overview_kwargs)
+        patch_filtered_matches: list[MatchSummary] | None = None
+        if active_patches and not supports_patch_overview:
+            base_filters = QueryFilters(
+                player_id=player_id,
+                game_mode=23,
+                game_mode_name="Turbo",
+                days=None,
+            )
+            all_turbo_matches = service.fetch_matches(base_filters)
+            selected_set = set(active_patches)
+            patch_filtered_matches = [
+                m for m in all_turbo_matches if _resolve_patch_name(m.start_time, patch_timeline) in selected_set
+            ]
+            overview = _build_overview_from_matches(patch_filtered_matches, service)
+        else:
+            overview_kwargs: dict[str, object] = {
+                "player_id": player_id,
+                "days": active_days,
+            }
+            if active_patches:
+                overview_kwargs["patch_names"] = active_patches
+            overview = service.get_turbo_hero_overview(**overview_kwargs)
 
         st.session_state["player_raw"] = player_raw
         st.session_state["player_id"] = player_id
@@ -181,6 +272,7 @@ if load:
         st.session_state["selected_patches"] = selected_patches
         st.session_state["active_patches"] = active_patches
         st.session_state["overview"] = overview
+        st.session_state["patch_filtered_matches"] = patch_filtered_matches
         st.session_state["min_hero_matches"] = min_hero_matches
         st.session_state["min_item_matches"] = min_item_matches
     except Exception as exc:  # noqa: BLE001
@@ -261,23 +353,27 @@ selected_label = st.selectbox("Select Hero", options=list(hero_options.keys()))
 selected_hero_id = hero_options[selected_label]
 selected_hero_name = service.resolve_hero_name(selected_hero_id)
 
-filters_kwargs: dict[str, object] = {
-    "player_id": player_id,
-    "hero_id": selected_hero_id,
-    "hero_name": selected_hero_name,
-    "game_mode": 23,
-    "game_mode_name": "Turbo",
-    "days": days,
-}
-if active_patches and query_filters_supports_patch:
-    filters_kwargs["patch_names"] = active_patches
-filters = QueryFilters(**filters_kwargs)
+if active_patches and not supports_patch_overview:
+    patch_filtered_matches = st.session_state.get("patch_filtered_matches") or []
+    matches = [m for m in patch_filtered_matches if int(m.hero_id or 0) == selected_hero_id]
+else:
+    filters_kwargs: dict[str, object] = {
+        "player_id": player_id,
+        "hero_id": selected_hero_id,
+        "hero_name": selected_hero_name,
+        "game_mode": 23,
+        "game_mode_name": "Turbo",
+        "days": days,
+    }
+    if active_patches and query_filters_supports_patch:
+        filters_kwargs["patch_names"] = active_patches
+    filters = QueryFilters(**filters_kwargs)
 
-try:
-    matches = service.fetch_matches(filters)
-except Exception as exc:  # noqa: BLE001
-    show_error(exc)
-    st.stop()
+    try:
+        matches = service.fetch_matches(filters)
+    except Exception as exc:  # noqa: BLE001
+        show_error(exc)
+        st.stop()
 
 if not matches:
     st.warning("No matches for selected hero with current Turbo filter.")
@@ -325,4 +421,3 @@ if item_wr_rows:
     )
 else:
     st.info("No items satisfy current minimum matches threshold.")
-

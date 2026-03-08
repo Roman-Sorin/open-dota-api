@@ -191,3 +191,12 @@ CLI remains available as a secondary interface.
   - patch capability checks now use safe runtime probing (`inspect` + `callable(getattr(...))`).
 - Expected result:
   - Patch dropdown appears reliably when backend code supports it.
+
+## 2026-03-08 patch filter hardening
+
+- Added webapp-level patch timeline loader from OpenDota constants (`constants/patch`) independent of service helper method.
+- Added local fallback filtering path for patch mode:
+  - if runtime service does not support `patch_names` overview filtering,
+  - app fetches Turbo matches and filters by selected patches in webapp logic,
+  - hero overview and hero details still work for selected patches.
+- Goal: patch multi-select works even under mixed/stale runtime code paths.
