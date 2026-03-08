@@ -1,0 +1,94 @@
+﻿# OpenDota Turbo Dashboard + CLI
+
+This project now contains:
+
+- Turbo-focused web dashboard (Dotabuff-like experience) for personal stats
+- Existing CLI for quick terminal queries
+
+## Main app: Turbo Dashboard (recommended)
+
+Turbo-only dashboard for your account:
+
+- Hero overview in Turbo (matches, wins, WR, avg K/D/A, KDA)
+- Detailed hero section in Turbo
+- Most frequent final items
+- Item winrates (when item appears in final slots)
+- Recent Turbo matches
+
+### Run
+
+```bash
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+
+pip install -r requirements.txt
+streamlit run webapp/turbo_dashboard.py
+```
+
+Then open the local URL printed by Streamlit (usually `http://localhost:8501`).
+
+## Optional API key
+
+OpenDota key is optional.
+
+```bash
+copy .env.example .env
+```
+
+Set key only if needed:
+
+```env
+OPENDOTA_API_KEY=
+```
+
+## CLI (still available)
+
+```bash
+python main.py stats --player 1233793238 --hero "Chaos Knight" --mode turbo --days 60
+python main.py items --player 1233793238 --hero ck --mode turbo --days 60
+python main.py matches --player 1233793238 --hero ck --mode turbo --days 60 --limit 20
+python main.py ask "дай мне статистику по игроку 1233793238 на Chaos Knight в турбо за последние 2 месяца"
+```
+
+## Architecture
+
+```text
+main.py
+cli/
+  app.py
+  commands.py
+webapp/
+  turbo_dashboard.py
+services/
+  analytics_service.py
+clients/
+  opendota_client.py
+parsers/
+  input_parser.py
+formatters/
+  output_formatter.py
+models/
+  dtos.py
+utils/
+  cache.py
+  config.py
+  exceptions.py
+  helpers.py
+tests/
+  test_parsers.py
+  test_helpers.py
+```
+
+## OpenDota limitations
+
+- Some `players/{id}/matches` rows may have empty `item_0..item_5` (especially Turbo cases).
+- The app falls back to `matches/{match_id}` for final slots if needed.
+- `purchase_log` is often incomplete, so purchased-item analytics may cover only part of matches.
+- Without API key, rate limits can be hit.
+
+## Tests
+
+```bash
+pytest -q
+```
