@@ -146,3 +146,16 @@ CLI remains available as a secondary interface.
 - Purpose: prevent runtime errors like:
   - `unexpected keyword argument 'patch_names'`
   - missing `get_patch_options` attribute
+
+## 2026-03-08 latest UI polish
+
+- Item winrate table column order updated:
+  - now `item_image` -> `item` -> `item_winrate_%` -> other columns.
+- Hero overview column order updated:
+  - moved `kda` near the beginning (right after hero name).
+- Formatting update:
+  - winrate values now render with explicit `%` in tables/metrics.
+  - only `KDA` values render with one decimal place (`x.x`).
+  - other numeric values remain integer-rounded.
+- Replaced detailed stats `st.columns` rows with responsive wrapped metric cards
+  - mobile now keeps stats in a single wrapping flow instead of separate fixed rows.

@@ -22,6 +22,29 @@ st.set_page_config(page_title="Turbo Buff", layout="wide")
 st.markdown(
     """
     <style>
+    .metrics-wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin: 0.5rem 0 1rem 0;
+    }
+    .metric-card {
+        flex: 1 1 150px;
+        border: 1px solid rgba(49, 51, 63, 0.2);
+        border-radius: 0.5rem;
+        padding: 0.6rem 0.7rem;
+        background: rgba(255, 255, 255, 0.02);
+    }
+    .metric-label {
+        font-size: 0.78rem;
+        opacity: 0.85;
+    }
+    .metric-value {
+        font-size: 1.05rem;
+        font-weight: 700;
+        line-height: 1.2;
+        margin-top: 0.2rem;
+    }
     @media (max-width: 768px) {
         .block-container {
             padding-top: 1rem;
@@ -195,14 +218,14 @@ hero_table = [
     {
         "hero_image": row.get("hero_image", ""),
         "hero": row["hero"],
+        "kda": round(float(row["kda"]), 1),
         "matches": int(row["matches"]),
         "wins": int(row["wins"]),
         "losses": int(row["losses"]),
-        "winrate": round(float(row["winrate"])),
+        "winrate": f"{round(float(row['winrate']))}%",
         "avg_kills": round(float(row["avg_kills"])),
         "avg_deaths": round(float(row["avg_deaths"])),
         "avg_assists": round(float(row["avg_assists"])),
-        "kda": round(float(row["kda"])),
     }
     for row in filtered_overview
 ]
@@ -250,18 +273,19 @@ item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50)
 item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
 
 st.markdown(f"### {selected_hero_name} · Detailed Turbo Stats")
-a, b, c, d = st.columns(4)
-a.metric("Matches", f"{round(stats.matches)}")
-b.metric("Winrate", f"{round(stats.winrate)}%")
-c.metric(
-    "Avg K/D/A",
-    f"{round(stats.avg_kills)}/{round(stats.avg_deaths)}/{round(stats.avg_assists)}",
+stats_cards = [
+    ("Matches", f"{round(stats.matches)}"),
+    ("Winrate", f"{round(stats.winrate)}%"),
+    ("Avg K/D/A", f"{round(stats.avg_kills)}/{round(stats.avg_deaths)}/{round(stats.avg_assists)}"),
+    ("KDA", f"{round(stats.kda_ratio, 1)}"),
+    ("Radiant WR", f"{round(stats.radiant_wr)}%"),
+    ("Dire WR", f"{round(stats.dire_wr)}%"),
+]
+stats_html = "".join(
+    f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div></div>'
+    for label, value in stats_cards
 )
-d.metric("KDA", f"{round(stats.kda_ratio)}")
-
-e, f = st.columns(2)
-e.metric("Radiant WR", f"{round(stats.radiant_wr)}%")
-f.metric("Dire WR", f"{round(stats.dire_wr)}%")
+st.markdown(f'<div class="metrics-wrap">{stats_html}</div>', unsafe_allow_html=True)
 
 st.markdown("### Item Winrates (when item appears in final slots)")
 if item_wr_rows:
@@ -269,10 +293,10 @@ if item_wr_rows:
         {
             "item_image": row.get("item_image", ""),
             "item": row["item"],
+            "item_winrate_%": f"{round(float(row['item_winrate']))}%",
             "matches_with_item": int(row["matches_with_item"]),
-            "item_pick_rate_%": round(float(row["item_pick_rate"])),
+            "item_pick_rate_%": f"{round(float(row['item_pick_rate']))}%",
             "wins_with_item": int(row["wins_with_item"]),
-            "item_winrate_%": round(float(row["item_winrate"])),
         }
         for row in item_wr_rows
     ]
