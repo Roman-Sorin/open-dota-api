@@ -283,6 +283,15 @@ CLI remains available as a secondary interface.
   - single `Patches (multi-select)` control only,
   - patch names only (no date labels, no extra add dropdown).
 
+## 2026-03-08 item winrates table update
+
+- Reworked `Item Winrates` columns in dashboard:
+  - kept: `Icon`, `Item`, `Item Winrate`
+  - replaced old extra columns with:
+    - `Avg K/D/A` (for matches where item appears)
+    - `KDA` (for matches where item appears)
+- Service layer (`get_item_winrates`) now computes per-item average kills/deaths/assists and KDA.
+
 ## 2026-03-08 select-hero UX update
 
 - Improved `Select Hero` usability:
