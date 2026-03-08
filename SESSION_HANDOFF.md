@@ -159,3 +159,10 @@ CLI remains available as a secondary interface.
   - other numeric values remain integer-rounded.
 - Replaced detailed stats `st.columns` rows with responsive wrapped metric cards
   - mobile now keeps stats in a single wrapping flow instead of separate fixed rows.
+
+## 2026-03-08 latest filter/columns adjustment
+
+- `Time filter mode` now always shows both options: `Days` and `Patches`.
+- If patch filtering is unavailable in runtime, app shows warning instead of hiding the option.
+- `Hero Overview` column order adjusted again:
+  - `winrate` moved to the 4th column (after `hero_image`, `hero`, `kda`).

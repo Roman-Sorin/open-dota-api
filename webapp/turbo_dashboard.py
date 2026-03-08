@@ -106,7 +106,7 @@ with st.sidebar:
         "Player ID or OpenDota URL",
         value=st.session_state.get("player_raw", "1233793238"),
     )
-    time_mode_options = ["Days", "Patches"] if supports_patch_mode else ["Days"]
+    time_mode_options = ["Days", "Patches"]
     default_mode = st.session_state.get("time_filter_mode", "Days")
     time_filter_mode = st.radio(
         "Time filter mode",
@@ -119,13 +119,17 @@ with st.sidebar:
     if time_filter_mode == "Days":
         days = st.slider("Period (days)", min_value=7, max_value=365, value=days, step=1)
     else:
-        patch_options = service.get_patch_options()
-        default_patches = selected_patches or (patch_options[:1] if patch_options else [])
-        selected_patches = st.multiselect(
-            "Patches (multi-select)",
-            options=patch_options,
-            default=[p for p in default_patches if p in patch_options],
-        )
+        if supports_patch_mode:
+            patch_options = service.get_patch_options()
+            default_patches = selected_patches or (patch_options[:1] if patch_options else [])
+            selected_patches = st.multiselect(
+                "Patches (multi-select)",
+                options=patch_options,
+                default=[p for p in default_patches if p in patch_options],
+            )
+        else:
+            st.warning("Patch filter is temporarily unavailable in current runtime.")
+            selected_patches = []
 
     min_hero_matches = st.slider(
         "Min matches per hero",
@@ -219,10 +223,10 @@ hero_table = [
         "hero_image": row.get("hero_image", ""),
         "hero": row["hero"],
         "kda": round(float(row["kda"]), 1),
+        "winrate": f"{round(float(row['winrate']))}%",
         "matches": int(row["matches"]),
         "wins": int(row["wins"]),
         "losses": int(row["losses"]),
-        "winrate": f"{round(float(row['winrate']))}%",
         "avg_kills": round(float(row["avg_kills"])),
         "avg_deaths": round(float(row["avg_deaths"])),
         "avg_assists": round(float(row["avg_assists"])),
