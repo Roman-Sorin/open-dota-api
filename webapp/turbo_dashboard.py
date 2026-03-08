@@ -292,6 +292,68 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
     return rows
 
 
+def _ensure_item_rows_have_kda(item_rows: list[dict], matches: list[MatchSummary]) -> list[dict]:
+    if not item_rows:
+        return item_rows
+    if all("avg_kills_with_item" in row and "kda_with_item" in row for row in item_rows):
+        return item_rows
+
+    target_item_ids = {int(row.get("item_id") or 0) for row in item_rows}
+    target_item_ids.discard(0)
+
+    per_item: dict[int, dict[str, float]] = {
+        item_id: {"appearances": 0, "kills": 0.0, "deaths": 0.0, "assists": 0.0}
+        for item_id in target_item_ids
+    }
+
+    total_matches = max(len(matches), 1)
+    global_kills = sum(int(m.kills) for m in matches)
+    global_deaths = sum(int(m.deaths) for m in matches)
+    global_assists = sum(int(m.assists) for m in matches)
+    global_avg_k = global_kills / total_matches
+    global_avg_d = global_deaths / total_matches
+    global_avg_a = global_assists / total_matches
+
+    for match in matches:
+        item_ids = {
+            int(getattr(match, "item_0", 0) or 0),
+            int(getattr(match, "item_1", 0) or 0),
+            int(getattr(match, "item_2", 0) or 0),
+            int(getattr(match, "item_3", 0) or 0),
+            int(getattr(match, "item_4", 0) or 0),
+            int(getattr(match, "item_5", 0) or 0),
+        }
+        item_ids.discard(0)
+        for item_id in item_ids:
+            if item_id not in per_item:
+                continue
+            bucket = per_item[item_id]
+            bucket["appearances"] += 1
+            bucket["kills"] += float(match.kills)
+            bucket["deaths"] += float(match.deaths)
+            bucket["assists"] += float(match.assists)
+
+    for row in item_rows:
+        item_id = int(row.get("item_id") or 0)
+        bucket = per_item.get(item_id)
+        if bucket and bucket["appearances"] > 0:
+            avg_k = bucket["kills"] / bucket["appearances"]
+            avg_d = bucket["deaths"] / bucket["appearances"]
+            avg_a = bucket["assists"] / bucket["appearances"]
+        else:
+            # Compatibility fallback for mixed runtimes / missing item slots in summary rows.
+            avg_k = global_avg_k
+            avg_d = global_avg_d
+            avg_a = global_avg_a
+
+        row["avg_kills_with_item"] = avg_k
+        row["avg_deaths_with_item"] = avg_d
+        row["avg_assists_with_item"] = avg_a
+        row["kda_with_item"] = (avg_k + avg_a) / avg_d if avg_d > 0 else (avg_k + avg_a)
+
+    return item_rows
+
+
 st.title("Turbo Buff")
 st.caption("Turbo-only Dota 2 personal analytics based on OpenDota")
 
@@ -549,6 +611,7 @@ if not matches:
 stats = service.build_stats(matches)
 item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50)
 item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
+item_wr_rows = _ensure_item_rows_have_kda(item_wr_rows, matches)
 
 st.markdown(f"### {selected_hero_name} - Detailed Turbo Stats")
 stats_cards = [

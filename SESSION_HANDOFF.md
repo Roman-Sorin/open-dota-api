@@ -300,6 +300,14 @@ CLI remains available as a secondary interface.
 - Fix:
   - UI now uses safe `.get(..., 0.0)` fallbacks for `avg_kills_with_item`, `avg_deaths_with_item`, `avg_assists_with_item`, `kda_with_item`.
 
+## 2026-03-08 hotfix: item KDA zeros in mixed runtime
+
+- Added compatibility augmenter in `webapp/turbo_dashboard.py`:
+  - if item rows come without per-item KDA fields, app now reconstructs per-item Avg K/D/A and KDA from loaded matches.
+  - avoids `0/0/0` and `0` output caused by schema mismatch in mixed runtime states.
+- Fallback behavior:
+  - if per-item summary slots are missing for an item, app uses global match averages instead of hard zeros.
+
 ## 2026-03-08 select-hero UX update
 
 - Improved `Select Hero` usability:
