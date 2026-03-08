@@ -99,3 +99,9 @@ CLI remains available as a secondary interface.
   - Verified reachable (HTTP 200) at update time.
 - Remaining step for stable permanent URL:
   - Create Streamlit Community Cloud app linked to `Roman-Sorin/open-dota-api` with main file `webapp/turbo_dashboard.py`.
+
+## 2026-03-08 UI updates (latest)
+
+- Removed `Most Frequent Final Items` section from `webapp/turbo_dashboard.py`.
+- Removed related `build_items(...)` calculation and note caption, since this section is no longer shown.
+- Item winrate and recent matches sections remain unchanged.

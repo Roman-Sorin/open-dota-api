@@ -187,7 +187,6 @@ if not matches:
     st.stop()
 
 stats = service.build_stats(matches)
-items = service.build_items(player_id, matches)
 item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50)
 item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
 recent_rows = service.build_match_rows(player_id, matches, limit=20)
@@ -202,25 +201,6 @@ d.metric("KDA", f"{stats.kda_ratio:.2f}")
 e, f = st.columns(2)
 e.metric("Radiant WR", f"{stats.radiant_wr:.2f}%")
 f.metric("Dire WR", f"{stats.dire_wr:.2f}%")
-
-st.markdown("### Most Frequent Final Items")
-final_items_table = [
-    {
-        "item_image": service.resolve_item_image(row.item_id),
-        "item": row.item_name,
-        "matches": int(row.count),
-        "match_%": round(float(row.match_pct), 2),
-    }
-    for row in items.final_inventory_items
-]
-st.dataframe(
-    final_items_table,
-    use_container_width=True,
-    hide_index=True,
-    column_config={
-        "item_image": st.column_config.ImageColumn("Item", help="Item icon", width="small"),
-    },
-)
 
 st.markdown("### Item Winrates (when item appears in final slots)")
 if item_wr_rows:
@@ -245,8 +225,6 @@ if item_wr_rows:
     )
 else:
     st.info("No items satisfy current minimum matches threshold.")
-
-st.caption(items.note)
 
 st.markdown("### Recent Turbo Matches")
 st.dataframe(
