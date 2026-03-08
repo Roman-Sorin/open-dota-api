@@ -217,3 +217,9 @@ CLI remains available as a secondary interface.
   - patch timeline parser used `datetime.fromisoformat(...)` without importing `datetime`.
 - Fix:
   - added `from datetime import datetime` import.
+
+## 2026-03-08 hero overview KDA presentation update
+
+- Added combined `Avg K/D/A` column in `Hero Overview` right after `Winrate`.
+- Format is `kills/deaths/assists` (e.g., `11/6/10`) using rounded averages.
+- Existing separate `avg_kills`, `avg_deaths`, `avg_assists` columns remain at the end.

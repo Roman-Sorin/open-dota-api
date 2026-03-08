@@ -352,8 +352,13 @@ hero_table = [
     {
         "hero_image": row.get("hero_image", ""),
         "hero": row["hero"],
-        "kda": round(float(row["kda"]), 1),
         "winrate": f"{round(float(row['winrate']))}%",
+        "avg_kda": (
+            f"{round(float(row['avg_kills']))}/"
+            f"{round(float(row['avg_deaths']))}/"
+            f"{round(float(row['avg_assists']))}"
+        ),
+        "kda": round(float(row["kda"]), 1),
         "matches": int(row["matches"]),
         "wins": int(row["wins"]),
         "losses": int(row["losses"]),
