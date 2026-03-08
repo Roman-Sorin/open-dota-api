@@ -88,6 +88,14 @@ with st.sidebar:
     min_item_matches = st.slider("Min matches per item", min_value=1, max_value=30, value=5, step=1)
     load = st.button("Load Turbo Dashboard", type="primary")
 
+# Auto-load once on first page open, manual button remains available for refresh.
+if "auto_loaded" not in st.session_state:
+    st.session_state["auto_loaded"] = False
+
+if not st.session_state["auto_loaded"] and "overview" not in st.session_state:
+    load = True
+    st.session_state["auto_loaded"] = True
+
 if load:
     try:
         player_id = parse_player_id(player_raw)

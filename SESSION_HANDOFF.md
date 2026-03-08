@@ -118,3 +118,9 @@ CLI remains available as a secondary interface.
   - winrates, KDA, averages, and item percentage columns.
 - Removed `Recent Turbo Matches` section from `webapp/turbo_dashboard.py`.
 - Removed unused `build_match_rows(...)` call after deleting recent matches section.
+
+## 2026-03-08 latest UX update
+
+- Added one-time automatic dashboard load on first app open:
+  - `Load Turbo Dashboard` request now runs automatically once when the page opens.
+  - Manual button remains for explicit reloads after changing filters.
