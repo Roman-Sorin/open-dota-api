@@ -206,10 +206,16 @@ total_matches = sum(int(row["matches"]) for row in overview)
 total_wins = sum(int(row["wins"]) for row in overview)
 overall_wr = (total_wins / total_matches * 100.0) if total_matches else 0.0
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Turbo Matches", f"{total_matches}")
-col2.metric("Turbo Wins", f"{total_wins}")
-col3.metric("Turbo Winrate", f"{round(overall_wr)}%")
+top_cards = [
+    ("Turbo Matches", f"{total_matches}"),
+    ("Turbo Wins", f"{total_wins}"),
+    ("Turbo Winrate", f"{round(overall_wr)}%"),
+]
+top_html = "".join(
+    f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div></div>'
+    for label, value in top_cards
+)
+st.markdown(f'<div class="metrics-wrap">{top_html}</div>', unsafe_allow_html=True)
 
 st.markdown("### Hero Overview")
 filtered_overview = [row for row in overview if int(row["matches"]) >= min_hero_matches]

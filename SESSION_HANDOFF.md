@@ -174,3 +174,8 @@ CLI remains available as a secondary interface.
   - not blocked by strict `QueryFilters` field check.
 - `patch_names` is injected into `QueryFilters` only when model supports it.
 - Goal: remove false "temporarily unavailable" warning in production runtime.
+
+## 2026-03-08 latest metric layout update
+
+- Top summary metrics (`Turbo Matches`, `Turbo Wins`, `Turbo Winrate`) now use the same responsive flex card layout as detailed stats.
+- On mobile, top metrics wrap to new rows based on available width (no fixed 3-column squeeze).
