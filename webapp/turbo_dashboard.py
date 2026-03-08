@@ -65,7 +65,6 @@ st.markdown(
 )
 
 
-@st.cache_resource
 def build_service() -> DotaAnalyticsService:
     settings = get_settings()
     client = OpenDotaClient(
@@ -94,9 +93,15 @@ st.title("Turbo Buff")
 st.caption("Turbo-only Dota 2 personal analytics based on OpenDota")
 
 service = build_service()
-service_overview_sig = inspect.signature(service.get_turbo_hero_overview)
-supports_patch_overview = "patch_names" in service_overview_sig.parameters
-supports_patch_options = hasattr(service, "get_patch_options")
+try:
+    service_overview_sig = inspect.signature(service.get_turbo_hero_overview)
+    supports_patch_overview = "patch_names" in service_overview_sig.parameters
+except Exception:  # noqa: BLE001
+    supports_patch_overview = False
+try:
+    supports_patch_options = callable(getattr(service, "get_patch_options"))
+except Exception:  # noqa: BLE001
+    supports_patch_options = False
 query_filters_supports_patch = "patch_names" in getattr(QueryFilters, "__dataclass_fields__", {})
 supports_patch_mode = supports_patch_overview and supports_patch_options
 

@@ -179,3 +179,15 @@ CLI remains available as a secondary interface.
 
 - Top summary metrics (`Turbo Matches`, `Turbo Wins`, `Turbo Winrate`) now use the same responsive flex card layout as detailed stats.
 - On mobile, top metrics wrap to new rows based on available width (no fixed 3-column squeeze).
+
+## 2026-03-08 patch filter root-cause fix
+
+- Root cause of unstable patch dropdown behavior:
+  - `DotaAnalyticsService` instance was created via `@st.cache_resource`.
+  - After some deployments, Streamlit runtime could keep stale cached service object while UI code was newer.
+  - This caused false runtime mismatch (`patch_names`/`get_patch_options` looked unavailable).
+- Fix applied:
+  - removed `@st.cache_resource` from service builder in `webapp/turbo_dashboard.py`.
+  - patch capability checks now use safe runtime probing (`inspect` + `callable(getattr(...))`).
+- Expected result:
+  - Patch dropdown appears reliably when backend code supports it.
