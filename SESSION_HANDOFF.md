@@ -166,3 +166,11 @@ CLI remains available as a secondary interface.
 - If patch filtering is unavailable in runtime, app shows warning instead of hiding the option.
 - `Hero Overview` column order adjusted again:
   - `winrate` moved to the 4th column (after `hero_image`, `hero`, `kda`).
+
+## 2026-03-08 patch-filter availability hotfix
+
+- Relaxed patch-mode availability check in `webapp/turbo_dashboard.py`:
+  - patch mode now depends on service capabilities (`get_patch_options` + overview support),
+  - not blocked by strict `QueryFilters` field check.
+- `patch_names` is injected into `QueryFilters` only when model supports it.
+- Goal: remove false "temporarily unavailable" warning in production runtime.

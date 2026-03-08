@@ -97,8 +97,8 @@ service = build_service()
 service_overview_sig = inspect.signature(service.get_turbo_hero_overview)
 supports_patch_overview = "patch_names" in service_overview_sig.parameters
 supports_patch_options = hasattr(service, "get_patch_options")
-supports_patch_filters = "patch_names" in getattr(QueryFilters, "__dataclass_fields__", {})
-supports_patch_mode = supports_patch_overview and supports_patch_options and supports_patch_filters
+query_filters_supports_patch = "patch_names" in getattr(QueryFilters, "__dataclass_fields__", {})
+supports_patch_mode = supports_patch_overview and supports_patch_options
 
 with st.sidebar:
     st.header("Filters")
@@ -258,7 +258,7 @@ filters_kwargs: dict[str, object] = {
     "game_mode_name": "Turbo",
     "days": days,
 }
-if supports_patch_mode and active_patches:
+if active_patches and query_filters_supports_patch:
     filters_kwargs["patch_names"] = active_patches
 filters = QueryFilters(**filters_kwargs)
 
