@@ -86,3 +86,16 @@ CLI remains available as a secondary interface.
 - Permanent free URL is still blocked on account/repository step:
   - Need GitHub repo (remote) push from this machine.
   - Need Streamlit Community Cloud app creation connected to that repo.
+
+## 2026-03-08 follow-up deployment updates
+
+- Installed GitHub CLI (`gh`) and authenticated as `Roman-Sorin`.
+- Created new GitHub repository and pushed current branch:
+  - `https://github.com/Roman-Sorin/open-dota-api`
+- Configured local `origin` remote to the repository above.
+- Re-launched Streamlit + Cloudflare quick tunnel for phone access.
+- Current temporary URL in this session:
+  - `https://sub-required-apparently-rugs.trycloudflare.com`
+  - Verified reachable (HTTP 200) at update time.
+- Remaining step for stable permanent URL:
+  - Create Streamlit Community Cloud app linked to `Roman-Sorin/open-dota-api` with main file `webapp/turbo_dashboard.py`.
