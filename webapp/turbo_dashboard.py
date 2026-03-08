@@ -7,6 +7,7 @@ import sys
 import time
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -266,6 +267,32 @@ def _patch_option_label(name: str, patch_ranges: dict[str, tuple[int, int | None
     return f"{name} ({start_str} - {end_str})"
 
 
+def _hide_patch_dates_in_selected_tags() -> None:
+    # Streamlit applies format_func labels to both dropdown options and selected tags.
+    # Keep long labels in dropdown, but shorten selected tags back to patch name.
+    components.html(
+        """
+        <script>
+          (function() {
+            const clean = () => {
+              const tags = parent.document.querySelectorAll(
+                'div[data-testid="stMultiSelect"] div[data-baseweb="tag"] span'
+              );
+              tags.forEach((el) => {
+                const txt = (el.textContent || '');
+                el.textContent = txt.replace(/\\s*\\(\\d{4}-\\d{2}-\\d{2}\\s*-\\s*(?:\\d{4}-\\d{2}-\\d{2}|now)\\)\\s*$/, '');
+              });
+            };
+            clean();
+            setTimeout(clean, 200);
+            setTimeout(clean, 800);
+          })();
+        </script>
+        """,
+        height=0,
+    )
+
+
 def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnalyticsService) -> list[dict]:
     grouped: dict[int, dict[str, float]] = {}
     for match in matches:
@@ -360,6 +387,7 @@ with st.sidebar:
                 key="patches_widget_selection",
                 format_func=lambda p: _patch_option_label(p, patch_ranges),
             )
+            _hide_patch_dates_in_selected_tags()
 
     min_hero_matches = st.slider(
         "Min matches per hero",

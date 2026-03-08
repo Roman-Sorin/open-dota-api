@@ -260,6 +260,14 @@ CLI remains available as a secondary interface.
   - for latest patch: `... - now`
 - Filter values still use pure patch names internally; only display labels changed.
 
+## 2026-03-08 patch multiselect label UX tweak
+
+- Implemented UI behavior:
+  - dropdown option rows keep full labels with date ranges.
+  - selected tags in multiselect are shortened to patch name only.
+- Technical note:
+  - done via lightweight frontend script because native Streamlit multiselect applies one label format to both options and selected tags.
+
 ## 2026-03-08 select-hero UX update
 
 - Improved `Select Hero` usability:
