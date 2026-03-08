@@ -66,4 +66,23 @@ CLI remains available as a secondary interface.
 - Added `DEPLOY.md` with deployment options.
 - Included quick free phone access workflow via LocalTunnel.
 - Included permanent free hosting workflow via Streamlit Community Cloud.
-- Current blocker: this workspace has no `.git` folder, so direct cloud deployment from this folder is not possible until repository is initialized and pushed.
+- Added hero-level filter in dashboard: `Min matches per hero`.
+- Hero table and hero selector now respect hero minimum matches threshold.
+- Added UX handling for empty hero set after hero threshold filter.
+- Updated `.gitignore` with `.runlogs/` and `.streamlit/secrets.toml`.
+- Initialized git repository and created initial commit:
+  - `294cda9 Initial project import and Streamlit dashboard updates`
+- Added Cloudflare Tunnel deployment flow to `DEPLOY.md` (works in current network).
+- Verified app external access via Cloudflare Tunnel URL (HTTP 200 during session).
+
+## Change logging rule (important)
+
+- From now on, every code/config/deploy change must be recorded in this file (`SESSION_HANDOFF.md`) in the same session.
+- Purpose: allow any next agent session to recover project state by reading this file first.
+
+## Current deployment status
+
+- Temporary public URL is available via Cloudflare quick tunnel while local processes are running.
+- Permanent free URL is still blocked on account/repository step:
+  - Need GitHub repo (remote) push from this machine.
+  - Need Streamlit Community Cloud app creation connected to that repo.
