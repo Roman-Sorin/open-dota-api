@@ -201,6 +201,16 @@ CLI remains available as a secondary interface.
   - hero overview and hero details still work for selected patches.
 - Goal: patch multi-select works even under mixed/stale runtime code paths.
 
+## 2026-03-08 production hotfix (bisect import) + patch-data note
+
+- Fixed runtime error:
+  - `Unexpected error: name 'bisect_right' is not defined`
+  - Added missing import in `webapp/turbo_dashboard.py`:
+    - `from bisect import bisect_right`
+- Verified OpenDota patch constants payload currently contains only numeric patch names (e.g., `7.39`, `7.40`) and no lettered subpatch names (`a/b/c`).
+- Implication:
+  - lettered patch dropdown values cannot be sourced from OpenDota constants directly without an additional custom mapping/source.
+
 ## 2026-03-08 select-hero UX update
 
 - Improved `Select Hero` usability:
