@@ -573,11 +573,11 @@ if item_wr_rows:
             "Item": row["item"],
             "Item Winrate": f"{round(float(row['item_winrate']))}%",
             "Avg K/D/A": (
-                f"{round(float(row['avg_kills_with_item']))}/"
-                f"{round(float(row['avg_deaths_with_item']))}/"
-                f"{round(float(row['avg_assists_with_item']))}"
+                f"{round(float(row.get('avg_kills_with_item', 0.0)))}/"
+                f"{round(float(row.get('avg_deaths_with_item', 0.0)))}/"
+                f"{round(float(row.get('avg_assists_with_item', 0.0)))}"
             ),
-            "KDA": round(float(row["kda_with_item"]), 1),
+            "KDA": round(float(row.get("kda_with_item", 0.0)), 1),
         }
         for row in item_wr_rows
     ]

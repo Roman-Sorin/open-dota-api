@@ -292,6 +292,14 @@ CLI remains available as a secondary interface.
     - `KDA` (for matches where item appears)
 - Service layer (`get_item_winrates`) now computes per-item average kills/deaths/assists and KDA.
 
+## 2026-03-08 hotfix: item winrate KeyError compatibility
+
+- Fixed runtime `KeyError: 'avg_kills_with_item'` in dashboard table rendering.
+- Cause:
+  - mixed runtime/old row schema could return item rows without new per-item KDA fields.
+- Fix:
+  - UI now uses safe `.get(..., 0.0)` fallbacks for `avg_kills_with_item`, `avg_deaths_with_item`, `avg_assists_with_item`, `kda_with_item`.
+
 ## 2026-03-08 select-hero UX update
 
 - Improved `Select Hero` usability:
