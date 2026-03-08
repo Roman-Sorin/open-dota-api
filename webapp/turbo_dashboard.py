@@ -118,27 +118,61 @@ def show_error(exc: Exception) -> None:
 
 
 def _load_patch_timeline(service: DotaAnalyticsService) -> list[tuple[int, str]]:
-    raw: list[dict] = []
-    if hasattr(service.client, "get_constants_patch"):
-        raw = service.client.get_constants_patch()
-    elif hasattr(service.client, "_request"):
-        result = service.client._request("GET", "constants/patch")
-        raw = result if isinstance(result, list) else []
+    cached = service.cache.get("patch_timeline_v2")
+    if isinstance(cached, list) and cached:
+        try:
+            return [(int(row[0]), str(row[1])) for row in cached if isinstance(row, list | tuple) and len(row) == 2]
+        except Exception:  # noqa: BLE001
+            pass
 
     timeline: list[tuple[int, str]] = []
-    for row in raw:
-        if not isinstance(row, dict):
-            continue
-        name = str(row.get("name") or "").strip()
-        date_raw = str(row.get("date") or "").strip()
-        if not name or not date_raw:
-            continue
-        try:
-            ts = int(datetime.fromisoformat(date_raw.replace("Z", "+00:00")).timestamp())
-        except ValueError:
-            continue
-        timeline.append((ts, name))
+
+    # Primary source: Valve patchnotes feed (contains lettered patches like 7.40b/7.40c).
+    try:
+        response = service.client.session.get(
+            "https://www.dota2.com/datafeed/patchnoteslist",
+            params={"language": "english"},
+            timeout=service.client.timeout_seconds,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        patches = payload.get("patches") if isinstance(payload, dict) else []
+        if isinstance(patches, list):
+            for row in patches:
+                if not isinstance(row, dict):
+                    continue
+                name = str(row.get("patch_name") or row.get("patch_number") or "").strip()
+                ts = int(row.get("patch_timestamp") or 0)
+                if name and ts > 0:
+                    timeline.append((ts, name))
+    except Exception:  # noqa: BLE001
+        timeline = []
+
+    # Fallback source: OpenDota constants/patch (numeric-only names).
+    if not timeline:
+        raw: list[dict] = []
+        if hasattr(service.client, "get_constants_patch"):
+            raw = service.client.get_constants_patch()
+        elif hasattr(service.client, "_request"):
+            result = service.client._request("GET", "constants/patch")
+            raw = result if isinstance(result, list) else []
+
+        for row in raw:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()
+            date_raw = str(row.get("date") or "").strip()
+            if not name or not date_raw:
+                continue
+            try:
+                ts = int(datetime.fromisoformat(date_raw.replace("Z", "+00:00")).timestamp())
+            except ValueError:
+                continue
+            timeline.append((ts, name))
+
     timeline.sort(key=lambda x: x[0])
+    if timeline:
+        service.cache.set("patch_timeline_v2", [[ts, name] for ts, name in timeline])
     return timeline
 
 
@@ -321,7 +355,7 @@ if active_patches:
     selected_filter_text = f"Patches: {', '.join(active_patches)}"
 else:
     selected_filter_text = f"Last {days} days"
-st.subheader(f"Player {player_id} · Turbo · {selected_filter_text}")
+st.subheader(f"Player {player_id} - Turbo - {selected_filter_text}")
 
 if not overview:
     st.warning("No Turbo matches found for selected period.")
@@ -351,21 +385,21 @@ if not filtered_overview:
 
 hero_table = [
     {
-        "hero_image": row.get("hero_image", ""),
-        "hero": row["hero"],
-        "winrate": f"{round(float(row['winrate']))}%",
-        "avg_kda": (
+        "Icon": row.get("hero_image", ""),
+        "Hero": row["hero"],
+        "Winrate": f"{round(float(row['winrate']))}%",
+        "Avg K/D/A": (
             f"{round(float(row['avg_kills']))}/"
             f"{round(float(row['avg_deaths']))}/"
             f"{round(float(row['avg_assists']))}"
         ),
-        "kda": round(float(row["kda"]), 1),
-        "matches": int(row["matches"]),
-        "wins": int(row["wins"]),
-        "losses": int(row["losses"]),
-        "avg_kills": round(float(row["avg_kills"])),
-        "avg_deaths": round(float(row["avg_deaths"])),
-        "avg_assists": round(float(row["avg_assists"])),
+        "KDA": round(float(row["kda"]), 1),
+        "Matches": int(row["matches"]),
+        "Wins": int(row["wins"]),
+        "Losses": int(row["losses"]),
+        "Avg Kills": round(float(row["avg_kills"])),
+        "Avg Deaths": round(float(row["avg_deaths"])),
+        "Avg Assists": round(float(row["avg_assists"])),
     }
     for row in filtered_overview
 ]
@@ -374,7 +408,7 @@ st.dataframe(
     use_container_width=True,
     hide_index=True,
     column_config={
-        "hero_image": st.column_config.ImageColumn("Hero", help="Hero icon", width="small"),
+        "Icon": st.column_config.ImageColumn("Hero", help="Hero icon", width="small"),
     },
 )
 
@@ -400,8 +434,8 @@ st.markdown(
         f'<img src="{selected_hero_row.get("hero_image", "")}" alt="{selected_hero_name}"/>'
         "<div>"
         f'<div class="hero-select-name">{selected_hero_name}</div>'
-        f'<div class="hero-select-meta">{int(selected_hero_row["matches"])} matches · '
-        f'{round(float(selected_hero_row["winrate"]))}% WR · KDA {round(float(selected_hero_row["kda"]), 1)}</div>'
+        f'<div class="hero-select-meta">{int(selected_hero_row["matches"])} matches - '
+        f'{round(float(selected_hero_row["winrate"]))}% WR - KDA {round(float(selected_hero_row["kda"]), 1)}</div>'
         "</div>"
         "</div>"
     ),
@@ -438,7 +472,7 @@ stats = service.build_stats(matches)
 item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50)
 item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
 
-st.markdown(f"### {selected_hero_name} · Detailed Turbo Stats")
+st.markdown(f"### {selected_hero_name} - Detailed Turbo Stats")
 stats_cards = [
     ("Matches", f"{round(stats.matches)}"),
     ("Winrate", f"{round(stats.winrate)}%"),
@@ -457,12 +491,12 @@ st.markdown("### Item Winrates (when item appears in final slots)")
 if item_wr_rows:
     item_winrate_table = [
         {
-            "item_image": row.get("item_image", ""),
-            "item": row["item"],
-            "item_winrate_%": f"{round(float(row['item_winrate']))}%",
-            "matches_with_item": int(row["matches_with_item"]),
-            "item_pick_rate_%": f"{round(float(row['item_pick_rate']))}%",
-            "wins_with_item": int(row["wins_with_item"]),
+            "Icon": row.get("item_image", ""),
+            "Item": row["item"],
+            "Item Winrate": f"{round(float(row['item_winrate']))}%",
+            "Matches With Item": int(row["matches_with_item"]),
+            "Item Pick Rate": f"{round(float(row['item_pick_rate']))}%",
+            "Wins With Item": int(row["wins_with_item"]),
         }
         for row in item_wr_rows
     ]
@@ -471,7 +505,7 @@ if item_wr_rows:
         use_container_width=True,
         hide_index=True,
         column_config={
-            "item_image": st.column_config.ImageColumn("Item", help="Item icon", width="small"),
+            "Icon": st.column_config.ImageColumn("Item", help="Item icon", width="small"),
         },
     )
 else:

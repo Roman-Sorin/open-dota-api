@@ -211,6 +211,16 @@ CLI remains available as a secondary interface.
 - Implication:
   - lettered patch dropdown values cannot be sourced from OpenDota constants directly without an additional custom mapping/source.
 
+## 2026-03-08 lettered patch source + column naming polish
+
+- Patch dropdown now uses Valve patch feed as primary source:
+  - `https://www.dota2.com/datafeed/patchnoteslist?language=english`
+  - includes lettered subpatches (e.g., `7.39b`, `7.40b`, `7.40c`).
+- OpenDota `constants/patch` kept as fallback source.
+- Updated table column names to user-friendly labels without underscores:
+  - Hero Overview: `Icon`, `Hero`, `Winrate`, `Avg K/D/A`, `KDA`, `Matches`, `Wins`, `Losses`, `Avg Kills`, `Avg Deaths`, `Avg Assists`.
+  - Item table: `Icon`, `Item`, `Item Winrate`, `Matches With Item`, `Item Pick Rate`, `Wins With Item`.
+
 ## 2026-03-08 select-hero UX update
 
 - Improved `Select Hero` usability:
