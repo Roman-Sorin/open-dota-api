@@ -253,6 +253,13 @@ CLI remains available as a secondary interface.
   - keep widget selection sanitized against current options list,
   - preserve immediate single-click add/remove behavior.
 
+## 2026-03-08 patch option labels with date ranges
+
+- Updated patch multiselect labels to include patch active range:
+  - format: `PatchName (YYYY-MM-DD - YYYY-MM-DD)`
+  - for latest patch: `... - now`
+- Filter values still use pure patch names internally; only display labels changed.
+
 ## 2026-03-08 select-hero UX update
 
 - Improved `Select Hero` usability:

@@ -247,6 +247,25 @@ def _build_patch_options(patch_timeline: list[tuple[int, str]]) -> list[str]:
     return options
 
 
+def _build_patch_ranges(patch_timeline: list[tuple[int, str]]) -> dict[str, tuple[int, int | None]]:
+    ranges: dict[str, tuple[int, int | None]] = {}
+    for i, (start_ts, name) in enumerate(patch_timeline):
+        end_ts: int | None = None
+        if i + 1 < len(patch_timeline):
+            end_ts = patch_timeline[i + 1][0] - 1
+        ranges[name] = (start_ts, end_ts)
+    return ranges
+
+
+def _patch_option_label(name: str, patch_ranges: dict[str, tuple[int, int | None]]) -> str:
+    if name not in patch_ranges:
+        return name
+    start_ts, end_ts = patch_ranges[name]
+    start_str = datetime.utcfromtimestamp(start_ts).strftime("%Y-%m-%d")
+    end_str = "now" if end_ts is None else datetime.utcfromtimestamp(end_ts).strftime("%Y-%m-%d")
+    return f"{name} ({start_str} - {end_str})"
+
+
 def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnalyticsService) -> list[dict]:
     grouped: dict[int, dict[str, float]] = {}
     for match in matches:
@@ -304,6 +323,7 @@ except Exception:  # noqa: BLE001
 query_filters_supports_patch = "patch_names" in getattr(QueryFilters, "__dataclass_fields__", {})
 patch_timeline = _load_patch_timeline(service)
 patch_options = _build_patch_options(patch_timeline)
+patch_ranges = _build_patch_ranges(patch_timeline)
 
 with st.sidebar:
     st.header("Filters")
@@ -338,6 +358,7 @@ with st.sidebar:
                 "Patches (multi-select)",
                 options=patch_options,
                 key="patches_widget_selection",
+                format_func=lambda p: _patch_option_label(p, patch_ranges),
             )
 
     min_hero_matches = st.slider(
