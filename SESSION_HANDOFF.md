@@ -243,6 +243,16 @@ CLI remains available as a secondary interface.
 - Default behavior:
   - retry up to 2 times with 5-second cooldown between attempts.
 
+## 2026-03-08 patch multiselect interaction fix
+
+- Fixed issue where selecting an additional patch in multiselect required two clicks.
+- Root cause:
+  - widget was re-initialized via `default=...` on reruns, causing first selection to be overwritten.
+- Fix:
+  - switched patch multiselect to stateful widget key (`patches_widget_selection`),
+  - keep widget selection sanitized against current options list,
+  - preserve immediate single-click add/remove behavior.
+
 ## 2026-03-08 select-hero UX update
 
 - Improved `Select Hero` usability:

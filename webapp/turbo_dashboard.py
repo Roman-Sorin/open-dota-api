@@ -328,11 +328,16 @@ with st.sidebar:
             st.warning("Patch list is temporarily unavailable (OpenDota constants).")
             selected_patches = []
         else:
-            default_patches = selected_patches or patch_options[:1]
+            if "patches_widget_selection" not in st.session_state:
+                st.session_state["patches_widget_selection"] = selected_patches or patch_options[:1]
+            # Keep widget value valid when options list changes.
+            st.session_state["patches_widget_selection"] = [
+                p for p in st.session_state["patches_widget_selection"] if p in patch_options
+            ] or patch_options[:1]
             selected_patches = st.multiselect(
                 "Patches (multi-select)",
                 options=patch_options,
-                default=[p for p in default_patches if p in patch_options],
+                key="patches_widget_selection",
             )
 
     min_hero_matches = st.slider(
