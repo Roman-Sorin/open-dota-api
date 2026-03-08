@@ -277,6 +277,12 @@ CLI remains available as a secondary interface.
 - Rationale:
   - avoids DOM patching fragility on Streamlit Cloud.
 
+## 2026-03-08 patch UI rollback
+
+- Rolled back patch selector UI to simpler version per user request:
+  - single `Patches (multi-select)` control only,
+  - patch names only (no date labels, no extra add dropdown).
+
 ## 2026-03-08 select-hero UX update
 
 - Improved `Select Hero` usability:
