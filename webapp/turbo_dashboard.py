@@ -126,7 +126,7 @@ overall_wr = (total_wins / total_matches * 100.0) if total_matches else 0.0
 col1, col2, col3 = st.columns(3)
 col1.metric("Turbo Matches", f"{total_matches}")
 col2.metric("Turbo Wins", f"{total_wins}")
-col3.metric("Turbo Winrate", f"{overall_wr:.2f}%")
+col3.metric("Turbo Winrate", f"{round(overall_wr)}%")
 
 st.markdown("### Hero Overview")
 filtered_overview = [row for row in overview if int(row["matches"]) >= min_hero_matches]
@@ -142,11 +142,11 @@ hero_table = [
         "matches": int(row["matches"]),
         "wins": int(row["wins"]),
         "losses": int(row["losses"]),
-        "winrate": round(float(row["winrate"]), 2),
-        "avg_kills": round(float(row["avg_kills"]), 2),
-        "avg_deaths": round(float(row["avg_deaths"]), 2),
-        "avg_assists": round(float(row["avg_assists"]), 2),
-        "kda": round(float(row["kda"]), 2),
+        "winrate": round(float(row["winrate"])),
+        "avg_kills": round(float(row["avg_kills"])),
+        "avg_deaths": round(float(row["avg_deaths"])),
+        "avg_assists": round(float(row["avg_assists"])),
+        "kda": round(float(row["kda"])),
     }
     for row in filtered_overview
 ]
@@ -160,7 +160,7 @@ st.dataframe(
 )
 
 hero_options = {
-    f"{row['hero']}  |  {row['matches']} matches  |  {row['winrate']:.2f}% WR": int(row["hero_id"])
+    f"{row['hero']}  |  {row['matches']} matches  |  {round(float(row['winrate']))}% WR": int(row["hero_id"])
     for row in filtered_overview
 }
 selected_label = st.selectbox("Select Hero", options=list(hero_options.keys()))
@@ -189,18 +189,20 @@ if not matches:
 stats = service.build_stats(matches)
 item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50)
 item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
-recent_rows = service.build_match_rows(player_id, matches, limit=20)
 
 st.markdown(f"### {selected_hero_name} · Detailed Turbo Stats")
 a, b, c, d = st.columns(4)
-a.metric("Matches", f"{stats.matches}")
-b.metric("Winrate", f"{stats.winrate:.2f}%")
-c.metric("Avg K/D/A", f"{stats.avg_kills:.2f}/{stats.avg_deaths:.2f}/{stats.avg_assists:.2f}")
-d.metric("KDA", f"{stats.kda_ratio:.2f}")
+a.metric("Matches", f"{round(stats.matches)}")
+b.metric("Winrate", f"{round(stats.winrate)}%")
+c.metric(
+    "Avg K/D/A",
+    f"{round(stats.avg_kills)}/{round(stats.avg_deaths)}/{round(stats.avg_assists)}",
+)
+d.metric("KDA", f"{round(stats.kda_ratio)}")
 
 e, f = st.columns(2)
-e.metric("Radiant WR", f"{stats.radiant_wr:.2f}%")
-f.metric("Dire WR", f"{stats.dire_wr:.2f}%")
+e.metric("Radiant WR", f"{round(stats.radiant_wr)}%")
+f.metric("Dire WR", f"{round(stats.dire_wr)}%")
 
 st.markdown("### Item Winrates (when item appears in final slots)")
 if item_wr_rows:
@@ -209,9 +211,9 @@ if item_wr_rows:
             "item_image": row.get("item_image", ""),
             "item": row["item"],
             "matches_with_item": int(row["matches_with_item"]),
-            "item_pick_rate_%": round(float(row["item_pick_rate"]), 2),
+            "item_pick_rate_%": round(float(row["item_pick_rate"])),
             "wins_with_item": int(row["wins_with_item"]),
-            "item_winrate_%": round(float(row["item_winrate"]), 2),
+            "item_winrate_%": round(float(row["item_winrate"])),
         }
         for row in item_wr_rows
     ]
@@ -225,21 +227,4 @@ if item_wr_rows:
     )
 else:
     st.info("No items satisfy current minimum matches threshold.")
-
-st.markdown("### Recent Turbo Matches")
-st.dataframe(
-    [
-        {
-            "match_id": row.match_id,
-            "date": row.started_at.strftime("%Y-%m-%d %H:%M"),
-            "result": row.result,
-            "kda": row.kda,
-            "duration": row.duration,
-            "items": ", ".join(row.items),
-        }
-        for row in recent_rows
-    ],
-    use_container_width=True,
-    hide_index=True,
-)
 

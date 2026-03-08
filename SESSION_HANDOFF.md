@@ -14,9 +14,7 @@ CLI remains available as a secondary interface.
 
 - Turbo-only hero overview across selected period
 - Per-hero Turbo deep dive
-- Final inventory frequency table
 - Item winrate table (`wins with item / matches with item` based on final slots)
-- Recent Turbo matches table
 
 ## Data caveats implemented
 
@@ -82,10 +80,11 @@ CLI remains available as a secondary interface.
 
 ## Current deployment status
 
-- Temporary public URL is available via Cloudflare quick tunnel while local processes are running.
-- Permanent free URL is still blocked on account/repository step:
-  - Need GitHub repo (remote) push from this machine.
-  - Need Streamlit Community Cloud app creation connected to that repo.
+- Stable Streamlit Community Cloud app is live:
+  - `https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/`
+- Auto-deploy is enabled by Streamlit Cloud integration:
+  - every push to `main` in `Roman-Sorin/open-dota-api` triggers redeploy automatically.
+- Cloudflare quick tunnel can still be used as temporary fallback when needed.
 
 ## 2026-03-08 follow-up deployment updates
 
@@ -112,3 +111,10 @@ CLI remains available as a secondary interface.
 - Stable production URL:
   - `https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/`
 - Added stable URL references to `README.md` and `DEPLOY.md`.
+
+## 2026-03-08 latest dashboard simplification
+
+- Rounded all displayed numeric values to whole numbers in dashboard UI:
+  - winrates, KDA, averages, and item percentage columns.
+- Removed `Recent Turbo Matches` section from `webapp/turbo_dashboard.py`.
+- Removed unused `build_match_rows(...)` call after deleting recent matches section.
