@@ -60,3 +60,6 @@ Use Streamlit Community Cloud:
 4. (Optional) add `OPENDOTA_API_KEY` in app Secrets.
 
 After deploy, you get a stable public HTTPS URL accessible from phone.
+
+Current deployed app:
+- https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/

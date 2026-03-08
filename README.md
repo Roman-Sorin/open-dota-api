@@ -11,9 +11,11 @@ Turbo-only dashboard for your account:
 
 - Hero overview in Turbo (matches, wins, WR, avg K/D/A, KDA)
 - Detailed hero section in Turbo
-- Most frequent final items
 - Item winrates (when item appears in final slots)
 - Recent Turbo matches
+
+Live app:
+- https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/
 
 ### Run
 

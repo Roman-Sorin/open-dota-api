@@ -105,3 +105,10 @@ CLI remains available as a secondary interface.
 - Removed `Most Frequent Final Items` section from `webapp/turbo_dashboard.py`.
 - Removed related `build_items(...)` calculation and note caption, since this section is no longer shown.
 - Item winrate and recent matches sections remain unchanged.
+
+## 2026-03-08 deployment completion
+
+- Streamlit Community Cloud app was deployed successfully.
+- Stable production URL:
+  - `https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/`
+- Added stable URL references to `README.md` and `DEPLOY.md`.
