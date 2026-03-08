@@ -45,6 +45,32 @@ st.markdown(
         line-height: 1.2;
         margin-top: 0.2rem;
     }
+    .hero-select-preview {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin: 0.35rem 0 0.75rem 0;
+        padding: 0.45rem 0.55rem;
+        border: 1px solid rgba(49, 51, 63, 0.2);
+        border-radius: 0.45rem;
+        background: rgba(255, 255, 255, 0.02);
+    }
+    .hero-select-preview img {
+        width: 34px;
+        height: 34px;
+        border-radius: 4px;
+        object-fit: cover;
+    }
+    .hero-select-name {
+        font-size: 0.92rem;
+        font-weight: 700;
+        line-height: 1.1;
+    }
+    .hero-select-meta {
+        font-size: 0.78rem;
+        opacity: 0.85;
+        margin-top: 0.1rem;
+    }
     @media (max-width: 768px) {
         .block-container {
             padding-top: 1rem;
@@ -345,13 +371,35 @@ st.dataframe(
     },
 )
 
-hero_options = {
-    f"{row['hero']}  |  {row['matches']} matches  |  {round(float(row['winrate']))}% WR": int(row["hero_id"])
-    for row in filtered_overview
-}
-selected_label = st.selectbox("Select Hero", options=list(hero_options.keys()))
-selected_hero_id = hero_options[selected_label]
+hero_rows_by_id = {int(row["hero_id"]): row for row in filtered_overview}
+hero_ids = list(hero_rows_by_id.keys())
+
+
+def _hero_option_label(hero_id: int) -> str:
+    row = hero_rows_by_id[hero_id]
+    return (
+        f"{row['hero']}  |  {int(row['matches'])} matches  |  "
+        f"{round(float(row['winrate']))}% WR  |  KDA {round(float(row['kda']), 1)}"
+    )
+
+
+selected_hero_id = st.selectbox("Select Hero", options=hero_ids, format_func=_hero_option_label)
+selected_hero_row = hero_rows_by_id[selected_hero_id]
 selected_hero_name = service.resolve_hero_name(selected_hero_id)
+
+st.markdown(
+    (
+        '<div class="hero-select-preview">'
+        f'<img src="{selected_hero_row.get("hero_image", "")}" alt="{selected_hero_name}"/>'
+        "<div>"
+        f'<div class="hero-select-name">{selected_hero_name}</div>'
+        f'<div class="hero-select-meta">{int(selected_hero_row["matches"])} matches · '
+        f'{round(float(selected_hero_row["winrate"]))}% WR · KDA {round(float(selected_hero_row["kda"]), 1)}</div>'
+        "</div>"
+        "</div>"
+    ),
+    unsafe_allow_html=True,
+)
 
 if active_patches and not supports_patch_overview:
     patch_filtered_matches = st.session_state.get("patch_filtered_matches") or []

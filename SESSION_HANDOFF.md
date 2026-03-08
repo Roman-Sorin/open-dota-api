@@ -200,3 +200,12 @@ CLI remains available as a secondary interface.
   - app fetches Turbo matches and filters by selected patches in webapp logic,
   - hero overview and hero details still work for selected patches.
 - Goal: patch multi-select works even under mixed/stale runtime code paths.
+
+## 2026-03-08 select-hero UX update
+
+- Improved `Select Hero` usability:
+  - dropdown options now include hero name + matches + WR + KDA in a consistent readable format.
+  - added hero preview card right below selector with hero icon and key stats.
+- Note:
+  - native Streamlit `selectbox` does not support inline images inside option rows.
+  - image is shown in preview directly under dropdown for selected hero.
