@@ -4,6 +4,7 @@ from datetime import datetime
 import inspect
 import re
 import sys
+import time
 
 import streamlit as st
 
@@ -116,6 +117,35 @@ def show_error(exc: Exception) -> None:
         st.error(str(exc))
     else:
         st.error(f"Unexpected error: {exc}")
+
+
+def run_with_rate_limit_retry(
+    operation: callable,
+    operation_label: str,
+    retries: int = 2,
+    cooldown_seconds: int = 5,
+):
+    attempt = 0
+    while True:
+        try:
+            return operation()
+        except OpenDotaRateLimitError:
+            if attempt >= retries:
+                raise
+            attempt += 1
+            status = st.empty()
+            progress = st.progress(0)
+            with st.spinner("OpenDota rate limit reached. Waiting to retry..."):
+                for elapsed in range(cooldown_seconds):
+                    seconds_left = cooldown_seconds - elapsed
+                    status.warning(
+                        f"Rate limit reached. Retrying {operation_label} in {seconds_left}s "
+                        f"(attempt {attempt + 1} of {retries + 1})"
+                    )
+                    progress.progress(int((elapsed + 1) * 100 / cooldown_seconds))
+                    time.sleep(1)
+            status.empty()
+            progress.empty()
 
 
 def _load_patch_timeline(service: DotaAnalyticsService) -> list[tuple[int, str]]:
@@ -333,7 +363,10 @@ if load:
         active_patches = selected_patches if time_filter_mode == "Patches" else []
 
         player_id = parse_player_id(player_raw)
-        service.ensure_player_exists(player_id)
+        run_with_rate_limit_retry(
+            lambda: service.ensure_player_exists(player_id),
+            operation_label="player profile",
+        )
         patch_filtered_matches: list[MatchSummary] | None = None
         if active_patches and not supports_patch_overview:
             base_filters = QueryFilters(
@@ -342,7 +375,10 @@ if load:
                 game_mode_name="Turbo",
                 days=None,
             )
-            all_turbo_matches = service.fetch_matches(base_filters)
+            all_turbo_matches = run_with_rate_limit_retry(
+                lambda: service.fetch_matches(base_filters),
+                operation_label="patch-filtered matches",
+            )
             selected_set = set(active_patches)
             patch_filtered_matches = [
                 m for m in all_turbo_matches if _resolve_patch_name(m.start_time, patch_timeline) in selected_set
@@ -355,7 +391,10 @@ if load:
             }
             if active_patches:
                 overview_kwargs["patch_names"] = active_patches
-            overview = service.get_turbo_hero_overview(**overview_kwargs)
+            overview = run_with_rate_limit_retry(
+                lambda: service.get_turbo_hero_overview(**overview_kwargs),
+                operation_label="hero overview",
+            )
 
         st.session_state["player_raw"] = player_raw
         st.session_state["player_id"] = player_id
@@ -490,7 +529,10 @@ else:
     filters = QueryFilters(**filters_kwargs)
 
     try:
-        matches = service.fetch_matches(filters)
+        matches = run_with_rate_limit_retry(
+            lambda: service.fetch_matches(filters),
+            operation_label="hero matches",
+        )
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
         st.stop()

@@ -230,6 +230,19 @@ CLI remains available as a secondary interface.
   - show `7.40`, `7.40b`, `7.40c`,
   - do not show old lettered entries like `7.39b`, `7.38c`, etc.
 
+## 2026-03-08 rate-limit UX retry improvement
+
+- Added user-friendly auto-retry flow for `OpenDotaRateLimitError` in web dashboard:
+  - circular spinner + visible countdown (`5..1`) + progress bar.
+  - automatic retry instead of immediate hard stop.
+- Applied to key calls:
+  - player profile check,
+  - hero overview load,
+  - patch-filtered match load,
+  - hero matches load.
+- Default behavior:
+  - retry up to 2 times with 5-second cooldown between attempts.
+
 ## 2026-03-08 select-hero UX update
 
 - Improved `Select Hero` usability:
