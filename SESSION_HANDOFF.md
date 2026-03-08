@@ -268,6 +268,15 @@ CLI remains available as a secondary interface.
 - Technical note:
   - done via lightweight frontend script because native Streamlit multiselect applies one label format to both options and selected tags.
 
+## 2026-03-08 patch selector stability update
+
+- Replaced JS-based label hack with stable native Streamlit flow:
+  - `Selected Patches` multiselect shows patch names only (no dates).
+  - `Add Patch (with dates)` dropdown shows patch name + date range labels.
+  - choosing patch in dropdown appends it to selected list and resets dropdown.
+- Rationale:
+  - avoids DOM patching fragility on Streamlit Cloud.
+
 ## 2026-03-08 select-hero UX update
 
 - Improved `Select Hero` usability:
