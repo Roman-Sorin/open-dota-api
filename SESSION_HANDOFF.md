@@ -209,3 +209,11 @@ CLI remains available as a secondary interface.
 - Note:
   - native Streamlit `selectbox` does not support inline images inside option rows.
   - image is shown in preview directly under dropdown for selected hero.
+
+## 2026-03-08 production hotfix (NameError)
+
+- Fixed `NameError: datetime is not defined` in `webapp/turbo_dashboard.py`.
+- Cause:
+  - patch timeline parser used `datetime.fromisoformat(...)` without importing `datetime`.
+- Fix:
+  - added `from datetime import datetime` import.
