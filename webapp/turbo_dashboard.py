@@ -658,6 +658,7 @@ if item_wr_rows:
             "Icon": row.get("item_image", ""),
             "Item": row["item"],
             "Item Winrate": f"{round(float(row['item_winrate']))}%",
+            "Matches": int(row.get("matches_with_item", 0)),
             "Avg K/D/A": (
                 f"{round(float(row.get('avg_kills_with_item', 0.0)))}/"
                 f"{round(float(row.get('avg_deaths_with_item', 0.0)))}/"

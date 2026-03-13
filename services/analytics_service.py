@@ -567,7 +567,14 @@ class DotaAnalyticsService:
                 }
             )
 
-        rows.sort(key=lambda x: (-x["matches_with_item"], -x["item_winrate"]))
+        rows.sort(
+            key=lambda x: (
+                -x["item_winrate"],
+                -x["matches_with_item"],
+                -x["wins_with_item"],
+                x["item"],
+            )
+        )
         return rows[:top_n]
 
     def resolve_hero_image(self, hero_id: int | None) -> str:
