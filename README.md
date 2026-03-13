@@ -97,3 +97,8 @@ tests/
 ```bash
 pytest -q
 ```
+
+## Collaboration Rules
+
+- After completing any implementation change, update relevant Markdown docs (`README.md`, `APP_GUIDE.md`, etc.) when behavior, UX, setup, or workflows changed.
+- After changes are complete and validated, commit and push to the remote branch in the same working session.
