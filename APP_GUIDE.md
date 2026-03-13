@@ -16,6 +16,7 @@ The project includes two interfaces:
 - Most frequent final items
 - Item winrate table (wins with item / matches with item), includes per-item match count
 - Item winrate table is sorted by highest item winrate first (ties by larger sample)
+- Dashboard filter `Min matches per item` defaults to `3`
 - Recent Turbo matches
 - Supports player input as account id or OpenDota profile URL
 - Caching for constants and match details

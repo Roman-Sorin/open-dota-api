@@ -432,7 +432,7 @@ with st.sidebar:
         value=st.session_state.get("min_hero_matches", 3),
         step=1,
     )
-    min_item_matches = st.slider("Min matches per item", min_value=1, max_value=30, value=5, step=1)
+    min_item_matches = st.slider("Min matches per item", min_value=1, max_value=30, value=3, step=1)
     load = st.button("Load Turbo Dashboard", type="primary")
 
 # Auto-load once on first page open, manual button remains available for refresh.
