@@ -12,6 +12,7 @@ The project includes two interfaces:
 ## Main capabilities
 
 - Turbo-only hero overview (matches, wins, losses, winrate)
+- Dashboard summary cards: Turbo matches, wins, losses, winrate
 - Per-hero detailed stats (avg K/D/A, KDA, Radiant/Dire WR)
 - Most frequent final items
 - Item winrate table (wins with item / matches with item), includes per-item match count

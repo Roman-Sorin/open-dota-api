@@ -523,11 +523,13 @@ if not overview:
 
 total_matches = sum(int(row["matches"]) for row in overview)
 total_wins = sum(int(row["wins"]) for row in overview)
+total_losses = total_matches - total_wins
 overall_wr = (total_wins / total_matches * 100.0) if total_matches else 0.0
 
 top_cards = [
     ("Turbo Matches", f"{total_matches}"),
     ("Turbo Wins", f"{total_wins}"),
+    ("Turbo Losses", f"{total_losses}"),
     ("Turbo Winrate", f"{round(overall_wr)}%"),
 ]
 top_html = "".join(
