@@ -14,7 +14,8 @@ Turbo-only dashboard for your account:
   - multi-select patches (e.g. `7.40`, `7.40c`, `7.39b`)
 - Hero overview in Turbo (matches, wins, WR, avg K/D/A, KDA)
 - Detailed hero section in Turbo
-- Item winrates (when item appears in final slots)
+- Item winrates (when item appears in final slots), with match count shown
+- Item winrates are ordered by highest winrate first (then by match count)
 
 Live app:
 - https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/

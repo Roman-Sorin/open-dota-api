@@ -14,7 +14,8 @@ The project includes two interfaces:
 - Turbo-only hero overview (matches, wins, losses, winrate)
 - Per-hero detailed stats (avg K/D/A, KDA, Radiant/Dire WR)
 - Most frequent final items
-- Item winrate table (wins with item / matches with item)
+- Item winrate table (wins with item / matches with item), includes per-item match count
+- Item winrate table is sorted by highest item winrate first (ties by larger sample)
 - Recent Turbo matches
 - Supports player input as account id or OpenDota profile URL
 - Caching for constants and match details
