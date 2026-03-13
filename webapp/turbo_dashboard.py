@@ -635,6 +635,14 @@ stats = service.build_stats(matches)
 item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50)
 item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
 item_wr_rows = _ensure_item_rows_have_kda(item_wr_rows, matches, service, player_id)
+item_wr_rows.sort(
+    key=lambda row: (
+        -round(float(row.get("item_winrate", 0.0))),
+        -int(row.get("matches_with_item", 0)),
+        -int(row.get("wins_with_item", 0)),
+        str(row.get("item", "")),
+    )
+)
 
 st.markdown(f"### {selected_hero_name} - Detailed Turbo Stats")
 stats_cards = [
@@ -657,7 +665,7 @@ if item_wr_rows:
         {
             "Icon": row.get("item_image", ""),
             "Item": row["item"],
-            "Item Winrate": f"{round(float(row['item_winrate']))}%",
+            "Item Winrate": round(float(row["item_winrate"])),
             "Matches": int(row.get("matches_with_item", 0)),
             "Avg K/D/A": (
                 f"{round(float(row.get('avg_kills_with_item', 0.0)))}/"
@@ -674,6 +682,7 @@ if item_wr_rows:
         hide_index=True,
         column_config={
             "Icon": st.column_config.ImageColumn("Item", help="Item icon", width="small"),
+            "Item Winrate": st.column_config.NumberColumn("Item Winrate", format="%.0f%%"),
         },
     )
 else:
