@@ -255,13 +255,14 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
             continue
         bucket = grouped.setdefault(
             hero_id,
-            {"matches": 0, "wins": 0, "kills": 0.0, "deaths": 0.0, "assists": 0.0},
+            {"matches": 0, "wins": 0, "kills": 0.0, "deaths": 0.0, "assists": 0.0, "hero_damage": 0.0},
         )
         bucket["matches"] += 1
         bucket["wins"] += 1 if match.did_win else 0
         bucket["kills"] += float(match.kills)
         bucket["deaths"] += float(match.deaths)
         bucket["assists"] += float(match.assists)
+        bucket["hero_damage"] += float(match.hero_damage)
 
     rows: list[dict] = []
     for hero_id, agg in grouped.items():
@@ -271,6 +272,7 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
         avg_k = agg["kills"] / games
         avg_d = agg["deaths"] / games
         avg_a = agg["assists"] / games
+        avg_damage = agg["hero_damage"] / games
         wr = (wins / games * 100.0) if games else 0.0
         kda = (avg_k + avg_a) / avg_d if avg_d > 0 else (avg_k + avg_a)
         rows.append(
@@ -285,6 +287,7 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
                 "avg_kills": avg_k,
                 "avg_deaths": avg_d,
                 "avg_assists": avg_a,
+                "avg_damage": avg_damage,
                 "kda": kda,
             }
         )
@@ -562,6 +565,7 @@ hero_table = [
         "Avg Kills": round(float(row["avg_kills"])),
         "Avg Deaths": round(float(row["avg_deaths"])),
         "Avg Assists": round(float(row["avg_assists"])),
+        "Avg Damage": round(float(row.get("avg_damage", 0.0))),
     }
     for row in filtered_overview
 ]

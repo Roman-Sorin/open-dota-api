@@ -154,6 +154,7 @@ class DotaAnalyticsService:
                     assists=int(row.get("assists") or 0),
                     duration=int(row.get("duration") or 0),
                     hero_id=int(row.get("hero_id") or 0) if row.get("hero_id") is not None else None,
+                    hero_damage=int(row.get("hero_damage") or 0),
                     item_0=int(row.get("item_0") or 0),
                     item_1=int(row.get("item_1") or 0),
                     item_2=int(row.get("item_2") or 0),
@@ -469,6 +470,7 @@ class DotaAnalyticsService:
                     "kills": 0.0,
                     "deaths": 0.0,
                     "assists": 0.0,
+                    "hero_damage": 0.0,
                 },
             )
             bucket["matches"] += 1
@@ -476,6 +478,7 @@ class DotaAnalyticsService:
             bucket["kills"] += float(match.kills)
             bucket["deaths"] += float(match.deaths)
             bucket["assists"] += float(match.assists)
+            bucket["hero_damage"] += float(match.hero_damage)
 
         result: list[dict[str, Any]] = []
         for hero_id, agg in grouped.items():
@@ -485,6 +488,7 @@ class DotaAnalyticsService:
             k = agg["kills"] / games
             d = agg["deaths"] / games
             a = agg["assists"] / games
+            avg_damage = agg["hero_damage"] / games
 
             result.append(
                 {
@@ -498,6 +502,7 @@ class DotaAnalyticsService:
                     "avg_kills": k,
                     "avg_deaths": d,
                     "avg_assists": a,
+                    "avg_damage": avg_damage,
                     "kda": calculate_kda_ratio(k, d, a),
                 }
             )

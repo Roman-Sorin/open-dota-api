@@ -39,6 +39,7 @@ class MatchSummary:
     assists: int
     duration: int
     hero_id: int | None
+    hero_damage: int = 0
     item_0: int = 0
     item_1: int = 0
     item_2: int = 0
