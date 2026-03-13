@@ -19,6 +19,7 @@ Turbo-only dashboard for your account:
 - Item winrates (when item appears in final slots), with match count shown
 - Item winrates are ordered by highest winrate first (then by match count)
 - Default minimum matches per item in the dashboard filter is `3`
+- Dashboard auto-refreshes overview session data when schema changes between app updates
 
 Live app:
 - https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/

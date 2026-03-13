@@ -22,6 +22,7 @@ from utils.helpers import parse_player_id
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
+OVERVIEW_SCHEMA_VERSION = 2
 
 st.markdown(
     """
@@ -446,6 +447,10 @@ if not st.session_state["auto_loaded"] and "overview" not in st.session_state:
     load = True
     st.session_state["auto_loaded"] = True
 
+# Force one-time refresh when overview structure changes between app versions.
+if "overview" in st.session_state and st.session_state.get("overview_schema_version") != OVERVIEW_SCHEMA_VERSION:
+    load = True
+
 if load:
     try:
         if time_filter_mode == "Patches" and not selected_patches:
@@ -498,6 +503,7 @@ if load:
         st.session_state["selected_patches"] = selected_patches
         st.session_state["active_patches"] = active_patches
         st.session_state["overview"] = overview
+        st.session_state["overview_schema_version"] = OVERVIEW_SCHEMA_VERSION
         st.session_state["patch_filtered_matches"] = patch_filtered_matches
         st.session_state["min_hero_matches"] = min_hero_matches
         st.session_state["min_item_matches"] = min_item_matches

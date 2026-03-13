@@ -82,3 +82,4 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - `ModuleNotFoundError`: activate `.venv` and reinstall requirements.
 - `OpenDotaRateLimitError`: wait and retry, reduce period, or use `OPENDOTA_API_KEY`.
 - Empty/partial item data: this can happen due to OpenDota coverage limits; app will still show available data.
+- After app updates, dashboard data schema is auto-refreshed; if values still look stale, click `Load Turbo Dashboard` once.
