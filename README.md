@@ -13,6 +13,7 @@ Turbo-only dashboard for your account:
   - period in days, or
   - multi-select patches (e.g. `7.40`, `7.40c`, `7.39b`)
 - Hero overview in Turbo (matches, wins, WR, avg K/D/A, avg damage, KDA)
+- When Turbo match rows miss `hero_damage`, the app enriches average damage from match details (API-safe fallback)
 - Top dashboard metrics include Turbo matches, wins, losses, and winrate
 - Detailed hero section in Turbo
 - Item winrates (when item appears in final slots), with match count shown

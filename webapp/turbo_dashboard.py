@@ -476,6 +476,7 @@ if load:
             patch_filtered_matches = [
                 m for m in all_turbo_matches if _resolve_patch_name(m.start_time, patch_timeline) in selected_set
             ]
+            service.enrich_hero_damage(player_id, patch_filtered_matches)
             overview = _build_overview_from_matches(patch_filtered_matches, service)
         else:
             overview_kwargs: dict[str, object] = {

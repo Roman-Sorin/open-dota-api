@@ -306,6 +306,31 @@ class DotaAnalyticsService:
         self.cache.set(cache_key, details)
         return details
 
+    def enrich_hero_damage(
+        self,
+        player_id: int,
+        matches: list[MatchSummary],
+        max_fallback_detail_calls: int = 45,
+    ) -> None:
+        fallback_detail_calls = 0
+        for match in matches:
+            if int(match.hero_damage or 0) > 0:
+                continue
+            if fallback_detail_calls >= max_fallback_detail_calls:
+                break
+            try:
+                details = self._get_match_details_cached(match.match_id)
+                fallback_detail_calls += 1
+                player_row = self._extract_player_from_match_details(
+                    details,
+                    player_id=player_id,
+                    player_slot=match.player_slot,
+                )
+                if player_row:
+                    match.hero_damage = int(player_row.get("hero_damage") or 0)
+            except OpenDotaRateLimitError:
+                break
+
     def build_items(self, player_id: int, matches: list[MatchSummary], include_purchase_logs: bool = True) -> ItemsResult:
         total = len(matches)
         if total == 0:
@@ -456,6 +481,7 @@ class DotaAnalyticsService:
         matches = self.fetch_matches(filters)
         if not matches:
             return []
+        self.enrich_hero_damage(player_id, matches)
 
         grouped: dict[int, dict[str, float]] = {}
         for match in matches:

@@ -12,6 +12,7 @@ The project includes two interfaces:
 ## Main capabilities
 
 - Turbo-only hero overview (matches, wins, losses, winrate, avg damage)
+- Hero overview avg damage uses match-detail fallback when player match rows don't include `hero_damage`
 - Dashboard summary cards: Turbo matches, wins, losses, winrate
 - Per-hero detailed stats (avg K/D/A, KDA, Radiant/Dire WR)
 - Most frequent final items
