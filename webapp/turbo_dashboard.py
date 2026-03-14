@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 
+import pandas as pd
 import streamlit as st
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -637,14 +638,32 @@ hero_table = [
     }
     for row in filtered_overview
 ]
+hero_table_df = pd.DataFrame(hero_table)
+if not hero_table_df.empty and "Avg Damage" in hero_table_df.columns:
+    hero_table_df["Avg Damage"] = hero_table_df["Avg Damage"].astype("int64")
+
 st.dataframe(
-    hero_table,
+    hero_table_df,
     use_container_width=True,
     hide_index=True,
     column_config={
         "Icon": st.column_config.ImageColumn("Hero", help="Hero icon", width="small"),
     },
 )
+
+with st.expander("Debug: Hero overview payload"):
+    debug_rows = [
+        {
+            "hero": row["hero"],
+            "matches": int(row["matches"]),
+            "avg_damage": round(float(row.get("avg_damage", 0.0))),
+            "avg_kills": round(float(row["avg_kills"]), 2),
+            "avg_deaths": round(float(row["avg_deaths"]), 2),
+            "avg_assists": round(float(row["avg_assists"]), 2),
+        }
+        for row in filtered_overview[:10]
+    ]
+    st.json(debug_rows)
 
 hero_rows_by_id = {int(row["hero_id"]): row for row in filtered_overview}
 hero_ids = list(hero_rows_by_id.keys())
