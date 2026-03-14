@@ -2,7 +2,9 @@ from pathlib import Path
 from bisect import bisect_right
 from datetime import datetime
 import inspect
+import os
 import re
+import subprocess
 import sys
 import time
 
@@ -105,6 +107,36 @@ def build_service() -> DotaAnalyticsService:
     )
     cache = JsonFileCache(cache_dir=get_cache_dir(), ttl_hours=settings.cache_ttl_hours)
     return DotaAnalyticsService(client=client, cache=cache)
+
+
+@st.cache_data(show_spinner=False)
+def get_app_version() -> str:
+    env_candidates = (
+        os.getenv("APP_VERSION"),
+        os.getenv("GIT_COMMIT"),
+        os.getenv("COMMIT_SHA"),
+        os.getenv("VERCEL_GIT_COMMIT_SHA"),
+        os.getenv("GITHUB_SHA"),
+    )
+    for candidate in env_candidates:
+        if candidate:
+            return candidate[:7]
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        version = result.stdout.strip()
+        if version:
+            return version
+    except Exception:  # noqa: BLE001
+        pass
+
+    return "unknown"
 
 
 def show_error(exc: Exception) -> None:
@@ -406,6 +438,8 @@ def _overview_looks_stale(overview: object) -> bool:
 
 st.title("Turbo Buff")
 st.caption("Turbo-only Dota 2 personal analytics based on OpenDota")
+app_version = get_app_version()
+st.caption(f"Build: `{app_version}`")
 
 service = build_service()
 try:
@@ -419,6 +453,7 @@ patch_options = _build_patch_options(patch_timeline)
 
 with st.sidebar:
     st.header("Filters")
+    st.caption(f"Version: `{app_version}`")
     player_raw = st.text_input(
         "Player ID or OpenDota URL",
         value=st.session_state.get("player_raw", "1233793238"),
