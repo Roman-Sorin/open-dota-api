@@ -6,3 +6,4 @@
 - After each push, verify the deployed UI shows the new `Build` hash before assuming the change is live.
 - For user-reported stats bugs, add or update a regression test with the exact reported numbers before calling the fix complete.
 - When changing overview/stat formulas, bump the UI overview schema/version so stale Streamlit session data is forcibly refreshed.
+- After any app/UI/filter/behavior change, update the relevant `MD` documentation in the same task so the repository docs stay current.
