@@ -22,7 +22,7 @@ from utils.helpers import parse_player_id
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
-OVERVIEW_SCHEMA_VERSION = 2
+OVERVIEW_SCHEMA_VERSION = 3
 
 st.markdown(
     """
@@ -381,6 +381,29 @@ def _ensure_item_rows_have_kda(
     return item_rows
 
 
+def _overview_looks_stale(overview: object) -> bool:
+    if not isinstance(overview, list) or not overview:
+        return False
+
+    has_avg_damage_key = any(isinstance(row, dict) and "avg_damage" in row for row in overview)
+    if not has_avg_damage_key:
+        return True
+
+    positive_damage_rows = 0
+    multi_match_rows = 0
+    for row in overview:
+        if not isinstance(row, dict):
+            continue
+        matches = int(row.get("matches") or 0)
+        avg_damage = float(row.get("avg_damage") or 0.0)
+        if matches > 1:
+            multi_match_rows += 1
+        if avg_damage > 0:
+            positive_damage_rows += 1
+
+    return multi_match_rows > 0 and positive_damage_rows == 0
+
+
 st.title("Turbo Buff")
 st.caption("Turbo-only Dota 2 personal analytics based on OpenDota")
 
@@ -449,6 +472,9 @@ if not st.session_state["auto_loaded"] and "overview" not in st.session_state:
 
 # Force one-time refresh when overview structure changes between app versions.
 if "overview" in st.session_state and st.session_state.get("overview_schema_version") != OVERVIEW_SCHEMA_VERSION:
+    load = True
+
+if "overview" in st.session_state and _overview_looks_stale(st.session_state.get("overview")):
     load = True
 
 if load:
