@@ -24,6 +24,29 @@ class ReferenceData:
     item_ids_by_key: dict[str, int]
 
 
+@dataclass(slots=True)
+class RecentMatchItem:
+    item_id: int
+    item_name: str
+    item_image: str
+    purchase_time_min: int | None
+
+
+@dataclass(slots=True)
+class RecentHeroMatch:
+    match_id: int
+    hero_name: str
+    hero_image: str
+    result: str
+    started_at: datetime
+    duration: str
+    kills: int
+    deaths: int
+    assists: int
+    kda_ratio: float
+    items: list[RecentMatchItem]
+
+
 class DotaAnalyticsService:
     def __init__(self, client: OpenDotaClient, cache: JsonFileCache) -> None:
         self.client = client
@@ -505,6 +528,88 @@ class DotaAnalyticsService:
                     kda=f"{match.kills}/{match.deaths}/{match.assists}",
                     duration=format_duration(match.duration),
                     items=item_names,
+                )
+            )
+
+        return rows
+
+    def _build_recent_match_items(self, player_row: dict | None, fallback_item_ids: list[int]) -> list[RecentMatchItem]:
+        items: list[RecentMatchItem] = []
+
+        purchase_log = player_row.get("purchase_log") if isinstance(player_row, dict) else None
+        if isinstance(purchase_log, list):
+            seen: set[int] = set()
+            for event in purchase_log:
+                if not isinstance(event, dict):
+                    continue
+                key = str(event.get("key") or "")
+                item_id = self.references.item_ids_by_key.get(key)
+                if not item_id or item_id in seen:
+                    continue
+                seen.add(item_id)
+                items.append(
+                    RecentMatchItem(
+                        item_id=item_id,
+                        item_name=self.references.item_names_by_id.get(item_id, key.replace("_", " ").title()),
+                        item_image=self.references.item_images_by_id.get(item_id, ""),
+                        purchase_time_min=max(int(event.get("time") or 0) // 60, 0),
+                    )
+                )
+                if len(items) >= 8:
+                    break
+
+        if items:
+            return items
+
+        for item_id in fallback_item_ids:
+            if item_id <= 0:
+                continue
+            items.append(
+                RecentMatchItem(
+                    item_id=item_id,
+                    item_name=self.references.item_names_by_id.get(item_id, f"Item #{item_id}"),
+                    item_image=self.references.item_images_by_id.get(item_id, ""),
+                    purchase_time_min=None,
+                )
+            )
+        return items[:8]
+
+    def build_recent_hero_matches(
+        self,
+        player_id: int,
+        matches: list[MatchSummary],
+        limit: int = 10,
+    ) -> list[RecentHeroMatch]:
+        rows: list[RecentHeroMatch] = []
+
+        for match in matches[:limit]:
+            item_ids = self._summary_item_ids(match)
+            player_row = None
+            try:
+                details = self._get_match_details_cached(match.match_id)
+                player_row = self._extract_player_from_match_details(
+                    details,
+                    player_id=player_id,
+                    player_slot=match.player_slot,
+                )
+                if player_row and not any(item_ids):
+                    item_ids = self._player_row_item_ids(player_row)
+            except OpenDotaRateLimitError:
+                player_row = None
+
+            rows.append(
+                RecentHeroMatch(
+                    match_id=match.match_id,
+                    hero_name=self.resolve_hero_name(match.hero_id),
+                    hero_image=self.resolve_hero_image(match.hero_id),
+                    result="Win" if match.did_win else "Loss",
+                    started_at=unix_to_dt(match.start_time),
+                    duration=format_duration(match.duration),
+                    kills=int(match.kills),
+                    deaths=int(match.deaths),
+                    assists=int(match.assists),
+                    kda_ratio=calculate_kda_ratio(float(match.kills), float(match.deaths), float(match.assists)),
+                    items=self._build_recent_match_items(player_row, item_ids),
                 )
             )
 
