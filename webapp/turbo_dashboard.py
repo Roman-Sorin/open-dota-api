@@ -104,6 +104,53 @@ st.markdown(
         border-bottom: 1px solid rgba(49, 51, 63, 0.1);
         vertical-align: middle;
     }
+    .recent-hero-cell {
+        min-width: 150px;
+    }
+    .recent-hero-wrap {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+    }
+    .recent-hero-icon-wrap {
+        position: relative;
+        width: 38px;
+        height: 38px;
+        flex: 0 0 38px;
+    }
+    .recent-hero-icon-wrap img {
+        width: 38px;
+        height: 38px;
+        border-radius: 6px;
+        display: block;
+    }
+    .recent-hero-level,
+    .recent-hero-variant {
+        position: absolute;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 999px;
+        font-size: 0.6rem;
+        font-weight: 700;
+        line-height: 16px;
+        text-align: center;
+        color: #fff;
+        background: rgba(17, 24, 39, 0.92);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+    }
+    .recent-hero-level {
+        top: -5px;
+        left: -5px;
+    }
+    .recent-hero-variant {
+        right: -5px;
+        bottom: -5px;
+    }
+    .recent-hero-name {
+        font-weight: 700;
+        line-height: 1.1;
+    }
     .recent-result {
         font-weight: 700;
         white-space: nowrap;
@@ -117,18 +164,56 @@ st.markdown(
     .recent-when {
         white-space: nowrap;
         opacity: 0.78;
+        font-size: 0.72rem;
+        margin-top: 0.12rem;
+    }
+    .recent-duration-value,
+    .recent-kda-value {
+        white-space: nowrap;
+        font-weight: 700;
+    }
+    .recent-bar {
+        width: 100%;
+        height: 6px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.08);
+        margin-top: 0.32rem;
+    }
+    .recent-bar-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #d97706 0%, #f59e0b 100%);
+    }
+    .recent-kda-bar {
+        display: flex;
+        width: 100%;
+        height: 6px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.08);
+        margin-top: 0.32rem;
+    }
+    .recent-kda-kills {
+        background: #c2410c;
+    }
+    .recent-kda-deaths {
+        background: #6b7280;
+    }
+    .recent-kda-assists {
+        background: #15803d;
     }
     .recent-items-inline {
         display: flex;
         align-items: flex-start;
         gap: 0.35rem;
-        min-width: 220px;
+        min-width: 236px;
     }
     .recent-items-inline.empty {
         opacity: 0.65;
     }
     .recent-item-inline {
-        text-align: center;
+        position: relative;
         width: 34px;
         flex: 0 0 34px;
     }
@@ -141,9 +226,16 @@ st.markdown(
     }
     .recent-item-inline-time {
         font-size: 0.63rem;
-        line-height: 1;
+        line-height: 1.1;
         font-weight: 700;
         white-space: nowrap;
+        position: absolute;
+        left: 2px;
+        bottom: 2px;
+        padding: 1px 3px;
+        border-radius: 4px;
+        color: #fff;
+        background: rgba(17, 24, 39, 0.92);
     }
     .recent-item-inline-time.na {
         opacity: 0.58;
@@ -257,6 +349,19 @@ def recent_matches_state_key(
     start_key = active_start_date.isoformat() if active_start_date else "no-start"
     days_key = str(days) if days is not None else "no-days"
     return f"recent_matches_limit_{hero_id}_{days_key}_{patch_key}_{start_key}"
+
+
+def duration_bar_percent(duration_seconds: int, full_scale_seconds: int = 45 * 60) -> float:
+    return max(0.0, min(duration_seconds / full_scale_seconds * 100.0, 100.0))
+
+
+def kda_bar_segments(kills: int, deaths: int, assists: int) -> tuple[float, float, float]:
+    total = max(kills + deaths + assists, 1)
+    return (
+        kills / total * 100.0,
+        deaths / total * 100.0,
+        assists / total * 100.0,
+    )
 
 
 def show_error(exc: Exception) -> None:
@@ -937,6 +1042,8 @@ st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches
 table_rows_html = ""
 for row in recent_match_rows:
     result_class = "win" if row.result == "Win" else "loss"
+    duration_percent = duration_bar_percent(row.duration_seconds)
+    kills_pct, deaths_pct, assists_pct = kda_bar_segments(row.kills, row.deaths, row.assists)
     item_html = "".join(
         (
             '<div class="recent-item-inline">'
@@ -950,13 +1057,31 @@ for row in recent_match_rows:
     ) or '<div class="recent-items-inline empty">No item data</div>'
     table_rows_html += (
         "<tr>"
-        f'<td class="recent-result {result_class}">{row.result} Match</td>'
-        f'<td class="recent-when">{format_time_ago(row.started_at)}</td>'
-        f"<td>{row.duration}</td>"
-        f"<td>{row.kills}/{row.deaths}/{row.assists}</td>"
-        f"<td>{round(row.kda_ratio, 1)}</td>"
+        '<td class="recent-hero-cell">'
+        '<div class="recent-hero-wrap">'
+        '<div class="recent-hero-icon-wrap">'
+        f'<img src="{row.hero_image}" alt="{row.hero_name}"/>'
+        f'<div class="recent-hero-level">{row.hero_level or "?"}</div>'
+        f'<div class="recent-hero-variant">{row.hero_variant or "-"}</div>'
+        "</div>"
+        f'<div class="recent-hero-name">{row.hero_name}</div>'
+        "</div>"
+        "</td>"
+        f'<td><div class="recent-result {result_class}">{row.result} Match</div>'
+        f'<div class="recent-when">{format_time_ago(row.started_at)}</div></td>'
+        '<td>'
+        f'<div class="recent-duration-value">{row.duration}</div>'
+        f'<div class="recent-bar"><div class="recent-bar-fill" style="width:{duration_percent:.1f}%"></div></div>'
+        "</td>"
+        '<td>'
+        f'<div class="recent-kda-value">{row.kills}/{row.deaths}/{row.assists}</div>'
+        '<div class="recent-kda-bar">'
+        f'<div class="recent-kda-kills" style="width:{kills_pct:.1f}%"></div>'
+        f'<div class="recent-kda-deaths" style="width:{deaths_pct:.1f}%"></div>'
+        f'<div class="recent-kda-assists" style="width:{assists_pct:.1f}%"></div>'
+        "</div>"
+        "</td>"
         f'<td><div class="recent-items-inline">{item_html}</div></td>'
-        f"<td>#{row.match_id}</td>"
         "</tr>"
     )
 
@@ -965,13 +1090,11 @@ st.markdown(
         '<div class="recent-matches-wrap">'
         '<table class="recent-matches-table">'
         "<thead><tr>"
+        "<th>Hero</th>"
         "<th>Result</th>"
-        "<th>When</th>"
         "<th>Duration</th>"
         "<th>KDA</th>"
-        "<th>Ratio</th>"
         "<th>Items</th>"
-        "<th>Match</th>"
         "</tr></thead>"
         f"<tbody>{table_rows_html}</tbody>"
         "</table>"

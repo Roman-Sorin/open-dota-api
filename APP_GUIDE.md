@@ -21,6 +21,7 @@ The project includes two interfaces:
 - Item winrate table is sorted by highest item winrate first (ties by larger sample)
 - Dashboard filter `Min matches per item` defaults to `3`
 - Recent hero matches are displayed as a compact table below the item table
+- Recent hero matches show final item slots only; timings are attached only to those final items when available from match details
 - Recent hero matches support incremental loading via `Load 10 more matches`
 - Supports player input as account id or OpenDota profile URL
 - Caching for constants and match details

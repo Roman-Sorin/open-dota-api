@@ -37,9 +37,12 @@ class RecentHeroMatch:
     match_id: int
     hero_name: str
     hero_image: str
+    hero_level: int | None
+    hero_variant: int | None
     result: str
     started_at: datetime
     duration: str
+    duration_seconds: int
     kills: int
     deaths: int
     assists: int
@@ -533,46 +536,34 @@ class DotaAnalyticsService:
 
         return rows
 
-    def _build_recent_match_items(self, player_row: dict | None, fallback_item_ids: list[int]) -> list[RecentMatchItem]:
-        items: list[RecentMatchItem] = []
-
+    def _build_recent_match_items(self, player_row: dict | None, final_item_ids: list[int]) -> list[RecentMatchItem]:
+        purchase_times_by_item: dict[int, list[int]] = {}
         purchase_log = player_row.get("purchase_log") if isinstance(player_row, dict) else None
         if isinstance(purchase_log, list):
-            seen: set[int] = set()
             for event in purchase_log:
                 if not isinstance(event, dict):
                     continue
                 key = str(event.get("key") or "")
                 item_id = self.references.item_ids_by_key.get(key)
-                if not item_id or item_id in seen:
+                if not item_id:
                     continue
-                seen.add(item_id)
-                items.append(
-                    RecentMatchItem(
-                        item_id=item_id,
-                        item_name=self.references.item_names_by_id.get(item_id, key.replace("_", " ").title()),
-                        item_image=self.references.item_images_by_id.get(item_id, ""),
-                        purchase_time_min=max(int(event.get("time") or 0) // 60, 0),
-                    )
-                )
-                if len(items) >= 8:
-                    break
+                purchase_times_by_item.setdefault(item_id, []).append(max(int(event.get("time") or 0) // 60, 0))
 
-        if items:
-            return items
-
-        for item_id in fallback_item_ids:
+        items: list[RecentMatchItem] = []
+        for item_id in final_item_ids:
             if item_id <= 0:
                 continue
+            purchase_times = purchase_times_by_item.get(item_id, [])
+            purchase_time_min = purchase_times.pop(0) if purchase_times else None
             items.append(
                 RecentMatchItem(
                     item_id=item_id,
                     item_name=self.references.item_names_by_id.get(item_id, f"Item #{item_id}"),
                     item_image=self.references.item_images_by_id.get(item_id, ""),
-                    purchase_time_min=None,
+                    purchase_time_min=purchase_time_min,
                 )
             )
-        return items[:8]
+        return items[:6]
 
     def build_recent_hero_matches(
         self,
@@ -592,7 +583,7 @@ class DotaAnalyticsService:
                     player_id=player_id,
                     player_slot=match.player_slot,
                 )
-                if player_row and not any(item_ids):
+                if player_row:
                     item_ids = self._player_row_item_ids(player_row)
             except OpenDotaRateLimitError:
                 player_row = None
@@ -602,9 +593,12 @@ class DotaAnalyticsService:
                     match_id=match.match_id,
                     hero_name=self.resolve_hero_name(match.hero_id),
                     hero_image=self.resolve_hero_image(match.hero_id),
+                    hero_level=int(player_row.get("level") or 0) if isinstance(player_row, dict) else None,
+                    hero_variant=int(player_row.get("hero_variant") or 0) if isinstance(player_row, dict) else None,
                     result="Win" if match.did_win else "Loss",
                     started_at=unix_to_dt(match.start_time),
                     duration=format_duration(match.duration),
+                    duration_seconds=int(match.duration),
                     kills=int(match.kills),
                     deaths=int(match.deaths),
                     assists=int(match.assists),

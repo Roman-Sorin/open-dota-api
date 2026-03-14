@@ -9,7 +9,14 @@ class _FakeClient:
         return {"1": {"id": 1, "localized_name": "Axe", "img": "/apps/dota2/images/heroes/axe.png"}}
 
     def get_constants_items(self) -> dict:
-        return {"blink": {"id": 1, "dname": "Blink Dagger", "img": "/apps/dota2/images/items/blink.png"}}
+        return {
+            "blink": {"id": 1, "dname": "Blink Dagger", "img": "/apps/dota2/images/items/blink.png"},
+            "power_treads": {"id": 63, "dname": "Power Treads", "img": "/apps/dota2/images/items/power_treads.png"},
+            "armlet": {"id": 114, "dname": "Armlet of Mordiggian", "img": "/apps/dota2/images/items/armlet.png"},
+            "skadi": {"id": 160, "dname": "Eye of Skadi", "img": "/apps/dota2/images/items/skadi.png"},
+            "orchid": {"id": 151, "dname": "Orchid Malevolence", "img": "/apps/dota2/images/items/orchid.png"},
+            "heart": {"id": 108, "dname": "Heart of Tarrasque", "img": "/apps/dota2/images/items/heart.png"},
+        }
 
     def get_constants_patch(self) -> list[dict]:
         return [{"name": "7.40", "date": "2025-01-01T00:00:00Z"}]
@@ -266,3 +273,60 @@ def test_fetch_matches_respects_start_date_filter() -> None:
 
     assert len(rows) == 1
     assert rows[0].match_id == 2
+
+
+def test_recent_hero_matches_use_final_slots_with_matching_final_item_timings() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=101,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=10,
+            deaths=2,
+            assists=8,
+            duration=1500,
+            hero_id=1,
+            item_0=63,
+            item_1=114,
+            item_2=160,
+            item_3=151,
+            item_4=108,
+            item_5=1,
+        )
+    ]
+
+    service._get_match_details_cached = lambda _: {  # type: ignore[method-assign]
+        "players": [
+            {
+                "account_id": 123,
+                "player_slot": 0,
+                "level": 27,
+                "hero_variant": 2,
+                "item_0": 63,
+                "item_1": 114,
+                "item_2": 160,
+                "item_3": 151,
+                "item_4": 108,
+                "item_5": 1,
+                "purchase_log": [
+                    {"key": "boots", "time": 15},
+                    {"key": "power_treads", "time": 180},
+                    {"key": "armlet", "time": 344},
+                    {"key": "orchid", "time": 543},
+                    {"key": "blink", "time": 774},
+                    {"key": "heart", "time": 1046},
+                    {"key": "skadi", "time": 1390},
+                ],
+            }
+        ]
+    }
+
+    rows = service.build_recent_hero_matches(player_id=123, matches=matches, limit=10)
+
+    assert len(rows) == 1
+    assert rows[0].hero_level == 27
+    assert rows[0].hero_variant == 2
+    assert [item.item_id for item in rows[0].items] == [63, 114, 160, 151, 108, 1]
+    assert [item.purchase_time_min for item in rows[0].items] == [3, 5, 23, 9, 17, 12]
