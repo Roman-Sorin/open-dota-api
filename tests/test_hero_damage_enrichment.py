@@ -134,3 +134,58 @@ def test_turbo_hero_overview_uses_confirmed_damage_samples_only() -> None:
     assert len(rows) == 1
     assert rows[0]["avg_damage"] == 30000
     assert rows[0]["avg_damage_samples"] == 1
+
+
+def test_turbo_hero_overview_matches_reported_phantom_lancer_example() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=1,
+            start_time=0,
+            player_slot=0,
+            radiant_win=False,
+            kills=2,
+            deaths=11,
+            assists=8,
+            duration=2226,
+            hero_id=1,
+            hero_damage=12700,
+            hero_damage_known=True,
+        ),
+        MatchSummary(
+            match_id=2,
+            start_time=0,
+            player_slot=128,
+            radiant_win=False,
+            kills=4,
+            deaths=7,
+            assists=11,
+            duration=1635,
+            hero_id=1,
+            hero_damage=14700,
+            hero_damage_known=True,
+        ),
+        MatchSummary(
+            match_id=3,
+            start_time=0,
+            player_slot=128,
+            radiant_win=False,
+            kills=2,
+            deaths=5,
+            assists=9,
+            duration=1325,
+            hero_id=1,
+            hero_damage=9700,
+            hero_damage_known=True,
+        ),
+    ]
+
+    service.fetch_matches = lambda filters: matches  # type: ignore[method-assign]
+    service.enrich_hero_damage = lambda player_id, matches, max_fallback_detail_calls=45: None  # type: ignore[method-assign]
+
+    rows = service.get_turbo_hero_overview(player_id=123, days=180)
+
+    assert len(rows) == 1
+    assert rows[0]["matches"] == 3
+    assert rows[0]["avg_damage"] == 12366.666666666666
+    assert rows[0]["avg_damage_samples"] == 3

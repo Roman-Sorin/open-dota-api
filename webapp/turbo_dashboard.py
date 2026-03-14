@@ -25,7 +25,7 @@ from utils.helpers import parse_player_id
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
-OVERVIEW_SCHEMA_VERSION = 3
+OVERVIEW_SCHEMA_VERSION = 4
 
 st.markdown(
     """
