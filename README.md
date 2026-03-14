@@ -12,11 +12,14 @@ Turbo-only dashboard for your account:
 - Flexible time filter:
   - period in days, or
   - multi-select patches (e.g. `7.40`, `7.40c`, `7.39b`)
+  - explicit `Start Date` mode
 - Hero overview in Turbo (matches, wins, WR, avg K/D/A, avg damage, KDA)
 - When Turbo match rows miss `hero_damage`, the app enriches average damage from match details (API-safe fallback)
 - Top dashboard metrics include Turbo matches, wins, losses, and winrate
 - Detailed hero section in Turbo
 - Item winrates (when item appears in final slots), with match count shown
+- Recent hero matches shown as a compact one-row-per-match table under the item table
+- Recent hero matches support `Load 10 more matches`
 - Item winrates are ordered by highest winrate first (then by match count)
 - Default minimum matches per item in the dashboard filter is `3`
 - Dashboard auto-refreshes overview session data when schema changes between app updates

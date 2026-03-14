@@ -79,98 +79,74 @@ st.markdown(
         opacity: 0.85;
         margin-top: 0.1rem;
     }
-    .recent-match-card {
-        border: 1px solid rgba(49, 51, 63, 0.16);
-        border-radius: 0.8rem;
-        padding: 0.8rem;
-        margin-bottom: 0.75rem;
-        background: rgba(255, 255, 255, 0.03);
+    .recent-matches-wrap {
+        overflow-x: auto;
+        margin-top: 0.5rem;
     }
-    .recent-match-top {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.8rem;
+    .recent-matches-table {
+        width: 100%;
+        min-width: 760px;
+        border-collapse: collapse;
+        font-size: 0.84rem;
     }
-    .recent-match-hero {
-        display: flex;
-        align-items: center;
-        gap: 0.7rem;
-    }
-    .recent-match-hero img {
-        width: 40px;
-        height: 40px;
-        border-radius: 6px;
-        object-fit: cover;
-    }
-    .recent-match-title {
-        font-size: 0.95rem;
-        font-weight: 700;
-        line-height: 1.1;
-    }
-    .recent-match-subtitle {
-        font-size: 0.78rem;
-        opacity: 0.8;
-        margin-top: 0.12rem;
-    }
-    .recent-match-result {
-        font-size: 0.88rem;
-        font-weight: 700;
-        text-align: right;
+    .recent-matches-table th {
+        text-align: left;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        opacity: 0.72;
+        padding: 0.45rem 0.55rem;
+        border-bottom: 1px solid rgba(49, 51, 63, 0.18);
         white-space: nowrap;
     }
-    .recent-match-result.win {
+    .recent-matches-table td {
+        padding: 0.55rem;
+        border-bottom: 1px solid rgba(49, 51, 63, 0.1);
+        vertical-align: middle;
+    }
+    .recent-result {
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    .recent-result.win {
         color: #23a55a;
     }
-    .recent-match-result.loss {
+    .recent-result.loss {
         color: #d9534f;
     }
-    .recent-match-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.6rem;
-        margin-top: 0.75rem;
+    .recent-when {
+        white-space: nowrap;
+        opacity: 0.78;
     }
-    .recent-match-cell {
-        border: 1px solid rgba(49, 51, 63, 0.12);
-        border-radius: 0.65rem;
-        padding: 0.55rem 0.65rem;
-        background: rgba(255, 255, 255, 0.02);
+    .recent-items-inline {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.35rem;
+        min-width: 220px;
     }
-    .recent-match-label {
-        font-size: 0.72rem;
-        opacity: 0.72;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
+    .recent-items-inline.empty {
+        opacity: 0.65;
     }
-    .recent-match-value {
-        font-size: 0.92rem;
-        font-weight: 700;
-        margin-top: 0.12rem;
-    }
-    .recent-match-items {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
-        gap: 0.45rem;
-        margin-top: 0.75rem;
-    }
-    .recent-item {
+    .recent-item-inline {
         text-align: center;
+        width: 34px;
+        flex: 0 0 34px;
     }
-    .recent-item img {
-        width: 100%;
-        max-width: 58px;
-        border-radius: 6px;
+    .recent-item-inline img {
+        width: 34px;
+        height: 34px;
+        border-radius: 5px;
         display: block;
-        margin: 0 auto 0.2rem auto;
+        margin: 0 auto 0.15rem auto;
     }
-    .recent-item-time {
-        font-size: 0.72rem;
-        font-weight: 700;
+    .recent-item-inline-time {
+        font-size: 0.63rem;
         line-height: 1;
+        font-weight: 700;
+        white-space: nowrap;
     }
-    .recent-item-time.na {
-        opacity: 0.6;
+    .recent-item-inline-time.na {
+        opacity: 0.58;
     }
     @media (max-width: 768px) {
         .block-container {
@@ -184,9 +160,6 @@ st.markdown(
         }
         div[data-testid="stDataFrameResizable"] {
             overflow-x: auto;
-        }
-        .recent-match-grid {
-            grid-template-columns: 1fr 1fr;
         }
     }
     </style>
@@ -929,64 +902,6 @@ recent_match_rows = service.build_recent_hero_matches(
     limit=min(visible_recent_matches, len(matches)),
 )
 
-st.markdown("### Hero Matches - Recent Matches for Hero")
-st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches)} matches")
-
-for row in recent_match_rows:
-    result_class = "win" if row.result == "Win" else "loss"
-    item_html = "".join(
-        (
-            '<div class="recent-item">'
-            f'<img src="{item.item_image}" alt="{item.item_name}" title="{item.item_name}"/>'
-            f'<div class="recent-item-time{" na" if item.purchase_time_min is None else ""}">'
-            f'{f"{item.purchase_time_min}m" if item.purchase_time_min is not None else "-"}'
-            "</div>"
-            "</div>"
-        )
-        for item in row.items
-    ) or '<div class="recent-match-subtitle">No item data</div>'
-    st.markdown(
-        (
-            '<div class="recent-match-card">'
-            '<div class="recent-match-top">'
-            '<div class="recent-match-hero">'
-            f'<img src="{row.hero_image}" alt="{row.hero_name}"/>'
-            "<div>"
-            f'<div class="recent-match-title">{row.hero_name}</div>'
-            f'<div class="recent-match-subtitle">Match #{row.match_id} · {format_time_ago(row.started_at)}</div>'
-            "</div>"
-            "</div>"
-            f'<div class="recent-match-result {result_class}">{row.result} Match</div>'
-            "</div>"
-            '<div class="recent-match-grid">'
-            '<div class="recent-match-cell">'
-            '<div class="recent-match-label">Duration</div>'
-            f'<div class="recent-match-value">{row.duration}</div>'
-            "</div>"
-            '<div class="recent-match-cell">'
-            '<div class="recent-match-label">KDA</div>'
-            f'<div class="recent-match-value">{row.kills}/{row.deaths}/{row.assists}</div>'
-            "</div>"
-            '<div class="recent-match-cell">'
-            '<div class="recent-match-label">Ratio</div>'
-            f'<div class="recent-match-value">{round(row.kda_ratio, 1)}</div>'
-            "</div>"
-            '<div class="recent-match-cell">'
-            '<div class="recent-match-label">Result</div>'
-            f'<div class="recent-match-value">{row.result}</div>'
-            "</div>"
-            "</div>"
-            f'<div class="recent-match-items">{item_html}</div>'
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
-
-if visible_recent_matches < len(matches):
-    if st.button("Load 10 more matches", key=f"{recent_matches_key}_load_more"):
-        st.session_state[recent_matches_key] = min(visible_recent_matches + 10, len(matches))
-        st.rerun()
-
 st.markdown("### Item Winrates (when item appears in final slots)")
 if item_wr_rows:
     item_winrate_table = [
@@ -1015,3 +930,57 @@ if item_wr_rows:
     )
 else:
     st.info("No items satisfy current minimum matches threshold.")
+
+st.markdown("### Hero Matches - Recent Matches for Hero")
+st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches)} matches")
+
+table_rows_html = ""
+for row in recent_match_rows:
+    result_class = "win" if row.result == "Win" else "loss"
+    item_html = "".join(
+        (
+            '<div class="recent-item-inline">'
+            f'<img src="{item.item_image}" alt="{item.item_name}" title="{item.item_name}"/>'
+            f'<div class="recent-item-inline-time{" na" if item.purchase_time_min is None else ""}">'
+            f'{f"{item.purchase_time_min}m" if item.purchase_time_min is not None else "-"}'
+            "</div>"
+            "</div>"
+        )
+        for item in row.items
+    ) or '<div class="recent-items-inline empty">No item data</div>'
+    table_rows_html += (
+        "<tr>"
+        f'<td class="recent-result {result_class}">{row.result} Match</td>'
+        f'<td class="recent-when">{format_time_ago(row.started_at)}</td>'
+        f"<td>{row.duration}</td>"
+        f"<td>{row.kills}/{row.deaths}/{row.assists}</td>"
+        f"<td>{round(row.kda_ratio, 1)}</td>"
+        f'<td><div class="recent-items-inline">{item_html}</div></td>'
+        f"<td>#{row.match_id}</td>"
+        "</tr>"
+    )
+
+st.markdown(
+    (
+        '<div class="recent-matches-wrap">'
+        '<table class="recent-matches-table">'
+        "<thead><tr>"
+        "<th>Result</th>"
+        "<th>When</th>"
+        "<th>Duration</th>"
+        "<th>KDA</th>"
+        "<th>Ratio</th>"
+        "<th>Items</th>"
+        "<th>Match</th>"
+        "</tr></thead>"
+        f"<tbody>{table_rows_html}</tbody>"
+        "</table>"
+        "</div>"
+    ),
+    unsafe_allow_html=True,
+)
+
+if visible_recent_matches < len(matches):
+    if st.button("Load 10 more matches", key=f"{recent_matches_key}_load_more"):
+        st.session_state[recent_matches_key] = min(visible_recent_matches + 10, len(matches))
+        st.rerun()

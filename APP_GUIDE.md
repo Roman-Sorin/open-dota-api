@@ -14,12 +14,14 @@ The project includes two interfaces:
 - Turbo-only hero overview (matches, wins, losses, winrate, avg damage)
 - Hero overview avg damage uses match-detail fallback when player match rows don't include `hero_damage`
 - Dashboard summary cards: Turbo matches, wins, losses, winrate
+- Time filter modes: `Days`, `Patches`, `Start Date`
 - Per-hero detailed stats (avg K/D/A, KDA, Radiant/Dire WR)
 - Most frequent final items
 - Item winrate table (wins with item / matches with item), includes per-item match count
 - Item winrate table is sorted by highest item winrate first (ties by larger sample)
 - Dashboard filter `Min matches per item` defaults to `3`
-- Recent Turbo matches
+- Recent hero matches are displayed as a compact table below the item table
+- Recent hero matches support incremental loading via `Load 10 more matches`
 - Supports player input as account id or OpenDota profile URL
 - Caching for constants and match details
 - Graceful handling of missing OpenDota fields and rate limits
