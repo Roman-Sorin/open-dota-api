@@ -203,6 +203,10 @@ st.markdown(
     .recent-kda-assists {
         background: #15803d;
     }
+    .recent-stat-value {
+        white-space: nowrap;
+        font-weight: 700;
+    }
     .recent-items-inline {
         display: flex;
         align-items: flex-start;
@@ -1081,6 +1085,8 @@ for row in recent_match_rows:
         f'<div class="recent-kda-assists" style="width:{assists_pct:.1f}%"></div>'
         "</div>"
         "</td>"
+        f'<td><div class="recent-stat-value">{f"{round((row.net_worth or 0) / 1000, 1)}k" if row.net_worth else "-"}</div></td>'
+        f'<td><div class="recent-stat-value">{f"{round((row.hero_damage or 0) / 1000, 1)}k" if row.hero_damage else "-"}</div></td>'
         f'<td><div class="recent-items-inline">{item_html}</div></td>'
         "</tr>"
     )
@@ -1094,6 +1100,8 @@ st.markdown(
         "<th>Result</th>"
         "<th>Duration</th>"
         "<th>KDA</th>"
+        "<th>Net Worth</th>"
+        "<th>Damage</th>"
         "<th>Items</th>"
         "</tr></thead>"
         f"<tbody>{table_rows_html}</tbody>"

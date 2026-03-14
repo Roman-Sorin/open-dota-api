@@ -20,6 +20,7 @@ Turbo-only dashboard for your account:
 - Item winrates (when item appears in final slots), with match count shown
 - Recent hero matches shown as a compact one-row-per-match table under the item table
 - Recent hero matches show only final slots, and item timings are shown only when the final item completion time is available
+- Recent hero matches include `Net Worth` and player `Hero Damage`
 - Recent hero matches support `Load 10 more matches`
 - Item winrates are ordered by highest winrate first (then by match count)
 - Default minimum matches per item in the dashboard filter is `3`

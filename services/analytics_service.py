@@ -47,6 +47,8 @@ class RecentHeroMatch:
     deaths: int
     assists: int
     kda_ratio: float
+    net_worth: int | None
+    hero_damage: int | None
     items: list[RecentMatchItem]
 
 
@@ -603,6 +605,8 @@ class DotaAnalyticsService:
                     deaths=int(match.deaths),
                     assists=int(match.assists),
                     kda_ratio=calculate_kda_ratio(float(match.kills), float(match.deaths), float(match.assists)),
+                    net_worth=int(player_row.get("net_worth") or 0) if isinstance(player_row, dict) else None,
+                    hero_damage=int(player_row.get("hero_damage") or 0) if isinstance(player_row, dict) else None,
                     items=self._build_recent_match_items(player_row, item_ids),
                 )
             )

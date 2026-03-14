@@ -304,6 +304,8 @@ def test_recent_hero_matches_use_final_slots_with_matching_final_item_timings() 
                 "player_slot": 0,
                 "level": 27,
                 "hero_variant": 2,
+                "net_worth": 26173,
+                "hero_damage": 15592,
                 "item_0": 63,
                 "item_1": 114,
                 "item_2": 160,
@@ -328,5 +330,7 @@ def test_recent_hero_matches_use_final_slots_with_matching_final_item_timings() 
     assert len(rows) == 1
     assert rows[0].hero_level == 27
     assert rows[0].hero_variant == 2
+    assert rows[0].net_worth == 26173
+    assert rows[0].hero_damage == 15592
     assert [item.item_id for item in rows[0].items] == [63, 114, 160, 151, 108, 1]
     assert [item.purchase_time_min for item in rows[0].items] == [3, 5, 23, 9, 17, 12]
