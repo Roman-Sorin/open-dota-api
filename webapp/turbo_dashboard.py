@@ -487,7 +487,7 @@ with st.sidebar:
         "Player ID or OpenDota URL",
         value=st.session_state.get("player_raw", "1233793238"),
     )
-    time_mode_options = ["Days", "Patches"]
+    time_mode_options = ["Days", "Patches", "Start Date"]
     default_mode = st.session_state.get("time_filter_mode", "Days")
     time_filter_mode = st.radio(
         "Time filter mode",
@@ -496,20 +496,11 @@ with st.sidebar:
     )
 
     days = st.session_state.get("days", get_default_days_period())
-    use_start_date = st.session_state.get("use_start_date", False)
     start_date_value = st.session_state.get("start_date", date(2026, 1, 22))
     selected_patches = st.session_state.get("selected_patches", [])
-    use_start_date = st.checkbox("Use start date", value=use_start_date)
-    start_date_value = st.date_input(
-        "Start date",
-        value=start_date_value,
-        disabled=not use_start_date,
-        min_value=date(2020, 1, 1),
-        max_value=datetime.now().date(),
-    )
     if time_filter_mode == "Days":
         days = st.slider("Period (days)", min_value=7, max_value=365, value=days, step=1)
-    else:
+    elif time_filter_mode == "Patches":
         if not patch_options:
             st.warning("Patch list is temporarily unavailable (OpenDota constants).")
             selected_patches = []
@@ -525,6 +516,13 @@ with st.sidebar:
                 options=patch_options,
                 key="patches_widget_selection",
             )
+    else:
+        start_date_value = st.date_input(
+            "Start date",
+            value=start_date_value,
+            min_value=date(2020, 1, 1),
+            max_value=datetime.now().date(),
+        )
 
     min_hero_matches = st.slider(
         "Min matches per hero",
@@ -559,7 +557,7 @@ if load:
 
         active_days = days if time_filter_mode == "Days" else None
         active_patches = selected_patches if time_filter_mode == "Patches" else []
-        active_start_date = start_date_value if use_start_date else None
+        active_start_date = start_date_value if time_filter_mode == "Start Date" else None
 
         player_id = parse_player_id(player_raw)
         run_with_rate_limit_retry(
@@ -607,7 +605,6 @@ if load:
         st.session_state["time_filter_mode"] = time_filter_mode
         st.session_state["days"] = days
         st.session_state["active_days"] = active_days
-        st.session_state["use_start_date"] = use_start_date
         st.session_state["start_date"] = start_date_value
         st.session_state["active_start_date"] = active_start_date
         st.session_state["selected_patches"] = selected_patches
