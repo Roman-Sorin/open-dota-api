@@ -1,6 +1,6 @@
 from pathlib import Path
 from bisect import bisect_right
-from datetime import datetime
+from datetime import date, datetime
 import inspect
 import os
 import re
@@ -138,6 +138,13 @@ def get_app_version() -> str:
         pass
 
     return "unknown"
+
+
+def get_default_days_period() -> int:
+    start_date = date(2026, 1, 22)
+    today = datetime.now().date()
+    days = max((today - start_date).days, 7)
+    return min(days, 365)
 
 
 def show_error(exc: Exception) -> None:
@@ -479,7 +486,7 @@ with st.sidebar:
         index=time_mode_options.index(default_mode) if default_mode in time_mode_options else 0,
     )
 
-    days = st.session_state.get("days", 60)
+    days = st.session_state.get("days", get_default_days_period())
     selected_patches = st.session_state.get("selected_patches", [])
     if time_filter_mode == "Days":
         days = st.slider("Period (days)", min_value=7, max_value=365, value=days, step=1)
