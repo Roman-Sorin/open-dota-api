@@ -40,6 +40,7 @@ class MatchSummary:
     duration: int
     hero_id: int | None
     hero_damage: int = 0
+    hero_damage_known: bool = False
     item_0: int = 0
     item_1: int = 0
     item_2: int = 0

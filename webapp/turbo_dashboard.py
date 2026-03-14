@@ -289,14 +289,24 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
             continue
         bucket = grouped.setdefault(
             hero_id,
-            {"matches": 0, "wins": 0, "kills": 0.0, "deaths": 0.0, "assists": 0.0, "hero_damage": 0.0},
+            {
+                "matches": 0,
+                "wins": 0,
+                "kills": 0.0,
+                "deaths": 0.0,
+                "assists": 0.0,
+                "hero_damage": 0.0,
+                "hero_damage_samples": 0,
+            },
         )
         bucket["matches"] += 1
         bucket["wins"] += 1 if match.did_win else 0
         bucket["kills"] += float(match.kills)
         bucket["deaths"] += float(match.deaths)
         bucket["assists"] += float(match.assists)
-        bucket["hero_damage"] += float(match.hero_damage)
+        if match.hero_damage_known:
+            bucket["hero_damage"] += float(match.hero_damage)
+            bucket["hero_damage_samples"] += 1
 
     rows: list[dict] = []
     for hero_id, agg in grouped.items():
@@ -306,7 +316,8 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
         avg_k = agg["kills"] / games
         avg_d = agg["deaths"] / games
         avg_a = agg["assists"] / games
-        avg_damage = agg["hero_damage"] / games
+        damage_samples = int(agg["hero_damage_samples"])
+        avg_damage = agg["hero_damage"] / damage_samples if damage_samples > 0 else 0.0
         wr = (wins / games * 100.0) if games else 0.0
         kda = (avg_k + avg_a) / avg_d if avg_d > 0 else (avg_k + avg_a)
         rows.append(
@@ -322,6 +333,7 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
                 "avg_deaths": avg_d,
                 "avg_assists": avg_a,
                 "avg_damage": avg_damage,
+                "avg_damage_samples": damage_samples,
                 "kda": kda,
             }
         )
@@ -660,6 +672,7 @@ with st.expander("Debug: Hero overview payload"):
         {
             "hero": row["hero"],
             "matches": int(row["matches"]),
+            "avg_damage_samples": int(row.get("avg_damage_samples") or 0),
             "avg_damage": round(float(row.get("avg_damage", 0.0))),
             "avg_kills": round(float(row["avg_kills"]), 2),
             "avg_deaths": round(float(row["avg_deaths"]), 2),

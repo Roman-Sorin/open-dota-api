@@ -93,3 +93,44 @@ def test_enrich_hero_damage_cached_details_do_not_consume_budget() -> None:
 
     assert matches[0].hero_damage == 11111
     assert matches[1].hero_damage == 22222
+
+
+def test_turbo_hero_overview_uses_confirmed_damage_samples_only() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=101,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=1,
+            deaths=1,
+            assists=1,
+            duration=1200,
+            hero_id=1,
+            hero_damage=30000,
+            hero_damage_known=True,
+        ),
+        MatchSummary(
+            match_id=102,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=1,
+            deaths=1,
+            assists=1,
+            duration=1200,
+            hero_id=1,
+            hero_damage=0,
+            hero_damage_known=False,
+        ),
+    ]
+
+    service.fetch_matches = lambda filters: matches  # type: ignore[method-assign]
+    service.enrich_hero_damage = lambda player_id, matches, max_fallback_detail_calls=45: None  # type: ignore[method-assign]
+
+    rows = service.get_turbo_hero_overview(player_id=123, days=60)
+
+    assert len(rows) == 1
+    assert rows[0]["avg_damage"] == 30000
+    assert rows[0]["avg_damage_samples"] == 1

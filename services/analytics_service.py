@@ -144,6 +144,7 @@ class DotaAnalyticsService:
                     if patch_name not in selected_patches:
                         continue
 
+                hero_damage = int(row.get("hero_damage") or 0)
                 match = MatchSummary(
                     match_id=int(row.get("match_id") or 0),
                     start_time=start_time,
@@ -154,7 +155,8 @@ class DotaAnalyticsService:
                     assists=int(row.get("assists") or 0),
                     duration=int(row.get("duration") or 0),
                     hero_id=int(row.get("hero_id") or 0) if row.get("hero_id") is not None else None,
-                    hero_damage=int(row.get("hero_damage") or 0),
+                    hero_damage=hero_damage,
+                    hero_damage_known=hero_damage > 0,
                     item_0=int(row.get("item_0") or 0),
                     item_1=int(row.get("item_1") or 0),
                     item_2=int(row.get("item_2") or 0),
@@ -337,6 +339,7 @@ class DotaAnalyticsService:
                 )
                 if player_row:
                     match.hero_damage = int(player_row.get("hero_damage") or 0)
+                    match.hero_damage_known = True
             except OpenDotaRateLimitError:
                 break
 
@@ -506,6 +509,7 @@ class DotaAnalyticsService:
                     "deaths": 0.0,
                     "assists": 0.0,
                     "hero_damage": 0.0,
+                    "hero_damage_samples": 0,
                 },
             )
             bucket["matches"] += 1
@@ -513,7 +517,9 @@ class DotaAnalyticsService:
             bucket["kills"] += float(match.kills)
             bucket["deaths"] += float(match.deaths)
             bucket["assists"] += float(match.assists)
-            bucket["hero_damage"] += float(match.hero_damage)
+            if match.hero_damage_known:
+                bucket["hero_damage"] += float(match.hero_damage)
+                bucket["hero_damage_samples"] += 1
 
         result: list[dict[str, Any]] = []
         for hero_id, agg in grouped.items():
@@ -523,7 +529,8 @@ class DotaAnalyticsService:
             k = agg["kills"] / games
             d = agg["deaths"] / games
             a = agg["assists"] / games
-            avg_damage = agg["hero_damage"] / games
+            damage_samples = int(agg["hero_damage_samples"])
+            avg_damage = agg["hero_damage"] / damage_samples if damage_samples > 0 else 0.0
 
             result.append(
                 {
@@ -538,6 +545,7 @@ class DotaAnalyticsService:
                     "avg_deaths": d,
                     "avg_assists": a,
                     "avg_damage": avg_damage,
+                    "avg_damage_samples": damage_samples,
                     "kda": calculate_kda_ratio(k, d, a),
                 }
             )
