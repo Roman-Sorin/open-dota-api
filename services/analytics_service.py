@@ -291,6 +291,13 @@ class DotaAnalyticsService:
     def _player_row_item_ids(player_row: dict) -> list[int]:
         return [int(player_row.get(f"item_{i}") or 0) for i in range(6)]
 
+    def _has_match_details_cached(self, match_id: int) -> bool:
+        if match_id in self._match_details_memory_cache:
+            return True
+
+        cache_key = f"match_details_{match_id}"
+        return isinstance(self.cache.get(cache_key), dict)
+
     def _get_match_details_cached(self, match_id: int) -> dict[str, Any]:
         if match_id in self._match_details_memory_cache:
             return self._match_details_memory_cache[match_id]
@@ -316,11 +323,13 @@ class DotaAnalyticsService:
         for match in matches:
             if int(match.hero_damage or 0) > 0:
                 continue
-            if fallback_detail_calls >= max_fallback_detail_calls:
+            details_cached = self._has_match_details_cached(match.match_id)
+            if not details_cached and fallback_detail_calls >= max_fallback_detail_calls:
                 break
             try:
                 details = self._get_match_details_cached(match.match_id)
-                fallback_detail_calls += 1
+                if not details_cached:
+                    fallback_detail_calls += 1
                 player_row = self._extract_player_from_match_details(
                     details,
                     player_id=player_id,
@@ -481,7 +490,7 @@ class DotaAnalyticsService:
         matches = self.fetch_matches(filters)
         if not matches:
             return []
-        self.enrich_hero_damage(player_id, matches)
+        self.enrich_hero_damage(player_id, matches, max_fallback_detail_calls=max(120, len(matches)))
 
         grouped: dict[int, dict[str, float]] = {}
         for match in matches:

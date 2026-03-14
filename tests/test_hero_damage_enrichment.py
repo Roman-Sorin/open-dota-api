@@ -48,3 +48,48 @@ def test_enrich_hero_damage_from_match_details() -> None:
     service.enrich_hero_damage(player_id=123, matches=matches, max_fallback_detail_calls=3)
 
     assert matches[0].hero_damage == 32123
+
+
+def test_enrich_hero_damage_cached_details_do_not_consume_budget() -> None:
+    cache = _FakeCache()
+    cache.set(
+        "match_details_101",
+        {"players": [{"account_id": 123, "player_slot": 0, "hero_damage": 11111}]},
+    )
+    service = DotaAnalyticsService(client=_FakeClient(), cache=cache)
+    matches = [
+        MatchSummary(
+            match_id=101,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=1,
+            deaths=1,
+            assists=1,
+            duration=1200,
+            hero_id=1,
+            hero_damage=0,
+        ),
+        MatchSummary(
+            match_id=202,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=1,
+            deaths=1,
+            assists=1,
+            duration=1200,
+            hero_id=1,
+            hero_damage=0,
+        ),
+    ]
+
+    def _fake_get_match_details(match_id: int) -> dict:
+        return {"players": [{"account_id": 123, "player_slot": 0, "hero_damage": 22222 if match_id == 202 else 0}]}
+
+    service.client.get_match_details = _fake_get_match_details  # type: ignore[method-assign]
+
+    service.enrich_hero_damage(player_id=123, matches=matches, max_fallback_detail_calls=1)
+
+    assert matches[0].hero_damage == 11111
+    assert matches[1].hero_damage == 22222
