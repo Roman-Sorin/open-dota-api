@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import Any
 
@@ -18,6 +18,7 @@ class QueryFilters:
     game_mode: int | None = None
     game_mode_name: str | None = None
     days: int | None = None
+    start_date: date | None = None
     patch_names: list[str] | None = None
     limit: int = 20
 

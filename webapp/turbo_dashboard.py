@@ -1,6 +1,6 @@
 from pathlib import Path
 from bisect import bisect_right
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import inspect
 import os
 import re
@@ -25,7 +25,7 @@ from utils.helpers import parse_player_id
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
-OVERVIEW_SCHEMA_VERSION = 4
+OVERVIEW_SCHEMA_VERSION = 5
 
 st.markdown(
     """
@@ -145,6 +145,15 @@ def get_default_days_period() -> int:
     today = datetime.now().date()
     days = max((today - start_date).days, 7)
     return min(days, 365)
+
+
+def get_effective_start_date(days: int | None, start_date_value: date | None) -> date | None:
+    candidates: list[date] = []
+    if days is not None:
+        candidates.append(datetime.now().date() - timedelta(days=days))
+    if start_date_value is not None:
+        candidates.append(start_date_value)
+    return max(candidates) if candidates else None
 
 
 def show_error(exc: Exception) -> None:
@@ -487,7 +496,17 @@ with st.sidebar:
     )
 
     days = st.session_state.get("days", get_default_days_period())
+    use_start_date = st.session_state.get("use_start_date", False)
+    start_date_value = st.session_state.get("start_date", date(2026, 1, 22))
     selected_patches = st.session_state.get("selected_patches", [])
+    use_start_date = st.checkbox("Use start date", value=use_start_date)
+    start_date_value = st.date_input(
+        "Start date",
+        value=start_date_value,
+        disabled=not use_start_date,
+        min_value=date(2020, 1, 1),
+        max_value=datetime.now().date(),
+    )
     if time_filter_mode == "Days":
         days = st.slider("Period (days)", min_value=7, max_value=365, value=days, step=1)
     else:
@@ -540,6 +559,7 @@ if load:
 
         active_days = days if time_filter_mode == "Days" else None
         active_patches = selected_patches if time_filter_mode == "Patches" else []
+        active_start_date = start_date_value if use_start_date else None
 
         player_id = parse_player_id(player_raw)
         run_with_rate_limit_retry(
@@ -553,6 +573,7 @@ if load:
                 game_mode=23,
                 game_mode_name="Turbo",
                 days=None,
+                start_date=active_start_date,
             )
             all_turbo_matches = run_with_rate_limit_retry(
                 lambda: service.fetch_matches(base_filters),
@@ -572,6 +593,7 @@ if load:
             overview_kwargs: dict[str, object] = {
                 "player_id": player_id,
                 "days": active_days,
+                "start_date": active_start_date,
             }
             if active_patches:
                 overview_kwargs["patch_names"] = active_patches
@@ -585,6 +607,9 @@ if load:
         st.session_state["time_filter_mode"] = time_filter_mode
         st.session_state["days"] = days
         st.session_state["active_days"] = active_days
+        st.session_state["use_start_date"] = use_start_date
+        st.session_state["start_date"] = start_date_value
+        st.session_state["active_start_date"] = active_start_date
         st.session_state["selected_patches"] = selected_patches
         st.session_state["active_patches"] = active_patches
         st.session_state["overview"] = overview
@@ -601,13 +626,19 @@ if "overview" not in st.session_state:
 
 player_id = st.session_state["player_id"]
 days = st.session_state.get("active_days")
+active_start_date = st.session_state.get("active_start_date")
 active_patches = st.session_state.get("active_patches", [])
 overview = st.session_state["overview"]
 min_hero_matches = st.session_state.get("min_hero_matches", min_hero_matches)
 min_item_matches = st.session_state.get("min_item_matches", min_item_matches)
+effective_start_date = get_effective_start_date(days, active_start_date)
 
 if active_patches:
     selected_filter_text = f"Patches: {', '.join(active_patches)}"
+    if effective_start_date:
+        selected_filter_text += f" | Since {effective_start_date.isoformat()}"
+elif effective_start_date:
+    selected_filter_text = f"Since {effective_start_date.isoformat()}"
 else:
     selected_filter_text = f"Last {days} days"
 st.subheader(f"Player {player_id} - Turbo - {selected_filter_text}")
@@ -714,6 +745,7 @@ else:
         "game_mode": 23,
         "game_mode_name": "Turbo",
         "days": days,
+        "start_date": active_start_date,
     }
     if active_patches and query_filters_supports_patch:
         filters_kwargs["patch_names"] = active_patches

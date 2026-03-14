@@ -1,3 +1,5 @@
+from datetime import date
+
 from models.dtos import MatchSummary, QueryFilters
 from services.analytics_service import DotaAnalyticsService
 
@@ -222,3 +224,45 @@ def test_fetch_matches_supports_lettered_patch_names() -> None:
 
     assert len(rows) == 1
     assert rows[0].match_id == 1
+
+
+def test_fetch_matches_respects_start_date_filter() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    service.client.get_player_matches = lambda **kwargs: [  # type: ignore[method-assign]
+        {
+            "match_id": 1,
+            "start_time": 1736899200,
+            "player_slot": 0,
+            "radiant_win": True,
+            "kills": 1,
+            "deaths": 1,
+            "assists": 1,
+            "duration": 1200,
+            "hero_id": 1,
+            "hero_damage": 10000,
+        },
+        {
+            "match_id": 2,
+            "start_time": 1738540800,
+            "player_slot": 0,
+            "radiant_win": True,
+            "kills": 1,
+            "deaths": 1,
+            "assists": 1,
+            "duration": 1200,
+            "hero_id": 1,
+            "hero_damage": 10000,
+        },
+    ]
+
+    rows = service.fetch_matches(
+        QueryFilters(
+            player_id=123,
+            game_mode=23,
+            game_mode_name="Turbo",
+            start_date=date(2025, 2, 1),
+        )
+    )
+
+    assert len(rows) == 1
+    assert rows[0].match_id == 2

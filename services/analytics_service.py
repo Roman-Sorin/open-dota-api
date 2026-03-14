@@ -3,7 +3,7 @@ from __future__ import annotations
 from bisect import bisect_right
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 from typing import Any
 
 from clients.opendota_client import OpenDotaClient
@@ -167,6 +167,9 @@ class DotaAnalyticsService:
         min_start = None
         if filters.days:
             min_start = int((datetime.now(tz=timezone.utc).timestamp()) - filters.days * 86400)
+        if filters.start_date:
+            start_date_ts = int(datetime.combine(filters.start_date, time.min, tzinfo=timezone.utc).timestamp())
+            min_start = max(min_start, start_date_ts) if min_start is not None else start_date_ts
 
         def parse_rows(rows: list[dict]) -> list[MatchSummary]:
             parsed: list[MatchSummary] = []
@@ -516,6 +519,7 @@ class DotaAnalyticsService:
         self,
         player_id: int,
         days: int | None = 60,
+        start_date=None,
         patch_names: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         filters = QueryFilters(
@@ -523,6 +527,7 @@ class DotaAnalyticsService:
             game_mode=23,
             game_mode_name="Turbo",
             days=days,
+            start_date=start_date,
             patch_names=patch_names,
         )
         matches = self.fetch_matches(filters)
