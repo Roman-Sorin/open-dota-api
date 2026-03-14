@@ -80,30 +80,65 @@ class DotaAnalyticsService:
         )
 
     def _load_patch_timeline(self) -> tuple[list[int], list[str]]:
-        patches = self.cache.get("constants_patch")
-        if patches is None:
-            patches = self.client.get_constants_patch()
-            self.cache.set("constants_patch", patches)
-
         timeline: list[tuple[int, str]] = []
-        if isinstance(patches, list):
-            for row in patches:
-                if not isinstance(row, dict):
-                    continue
-                name = str(row.get("name") or "").strip()
-                date_raw = str(row.get("date") or "").strip()
-                if not name or not date_raw:
-                    continue
-                try:
-                    start_dt = datetime.fromisoformat(date_raw.replace("Z", "+00:00"))
-                except ValueError:
-                    continue
-                timeline.append((int(start_dt.timestamp()), name))
+
+        cached_timeline = self.cache.get("patch_timeline_v2")
+        if isinstance(cached_timeline, list) and cached_timeline:
+            try:
+                timeline = [
+                    (int(row[0]), str(row[1]))
+                    for row in cached_timeline
+                    if isinstance(row, list | tuple) and len(row) == 2
+                ]
+            except Exception:
+                timeline = []
+
+        if not timeline and hasattr(self.client, "session"):
+            try:
+                response = self.client.session.get(
+                    "https://www.dota2.com/datafeed/patchnoteslist",
+                    params={"language": "english"},
+                    timeout=self.client.timeout_seconds,
+                )
+                response.raise_for_status()
+                payload = response.json()
+                patches = payload.get("patches") if isinstance(payload, dict) else []
+                if isinstance(patches, list):
+                    for row in patches:
+                        if not isinstance(row, dict):
+                            continue
+                        name = str(row.get("patch_name") or row.get("patch_number") or "").strip()
+                        ts = int(row.get("patch_timestamp") or 0)
+                        if name and ts > 0:
+                            timeline.append((ts, name))
+            except Exception:
+                timeline = []
+
+        if not timeline:
+            patches = self.cache.get("constants_patch")
+            if patches is None:
+                patches = self.client.get_constants_patch()
+                self.cache.set("constants_patch", patches)
+
+            if isinstance(patches, list):
+                for row in patches:
+                    if not isinstance(row, dict):
+                        continue
+                    name = str(row.get("name") or "").strip()
+                    date_raw = str(row.get("date") or "").strip()
+                    if not name or not date_raw:
+                        continue
+                    try:
+                        start_dt = datetime.fromisoformat(date_raw.replace("Z", "+00:00"))
+                    except ValueError:
+                        continue
+                    timeline.append((int(start_dt.timestamp()), name))
 
         timeline.sort(key=lambda x: x[0])
         if not timeline:
             return [], []
 
+        self.cache.set("patch_timeline_v2", [[ts, name] for ts, name in timeline])
         starts = [row[0] for row in timeline]
         names = [row[1] for row in timeline]
         return starts, names

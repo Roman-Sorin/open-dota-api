@@ -1,4 +1,4 @@
-from models.dtos import MatchSummary
+from models.dtos import MatchSummary, QueryFilters
 from services.analytics_service import DotaAnalyticsService
 
 
@@ -189,3 +189,36 @@ def test_turbo_hero_overview_matches_reported_phantom_lancer_example() -> None:
     assert rows[0]["matches"] == 3
     assert rows[0]["avg_damage"] == 12366.666666666666
     assert rows[0]["avg_damage_samples"] == 3
+
+
+def test_fetch_matches_supports_lettered_patch_names() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    service._patch_starts = [1735689600, 1738368000]
+    service._patch_names = ["7.40", "7.40c"]
+
+    service.client.get_player_matches = lambda **kwargs: [  # type: ignore[method-assign]
+        {
+            "match_id": 1,
+            "start_time": 1739000000,
+            "player_slot": 0,
+            "radiant_win": True,
+            "kills": 1,
+            "deaths": 1,
+            "assists": 1,
+            "duration": 1200,
+            "hero_id": 1,
+            "hero_damage": 10000,
+        }
+    ]
+
+    rows = service.fetch_matches(
+        QueryFilters(
+            player_id=123,
+            game_mode=23,
+            game_mode_name="Turbo",
+            patch_names=["7.40c"],
+        )
+    )
+
+    assert len(rows) == 1
+    assert rows[0].match_id == 1
