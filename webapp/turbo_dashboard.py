@@ -751,6 +751,11 @@ def _load_selected_hero_matches(
             lambda: service.fetch_matches(QueryFilters(**filters_kwargs)),
             operation_label="hero matches",
         )
+        service.enrich_hero_damage(
+            player_id,
+            matches,
+            max_fallback_detail_calls=max(60, len(matches)),
+        )
 
     st.session_state["hero_matches"] = matches
     st.session_state["hero_matches_request_key"] = current_hero_request_key
@@ -958,7 +963,7 @@ hero_table = [
             f"{round(float(row['avg_assists']))}"
         ),
         "KDA": round(float(row["kda"]), 1),
-        "Average Net Worth": round(float(row.get("avg_net_worth", 0.0))),
+        "Avg NW": round(float(row.get("avg_net_worth", 0.0))),
         "Wins": int(row["wins"]),
         "Losses": int(row["losses"]),
         "Avg Kills": round(float(row["avg_kills"])),
@@ -971,8 +976,8 @@ hero_table = [
 hero_table_df = pd.DataFrame(hero_table)
 if not hero_table_df.empty and "Avg Damage" in hero_table_df.columns:
     hero_table_df["Avg Damage"] = hero_table_df["Avg Damage"].astype("int64")
-if not hero_table_df.empty and "Average Net Worth" in hero_table_df.columns:
-    hero_table_df["Average Net Worth"] = hero_table_df["Average Net Worth"].astype("int64")
+if not hero_table_df.empty and "Avg NW" in hero_table_df.columns:
+    hero_table_df["Avg NW"] = hero_table_df["Avg NW"].astype("int64")
 
 st.dataframe(
     hero_table_df,

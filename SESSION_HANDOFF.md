@@ -349,6 +349,7 @@ CLI remains available as a secondary interface.
 ## 2026-03-15 hero economy + independent section loading update
 
 - Added average net worth to Turbo hero overview and detailed hero stat cards.
+- Hero Overview column label shortened from `Average Net Worth` to `Avg NW`.
 - Recent hero matches and CLI match rows now surface per-match net worth.
 - `Load Hero Details`, `Load Item Winrates`, and `Load Recent Matches` now resolve hero matches independently instead of blocking on each other.
 - Added request-level caching for player match-list queries with TTLs tuned by recency to cut repeated OpenDota API calls.

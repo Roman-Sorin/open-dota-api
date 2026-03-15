@@ -51,12 +51,13 @@ def test_enrich_hero_damage_from_match_details() -> None:
     ]
 
     service._get_match_details_cached = lambda _: {  # type: ignore[method-assign]
-        "players": [{"account_id": 123, "player_slot": 0, "hero_damage": 32123}]
+        "players": [{"account_id": 123, "player_slot": 0, "hero_damage": 32123, "net_worth": 25444}]
     }
 
     service.enrich_hero_damage(player_id=123, matches=matches, max_fallback_detail_calls=3)
 
     assert matches[0].hero_damage == 32123
+    assert matches[0].net_worth == 25444
 
 
 def test_enrich_hero_damage_cached_details_do_not_consume_budget() -> None:

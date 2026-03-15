@@ -80,6 +80,7 @@ def _run_stats(service: DotaAnalyticsService, formatter: TerminalFormatter, filt
         formatter.print_no_matches()
         return
 
+    service.enrich_hero_damage(filters.player_id, matches, max_fallback_detail_calls=max(45, len(matches)))
     stats = service.build_stats(matches)
     formatter.print_stats(stats)
 
