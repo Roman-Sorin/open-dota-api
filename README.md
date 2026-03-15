@@ -16,6 +16,10 @@ Turbo-only dashboard for your account:
 - Hero overview in Turbo (matches, wins, WR, avg K/D/A, avg damage, KDA)
 - When Turbo match rows miss `hero_damage`, the app enriches average damage from match details (API-safe fallback)
 - Top dashboard metrics include Turbo matches, wins, losses, and winrate
+- Dashboard loading is manual by section:
+  - `Load Turbo Dashboard` loads the overview only
+  - `Load Hero Details` loads the selected hero's match set and stat cards
+  - `Load Item Winrates` and `Load Recent Matches` load those heavier sections only on demand
 - Detailed hero section in Turbo
 - Item winrates (when item appears in final slots), with match count shown
 - Recent hero matches shown as a compact one-row-per-match table under the item table
@@ -24,7 +28,7 @@ Turbo-only dashboard for your account:
 - Recent hero matches support `Load 10 more matches`
 - Item winrates are ordered by highest winrate first (then by match count)
 - Default minimum matches per item in the dashboard filter is `3`
-- Dashboard auto-refreshes overview session data when schema changes between app updates
+- Dashboard clears stale overview session data when schema changes between app updates
 
 Live app:
 - https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/

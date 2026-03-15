@@ -338,3 +338,14 @@ CLI remains available as a secondary interface.
 - Added combined `Avg K/D/A` column in `Hero Overview` right after `Winrate`.
 - Format is `kills/deaths/assists` (e.g., `11/6/10`) using rounded averages.
 - Existing separate `avg_kills`, `avg_deaths`, `avg_assists` columns remain at the end.
+
+## 2026-03-15 manual section loading update
+
+- Removed the one-time automatic dashboard load on first page open.
+- Dashboard loading is now split into explicit buttons:
+  - `Load Turbo Dashboard` loads only the overview/filter result.
+  - `Load Hero Details` loads the selected hero's filtered match set and stat cards.
+  - `Load Item Winrates` and `Load Recent Matches` load those heavier sections only when clicked.
+- Added request-key-based section state tracking so hero/item/recent sections do not display stale data after hero/filter changes.
+- Bumped `OVERVIEW_SCHEMA_VERSION` to `6` so old session overview data is cleared after deploy.
+- Added regression tests for dashboard request-key normalization and invalidation behavior in `tests/test_dashboard_state.py`.

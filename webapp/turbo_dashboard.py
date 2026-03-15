@@ -22,10 +22,11 @@ from utils.cache import JsonFileCache
 from utils.config import get_cache_dir, get_settings
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError, ValidationError
 from utils.helpers import parse_player_id
+from webapp.dashboard_state import build_hero_request_key
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
-OVERVIEW_SCHEMA_VERSION = 5
+OVERVIEW_SCHEMA_VERSION = 6
 
 st.markdown(
     """
@@ -692,6 +693,19 @@ query_filters_supports_patch = "patch_names" in getattr(QueryFilters, "__datacla
 patch_timeline = _load_patch_timeline(service)
 patch_options = _build_patch_options(patch_timeline)
 
+
+def _clear_detail_sections() -> None:
+    for key in (
+        "hero_matches",
+        "hero_matches_request_key",
+        "item_winrate_rows",
+        "item_rows_request_key",
+        "recent_match_rows",
+        "recent_matches_request_key",
+        "recent_matches_loaded_limit",
+    ):
+        st.session_state.pop(key, None)
+
 with st.sidebar:
     st.header("Filters")
     st.caption(f"Version: `{app_version}`")
@@ -743,23 +757,24 @@ with st.sidebar:
         value=st.session_state.get("min_hero_matches", 3),
         step=1,
     )
-    min_item_matches = st.slider("Min matches per item", min_value=1, max_value=30, value=3, step=1)
+    min_item_matches = st.slider(
+        "Min matches per item",
+        min_value=1,
+        max_value=30,
+        value=st.session_state.get("min_item_matches", 3),
+        step=1,
+    )
     load = st.button("Load Turbo Dashboard", type="primary")
 
-# Auto-load once on first page open, manual button remains available for refresh.
-if "auto_loaded" not in st.session_state:
-    st.session_state["auto_loaded"] = False
-
-if not st.session_state["auto_loaded"] and "overview" not in st.session_state:
-    load = True
-    st.session_state["auto_loaded"] = True
-
-# Force one-time refresh when overview structure changes between app versions.
 if "overview" in st.session_state and st.session_state.get("overview_schema_version") != OVERVIEW_SCHEMA_VERSION:
-    load = True
+    st.session_state.pop("overview", None)
+    st.session_state.pop("patch_filtered_matches", None)
+    _clear_detail_sections()
 
 if "overview" in st.session_state and _overview_looks_stale(st.session_state.get("overview")):
-    load = True
+    st.session_state.pop("overview", None)
+    st.session_state.pop("patch_filtered_matches", None)
+    _clear_detail_sections()
 
 if load:
     try:
@@ -826,6 +841,7 @@ if load:
         st.session_state["patch_filtered_matches"] = patch_filtered_matches
         st.session_state["min_hero_matches"] = min_hero_matches
         st.session_state["min_item_matches"] = min_item_matches
+        _clear_detail_sections()
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
@@ -943,48 +959,72 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if active_patches and not supports_patch_overview:
-    patch_filtered_matches = st.session_state.get("patch_filtered_matches") or []
-    matches = [m for m in patch_filtered_matches if int(m.hero_id or 0) == selected_hero_id]
-else:
-    filters_kwargs: dict[str, object] = {
-        "player_id": player_id,
-        "hero_id": selected_hero_id,
-        "hero_name": selected_hero_name,
-        "game_mode": 23,
-        "game_mode_name": "Turbo",
-        "days": days,
-        "start_date": active_start_date,
-    }
-    if active_patches and query_filters_supports_patch:
-        filters_kwargs["patch_names"] = active_patches
-    filters = QueryFilters(**filters_kwargs)
+current_hero_request_key = build_hero_request_key(
+    player_id=player_id,
+    hero_id=selected_hero_id,
+    days=days,
+    active_patches=active_patches,
+    active_start_date=active_start_date,
+)
+current_item_request_key = (*current_hero_request_key, int(min_item_matches))
+hero_matches_loaded = st.session_state.get("hero_matches_request_key") == current_hero_request_key
 
+action_col_1, action_col_2, action_col_3 = st.columns(3)
+with action_col_1:
+    load_hero_matches = st.button("Load Hero Details", type="primary")
+with action_col_2:
+    load_item_winrates = st.button("Load Item Winrates", disabled=not hero_matches_loaded)
+with action_col_3:
+    load_recent_matches = st.button("Load Recent Matches", disabled=not hero_matches_loaded)
+
+if load_hero_matches:
     try:
-        matches = run_with_rate_limit_retry(
-            lambda: service.fetch_matches(filters),
-            operation_label="hero matches",
-        )
+        if active_patches and not supports_patch_overview:
+            patch_filtered_matches = st.session_state.get("patch_filtered_matches") or []
+            matches = [m for m in patch_filtered_matches if int(m.hero_id or 0) == selected_hero_id]
+        else:
+            filters_kwargs: dict[str, object] = {
+                "player_id": player_id,
+                "hero_id": selected_hero_id,
+                "hero_name": selected_hero_name,
+                "game_mode": 23,
+                "game_mode_name": "Turbo",
+                "days": days,
+                "start_date": active_start_date,
+            }
+            if active_patches and query_filters_supports_patch:
+                filters_kwargs["patch_names"] = active_patches
+            filters = QueryFilters(**filters_kwargs)
+            matches = run_with_rate_limit_retry(
+                lambda: service.fetch_matches(filters),
+                operation_label="hero matches",
+            )
+
+        st.session_state["hero_matches"] = matches
+        st.session_state["hero_matches_request_key"] = current_hero_request_key
+        st.session_state.pop("item_winrate_rows", None)
+        st.session_state.pop("item_rows_request_key", None)
+        st.session_state.pop("recent_match_rows", None)
+        st.session_state.pop("recent_matches_request_key", None)
+        st.session_state.pop("recent_matches_loaded_limit", None)
+        hero_matches_loaded = True
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
-        st.stop()
 
+if not hero_matches_loaded:
+    st.info("Select a hero and click `Load Hero Details` to fetch hero-specific sections.")
+    st.stop()
+
+if st.session_state.get("hero_matches_request_key") != current_hero_request_key:
+    st.info("Hero details shown below belong to the last loaded hero. Click `Load Hero Details` to refresh.")
+    st.stop()
+
+matches = st.session_state.get("hero_matches") or []
 if not matches:
     st.warning("No matches for selected hero with current Turbo filter.")
     st.stop()
 
 stats = service.build_stats(matches)
-item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50)
-item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
-item_wr_rows = _ensure_item_rows_have_kda(item_wr_rows, matches, service, player_id)
-item_wr_rows.sort(
-    key=lambda row: (
-        -round(float(row.get("item_winrate", 0.0))),
-        -int(row.get("matches_with_item", 0)),
-        -int(row.get("wins_with_item", 0)),
-        str(row.get("item", "")),
-    )
-)
 
 st.markdown(f"### {selected_hero_name} - Detailed Turbo Stats")
 stats_cards = [
@@ -1001,117 +1041,166 @@ stats_html = "".join(
 )
 st.markdown(f'<div class="metrics-wrap">{stats_html}</div>', unsafe_allow_html=True)
 
+if load_item_winrates:
+    try:
+        item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50)
+        item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
+        item_wr_rows = _ensure_item_rows_have_kda(item_wr_rows, matches, service, player_id)
+        item_wr_rows.sort(
+            key=lambda row: (
+                -round(float(row.get("item_winrate", 0.0))),
+                -int(row.get("matches_with_item", 0)),
+                -int(row.get("wins_with_item", 0)),
+                str(row.get("item", "")),
+            )
+        )
+        st.session_state["item_winrate_rows"] = item_wr_rows
+        st.session_state["item_rows_request_key"] = current_item_request_key
+    except Exception as exc:  # noqa: BLE001
+        show_error(exc)
+
+st.markdown("### Item Winrates (when item appears in final slots)")
+if st.session_state.get("item_rows_request_key") == current_item_request_key:
+    item_wr_rows = st.session_state.get("item_winrate_rows") or []
+    if item_wr_rows:
+        item_winrate_table = [
+            {
+                "Icon": row.get("item_image", ""),
+                "Item": row["item"],
+                "Item Winrate": round(float(row["item_winrate"])),
+                "Matches": int(row.get("matches_with_item", 0)),
+                "Avg K/D/A": (
+                    f"{round(float(row.get('avg_kills_with_item', 0.0)))}/"
+                    f"{round(float(row.get('avg_deaths_with_item', 0.0)))}/"
+                    f"{round(float(row.get('avg_assists_with_item', 0.0)))}"
+                ),
+                "KDA": round(float(row.get("kda_with_item", 0.0)), 1),
+            }
+            for row in item_wr_rows
+        ]
+        st.dataframe(
+            item_winrate_table,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Icon": st.column_config.ImageColumn("Item", help="Item icon", width="small"),
+                "Item Winrate": st.column_config.NumberColumn("Item Winrate", format="%.0f%%"),
+            },
+        )
+    else:
+        st.info("No items satisfy current minimum matches threshold.")
+else:
+    st.info("Click `Load Item Winrates` to fetch this section.")
+
 recent_matches_key = recent_matches_state_key(selected_hero_id, days, active_patches, active_start_date)
 if recent_matches_key not in st.session_state:
     st.session_state[recent_matches_key] = 10
-visible_recent_matches = int(st.session_state[recent_matches_key])
-recent_match_rows = service.build_recent_hero_matches(
-    player_id=player_id,
-    matches=matches,
-    limit=min(visible_recent_matches, len(matches)),
-)
 
-st.markdown("### Item Winrates (when item appears in final slots)")
-if item_wr_rows:
-    item_winrate_table = [
-        {
-            "Icon": row.get("item_image", ""),
-            "Item": row["item"],
-            "Item Winrate": round(float(row["item_winrate"])),
-            "Matches": int(row.get("matches_with_item", 0)),
-            "Avg K/D/A": (
-                f"{round(float(row.get('avg_kills_with_item', 0.0)))}/"
-                f"{round(float(row.get('avg_deaths_with_item', 0.0)))}/"
-                f"{round(float(row.get('avg_assists_with_item', 0.0)))}"
-            ),
-            "KDA": round(float(row.get("kda_with_item", 0.0)), 1),
-        }
-        for row in item_wr_rows
-    ]
-    st.dataframe(
-        item_winrate_table,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Icon": st.column_config.ImageColumn("Item", help="Item icon", width="small"),
-            "Item Winrate": st.column_config.NumberColumn("Item Winrate", format="%.0f%%"),
-        },
-    )
-else:
-    st.info("No items satisfy current minimum matches threshold.")
+if load_recent_matches:
+    try:
+        visible_recent_matches = int(st.session_state[recent_matches_key])
+        st.session_state["recent_match_rows"] = service.build_recent_hero_matches(
+            player_id=player_id,
+            matches=matches,
+            limit=min(visible_recent_matches, len(matches)),
+        )
+        st.session_state["recent_matches_request_key"] = current_hero_request_key
+        st.session_state["recent_matches_loaded_limit"] = visible_recent_matches
+    except Exception as exc:  # noqa: BLE001
+        show_error(exc)
 
 st.markdown("### Hero Matches - Recent Matches for Hero")
-st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches)} matches")
+recent_matches_loaded = st.session_state.get("recent_matches_request_key") == current_hero_request_key
+visible_recent_matches = int(st.session_state[recent_matches_key])
+loaded_recent_matches = int(st.session_state.get("recent_matches_loaded_limit") or 0)
 
-table_rows_html = ""
-for row in recent_match_rows:
-    result_class = "win" if row.result == "Win" else "loss"
-    duration_percent = duration_bar_percent(row.duration_seconds)
-    kills_pct, deaths_pct, assists_pct = kda_bar_segments(row.kills, row.deaths, row.assists)
-    item_html = "".join(
-        (
-            '<div class="recent-item-inline">'
-            f'<img src="{item.item_image}" alt="{item.item_name}" title="{item.item_name}"/>'
-            f'<div class="recent-item-inline-time{" na" if item.purchase_time_min is None else ""}">'
-            f'{f"{item.purchase_time_min}m" if item.purchase_time_min is not None else "-"}'
-            "</div>"
-            "</div>"
+if recent_matches_loaded and loaded_recent_matches != visible_recent_matches:
+    try:
+        st.session_state["recent_match_rows"] = service.build_recent_hero_matches(
+            player_id=player_id,
+            matches=matches,
+            limit=min(visible_recent_matches, len(matches)),
         )
-        for item in row.items
-    ) or '<div class="recent-items-inline empty">No item data</div>'
-    table_rows_html += (
-        "<tr>"
-        '<td class="recent-hero-cell">'
-        '<div class="recent-hero-wrap">'
-        '<div class="recent-hero-icon-wrap">'
-        f'<img src="{row.hero_image}" alt="{row.hero_name}"/>'
-        f'<div class="recent-hero-level">{row.hero_level or "?"}</div>'
-        f'<div class="recent-hero-variant">{row.hero_variant or "-"}</div>'
-        "</div>"
-        f'<div class="recent-hero-name">{row.hero_name}</div>'
-        "</div>"
-        "</td>"
-        f'<td><div class="recent-result {result_class}">{row.result} Match</div>'
-        f'<div class="recent-when">{format_time_ago(row.started_at)}</div></td>'
-        '<td>'
-        f'<div class="recent-duration-value">{row.duration}</div>'
-        f'<div class="recent-bar"><div class="recent-bar-fill" style="width:{duration_percent:.1f}%"></div></div>'
-        "</td>"
-        '<td>'
-        f'<div class="recent-kda-value">{row.kills}/{row.deaths}/{row.assists}</div>'
-        '<div class="recent-kda-bar">'
-        f'<div class="recent-kda-kills" style="width:{kills_pct:.1f}%"></div>'
-        f'<div class="recent-kda-deaths" style="width:{deaths_pct:.1f}%"></div>'
-        f'<div class="recent-kda-assists" style="width:{assists_pct:.1f}%"></div>'
-        "</div>"
-        "</td>"
-        f'<td><div class="recent-stat-value">{f"{round((row.net_worth or 0) / 1000, 1)}k" if row.net_worth else "-"}</div></td>'
-        f'<td><div class="recent-stat-value">{f"{round((row.hero_damage or 0) / 1000, 1)}k" if row.hero_damage else "-"}</div></td>'
-        f'<td><div class="recent-items-inline">{item_html}</div></td>'
-        "</tr>"
+        st.session_state["recent_matches_loaded_limit"] = visible_recent_matches
+    except Exception as exc:  # noqa: BLE001
+        show_error(exc)
+        recent_matches_loaded = False
+
+if recent_matches_loaded:
+    recent_match_rows = st.session_state.get("recent_match_rows") or []
+    st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches)} matches")
+
+    table_rows_html = ""
+    for row in recent_match_rows:
+        result_class = "win" if row.result == "Win" else "loss"
+        duration_percent = duration_bar_percent(row.duration_seconds)
+        kills_pct, deaths_pct, assists_pct = kda_bar_segments(row.kills, row.deaths, row.assists)
+        item_html = "".join(
+            (
+                '<div class="recent-item-inline">'
+                f'<img src="{item.item_image}" alt="{item.item_name}" title="{item.item_name}"/>'
+                f'<div class="recent-item-inline-time{" na" if item.purchase_time_min is None else ""}">'
+                f'{f"{item.purchase_time_min}m" if item.purchase_time_min is not None else "-"}'
+                "</div>"
+                "</div>"
+            )
+            for item in row.items
+        ) or '<div class="recent-items-inline empty">No item data</div>'
+        table_rows_html += (
+            "<tr>"
+            '<td class="recent-hero-cell">'
+            '<div class="recent-hero-wrap">'
+            '<div class="recent-hero-icon-wrap">'
+            f'<img src="{row.hero_image}" alt="{row.hero_name}"/>'
+            f'<div class="recent-hero-level">{row.hero_level or "?"}</div>'
+            f'<div class="recent-hero-variant">{row.hero_variant or "-"}</div>'
+            "</div>"
+            f'<div class="recent-hero-name">{row.hero_name}</div>'
+            "</div>"
+            "</td>"
+            f'<td><div class="recent-result {result_class}">{row.result} Match</div>'
+            f'<div class="recent-when">{format_time_ago(row.started_at)}</div></td>'
+            '<td>'
+            f'<div class="recent-duration-value">{row.duration}</div>'
+            f'<div class="recent-bar"><div class="recent-bar-fill" style="width:{duration_percent:.1f}%"></div></div>'
+            "</td>"
+            '<td>'
+            f'<div class="recent-kda-value">{row.kills}/{row.deaths}/{row.assists}</div>'
+            '<div class="recent-kda-bar">'
+            f'<div class="recent-kda-kills" style="width:{kills_pct:.1f}%"></div>'
+            f'<div class="recent-kda-deaths" style="width:{deaths_pct:.1f}%"></div>'
+            f'<div class="recent-kda-assists" style="width:{assists_pct:.1f}%"></div>'
+            "</div>"
+            "</td>"
+            f'<td><div class="recent-stat-value">{f"{round((row.net_worth or 0) / 1000, 1)}k" if row.net_worth else "-"}</div></td>'
+            f'<td><div class="recent-stat-value">{f"{round((row.hero_damage or 0) / 1000, 1)}k" if row.hero_damage else "-"}</div></td>'
+            f'<td><div class="recent-items-inline">{item_html}</div></td>'
+            "</tr>"
+        )
+
+    st.markdown(
+        (
+            '<div class="recent-matches-wrap">'
+            '<table class="recent-matches-table">'
+            "<thead><tr>"
+            "<th>Hero</th>"
+            "<th>Result</th>"
+            "<th>Duration</th>"
+            "<th>KDA</th>"
+            "<th>Net Worth</th>"
+            "<th>Damage</th>"
+            "<th>Items</th>"
+            "</tr></thead>"
+            f"<tbody>{table_rows_html}</tbody>"
+            "</table>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
     )
 
-st.markdown(
-    (
-        '<div class="recent-matches-wrap">'
-        '<table class="recent-matches-table">'
-        "<thead><tr>"
-        "<th>Hero</th>"
-        "<th>Result</th>"
-        "<th>Duration</th>"
-        "<th>KDA</th>"
-        "<th>Net Worth</th>"
-        "<th>Damage</th>"
-        "<th>Items</th>"
-        "</tr></thead>"
-        f"<tbody>{table_rows_html}</tbody>"
-        "</table>"
-        "</div>"
-    ),
-    unsafe_allow_html=True,
-)
-
-if visible_recent_matches < len(matches):
-    if st.button("Load 10 more matches", key=f"{recent_matches_key}_load_more"):
-        st.session_state[recent_matches_key] = min(visible_recent_matches + 10, len(matches))
-        st.rerun()
+    if visible_recent_matches < len(matches):
+        if st.button("Load 10 more matches", key=f"{recent_matches_key}_load_more"):
+            st.session_state[recent_matches_key] = min(visible_recent_matches + 10, len(matches))
+            st.rerun()
+else:
+    st.info("Click `Load Recent Matches` to fetch this section.")
