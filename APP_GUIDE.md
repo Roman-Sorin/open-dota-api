@@ -12,7 +12,6 @@ The project includes two interfaces:
 ## Main capabilities
 
 - Turbo-only hero overview (matches, wins, losses, winrate, avg duration, avg net worth, avg damage, max kills, max hero damage)
-- Hero Overview icons are clickable and can be used to select the hero without opening the dropdown
 - Hero overview avg damage/net worth use match-detail fallback when player match rows don't include `hero_damage` or `net_worth`
 - Dashboard summary cards: Turbo matches, wins, losses, winrate
 - Time filter modes: `Days`, `Patches`, `Start Date`
@@ -86,7 +85,7 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 
 - Some Turbo rows from `players/{id}/matches` can have empty item slots.
 - The app uses fallback match-detail calls for item enrichment and hero economy/damage enrichment when needed.
-- Some requested metrics may depend on detail payload fields that are not guaranteed in every parsed match. When lane-specific data is unavailable, the app should prefer showing `-` instead of pretending the value is `0%`.
+- Some requested metrics may depend on detail payload fields that are not guaranteed in every parsed match. Lane-derived values are currently not shown in the UI until the data source is made reliable.
 - `purchase_log` is often incomplete; purchased-item stats may have partial coverage.
 
 ## Troubleshooting

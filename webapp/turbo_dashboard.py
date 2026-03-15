@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 
+import pandas as pd
 import streamlit as st
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -244,49 +245,6 @@ st.markdown(
     }
     .recent-item-inline-time.na {
         opacity: 0.58;
-    }
-    .hero-overview-wrap {
-        overflow-x: auto;
-        margin-top: 0.45rem;
-        margin-bottom: 0.7rem;
-    }
-    .hero-overview-table {
-        width: 100%;
-        min-width: 1040px;
-        border-collapse: collapse;
-        font-size: 0.84rem;
-    }
-    .hero-overview-table th {
-        text-align: left;
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        opacity: 0.72;
-        padding: 0.45rem 0.55rem;
-        border-bottom: 1px solid rgba(49, 51, 63, 0.18);
-        white-space: nowrap;
-    }
-    .hero-overview-table td {
-        padding: 0.55rem;
-        border-bottom: 1px solid rgba(49, 51, 63, 0.1);
-        vertical-align: middle;
-        white-space: nowrap;
-    }
-    .hero-overview-icon-link {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-    }
-    .hero-overview-icon-link img {
-        width: 34px;
-        height: 34px;
-        border-radius: 6px;
-        display: block;
-        transition: transform 120ms ease, box-shadow 120ms ease;
-    }
-    .hero-overview-icon-link:hover img {
-        transform: translateY(-1px);
-        box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.28);
     }
     @media (max-width: 768px) {
         .block-container {
@@ -1016,15 +974,9 @@ if not filtered_overview:
 hero_table = [
     {
         "Icon": row.get("hero_image", ""),
-        "Hero ID": int(row["hero_id"]),
         "Hero": row["hero"],
         "Matches": int(row["matches"]),
         "Winrate": f"{round(float(row['winrate']))}%",
-        "Lane Win %": (
-            f"{round(float(row.get('lane_winrate', 0.0)))}%"
-            if int(row.get("lane_winrate_samples", 0)) > 0
-            else "-"
-        ),
         "Avg K/D/A": (
             f"{round(float(row['avg_kills']))}/"
             f"{round(float(row['avg_deaths']))}/"
@@ -1047,49 +999,19 @@ hero_table = [
 hero_rows_by_id = {int(row["hero_id"]): row for row in filtered_overview}
 hero_ids = list(hero_rows_by_id.keys())
 
-hero_table_headers = [
-    "Icon",
-    "Hero",
-    "Matches",
-    "Winrate",
-    "Lane Win %",
-    "Avg K/D/A",
-    "KDA",
-    "Avg Duration",
-    "Avg NW",
-    "Max Kills",
-    "Max Damage",
-]
-hero_table_rows_html = ""
-for row in hero_table:
-    hero_id = int(row["Hero ID"])
-    hero_name = str(row["Hero"])
-    hero_table_rows_html += (
-        "<tr>"
-        f'<td><a class="hero-overview-icon-link" href="?hero_id={hero_id}" title="Select {hero_name}">'
-        f'<img src="{row["Icon"]}" alt="{hero_name}"/></a></td>'
-        f"<td>{hero_name}</td>"
-        f"<td>{row['Matches']}</td>"
-        f"<td>{row['Winrate']}</td>"
-        f"<td>{row['Lane Win %']}</td>"
-        f"<td>{row['Avg K/D/A']}</td>"
-        f"<td>{row['KDA']}</td>"
-        f"<td>{row['Avg Duration']}</td>"
-        f"<td>{row['Avg NW']}</td>"
-        f"<td>{row['Max Kills']}</td>"
-        f"<td>{row['Max Damage']}</td>"
-        "</tr>"
-    )
-st.markdown(
-    (
-        '<div class="hero-overview-wrap">'
-        '<table class="hero-overview-table">'
-        f"<thead><tr>{''.join(f'<th>{header}</th>' for header in hero_table_headers)}</tr></thead>"
-        f"<tbody>{hero_table_rows_html}</tbody>"
-        "</table>"
-        "</div>"
-    ),
-    unsafe_allow_html=True,
+hero_table_df = pd.DataFrame(hero_table)
+if not hero_table_df.empty and "Avg Damage" in hero_table_df.columns:
+    hero_table_df["Avg Damage"] = hero_table_df["Avg Damage"].astype("int64")
+if not hero_table_df.empty and "Avg NW" in hero_table_df.columns:
+    hero_table_df["Avg NW"] = hero_table_df["Avg NW"].astype("int64")
+
+st.dataframe(
+    hero_table_df,
+    use_container_width=True,
+    hide_index=True,
+    column_config={
+        "Icon": st.column_config.ImageColumn("Hero", help="Hero icon", width="small"),
+    },
 )
 
 
@@ -1101,27 +1023,7 @@ def _hero_option_label(hero_id: int) -> str:
     )
 
 
-query_hero_raw = st.query_params.get("hero_id")
-if isinstance(query_hero_raw, list):
-    query_hero_raw = query_hero_raw[0] if query_hero_raw else None
-if query_hero_raw is not None:
-    try:
-        query_hero_id = int(str(query_hero_raw))
-        if query_hero_id in hero_ids:
-            st.session_state["selected_hero_id"] = query_hero_id
-    except ValueError:
-        pass
-if st.session_state.get("selected_hero_id") not in hero_ids:
-    st.session_state["selected_hero_id"] = hero_ids[0]
-
-selected_hero_id = st.selectbox(
-    "Select Hero",
-    options=hero_ids,
-    format_func=_hero_option_label,
-    key="selected_hero_id",
-)
-if st.query_params.get("hero_id") != str(selected_hero_id):
-    st.query_params["hero_id"] = str(selected_hero_id)
+selected_hero_id = st.selectbox("Select Hero", options=hero_ids, format_func=_hero_option_label)
 selected_hero_row = hero_rows_by_id[selected_hero_id]
 selected_hero_name = service.resolve_hero_name(selected_hero_id)
 
@@ -1188,7 +1090,6 @@ if hero_matches_loaded:
         stats_cards = [
             ("Matches", f"{round(stats.matches)}"),
             ("Winrate", f"{round(stats.winrate)}%"),
-            ("Lane Win %", f"{round(stats.lane_winrate)}%" if stats.lane_sample_count > 0 else "-"),
             ("Avg K/D/A", f"{round(stats.avg_kills)}/{round(stats.avg_deaths)}/{round(stats.avg_assists)}"),
             ("KDA", f"{round(stats.kda_ratio, 1)}"),
             ("Avg Duration", format_duration(int(round(stats.avg_duration_seconds)))),

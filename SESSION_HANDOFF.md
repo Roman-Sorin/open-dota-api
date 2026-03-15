@@ -371,7 +371,7 @@ CLI remains available as a secondary interface.
   - `Avg Duration`
   - `Max Kills`
   - `Max Damage`
-- Hero Overview icons are now intended to be clickable hero selectors.
+- Attempted clickable hero icons in `Hero Overview` were reverted because they broke dataframe interactions like sorting/filtering/resizing.
 - Local OpenDota reference dump for future code-agent work:
   - `open_dota_api_docs.txt.txt`
   - `Load Item Winrates` and `Load Recent Matches` load those heavier sections only when clicked.
