@@ -13,13 +13,14 @@ Turbo-only dashboard for your account:
   - period in days, or
   - multi-select patches (e.g. `7.40`, `7.40c`, `7.39b`)
   - explicit `Start Date` mode
-- Hero overview in Turbo (matches, WR, avg K/D/A, avg net worth, avg damage, KDA)
-- When Turbo match rows miss `hero_damage` or `net_worth`, the app enriches overview/detail stats from match details with cache-backed fallback
+- Hero overview in Turbo (matches, WR, avg K/D/A, avg duration, avg net worth, avg damage, KDA, max kills, max hero damage)
+- `Hero Overview` hero icon is clickable and selects that hero in the detail section
+- When Turbo match rows miss `hero_damage` or `net_worth`, the app enriches overview/detail stats from match details stored locally
 - Top dashboard metrics include Turbo matches, wins, losses, and winrate
 - Dashboard loading is manual by section:
   - `Load Turbo Dashboard` loads the overview only
   - `Load Hero Details`, `Load Item Winrates`, and `Load Recent Matches` can each be loaded independently for the selected hero
-- Detailed hero section in Turbo includes avg damage and avg net worth
+- Detailed hero section in Turbo includes avg duration, avg damage, avg net worth, max kills, and max hero damage
 - Item winrates (when item appears in final slots), with match count shown
 - Recent hero matches shown as a compact one-row-per-match table under the item table
 - Recent hero matches show only final slots, and item timings are shown only when the final item completion time is available
@@ -101,7 +102,9 @@ tests/
 
 - Some `players/{id}/matches` rows may have empty `item_0..item_5` (especially Turbo cases).
 - The app falls back to `matches/{match_id}` for final slots if needed.
-- Historical player-match list responses are cached with longer TTLs than very recent ranges to reduce repeated OpenDota requests.
+- Player matches are persisted in local `SQLite` storage and reused for later filters/analytics.
+- Match details are persisted separately and reused for enrichment-heavy sections.
+- The service performs incremental syncs instead of refetching whole history on each reload.
 - `purchase_log` is often incomplete, so purchased-item analytics may cover only part of matches.
 - Without API key, rate limits can be hit.
 

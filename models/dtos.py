@@ -40,6 +40,8 @@ class MatchSummary:
     assists: int
     duration: int
     hero_id: int | None
+    lane_efficiency_pct: float = 0.0
+    lane_efficiency_known: bool = False
     net_worth: int = 0
     net_worth_known: bool = False
     hero_damage: int = 0
@@ -71,8 +73,13 @@ class StatsResult:
     avg_deaths: float
     avg_assists: float
     kda_ratio: float
+    avg_duration_seconds: float
     avg_net_worth: float
     avg_damage: float
+    lane_winrate: float
+    lane_sample_count: int
+    max_kills: int
+    max_hero_damage: int
     radiant_wr: float
     dire_wr: float
 

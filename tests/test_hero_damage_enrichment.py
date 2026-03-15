@@ -159,6 +159,8 @@ def test_build_stats_tracks_avg_net_worth_and_damage() -> None:
             assists=8,
             duration=1200,
             hero_id=1,
+            lane_efficiency_pct=60.0,
+            lane_efficiency_known=True,
             net_worth=18000,
             net_worth_known=True,
             hero_damage=15000,
@@ -174,6 +176,8 @@ def test_build_stats_tracks_avg_net_worth_and_damage() -> None:
             assists=10,
             duration=1200,
             hero_id=1,
+            lane_efficiency_pct=40.0,
+            lane_efficiency_known=True,
             net_worth=24000,
             net_worth_known=True,
             hero_damage=21000,
@@ -185,6 +189,11 @@ def test_build_stats_tracks_avg_net_worth_and_damage() -> None:
 
     assert stats.avg_net_worth == 21000
     assert stats.avg_damage == 18000
+    assert stats.avg_duration_seconds == 1200
+    assert stats.lane_winrate == 50.0
+    assert stats.lane_sample_count == 2
+    assert stats.max_kills == 10
+    assert stats.max_hero_damage == 21000
 
 
 def test_turbo_hero_overview_matches_reported_phantom_lancer_example() -> None:
@@ -284,6 +293,52 @@ def test_turbo_hero_overview_includes_avg_net_worth() -> None:
 
     assert rows[0]["avg_net_worth"] == 24000
     assert rows[0]["avg_net_worth_samples"] == 2
+
+
+def test_turbo_hero_overview_tracks_duration_and_maxima() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=1,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=9,
+            deaths=2,
+            assists=10,
+            duration=1500,
+            hero_id=1,
+            lane_efficiency_pct=55.0,
+            lane_efficiency_known=True,
+            hero_damage=12000,
+            hero_damage_known=True,
+        ),
+        MatchSummary(
+            match_id=2,
+            start_time=0,
+            player_slot=0,
+            radiant_win=False,
+            kills=14,
+            deaths=5,
+            assists=7,
+            duration=2100,
+            hero_id=1,
+            lane_efficiency_pct=45.0,
+            lane_efficiency_known=True,
+            hero_damage=28000,
+            hero_damage_known=True,
+        ),
+    ]
+
+    service.fetch_matches = lambda filters: matches  # type: ignore[method-assign]
+    service.enrich_hero_damage = lambda player_id, matches, max_fallback_detail_calls=45: None  # type: ignore[method-assign]
+
+    rows = service.get_turbo_hero_overview(player_id=123, days=60)
+
+    assert rows[0]["avg_duration_seconds"] == 1800
+    assert rows[0]["lane_winrate"] == 50.0
+    assert rows[0]["max_kills"] == 14
+    assert rows[0]["max_hero_damage"] == 28000
 
 
 def test_fetch_matches_supports_lettered_patch_names() -> None:

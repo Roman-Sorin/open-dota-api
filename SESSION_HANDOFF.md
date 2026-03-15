@@ -355,6 +355,25 @@ CLI remains available as a secondary interface.
 - Added request-level caching for player match-list queries with TTLs tuned by recency to cut repeated OpenDota API calls.
 - Bumped overview schema version so stale Streamlit sessions refresh after the new economy metrics shipped.
 - Added regression coverage for avg net worth formulas and cached historical match loading.
+
+## 2026-03-15 sqlite match store + hero overview interaction update
+
+- Added `utils/match_store.py` with persisted `SQLite` storage for player match summaries, match details, and sync state.
+- Web app and CLI now construct `DotaAnalyticsService` with the local match store.
+- Summary history is synced incrementally per player/game-mode instead of refetching full history every reload.
+- Match details are stored separately and reused for economy/item enrichment.
+- Added service-level `backfill_match_details(...)` hook for future explicit full-detail sync workflows.
+- Added Hero Overview metrics:
+  - `Avg Duration`
+  - `Max Kills`
+  - `Max Damage`
+- Detailed Turbo Stats now show:
+  - `Avg Duration`
+  - `Max Kills`
+  - `Max Damage`
+- Hero Overview icons are now intended to be clickable hero selectors.
+- Local OpenDota reference dump for future code-agent work:
+  - `open_dota_api_docs.txt.txt`
   - `Load Item Winrates` and `Load Recent Matches` load those heavier sections only when clicked.
 - Added request-key-based section state tracking so hero/item/recent sections do not display stale data after hero/filter changes.
 - Bumped `OVERVIEW_SCHEMA_VERSION` to `6` so old session overview data is cleared after deploy.

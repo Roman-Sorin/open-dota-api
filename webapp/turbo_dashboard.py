@@ -8,7 +8,6 @@ import subprocess
 import sys
 import time
 
-import pandas as pd
 import streamlit as st
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -19,14 +18,15 @@ from clients.opendota_client import OpenDotaClient
 from models.dtos import MatchSummary, QueryFilters
 from services.analytics_service import DotaAnalyticsService
 from utils.cache import JsonFileCache
-from utils.config import get_cache_dir, get_settings
+from utils.config import get_cache_dir, get_match_store_path, get_settings
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError, ValidationError
-from utils.helpers import parse_player_id
+from utils.helpers import format_duration, parse_player_id
+from utils.match_store import SQLiteMatchStore
 from webapp.dashboard_state import build_hero_request_key
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
-OVERVIEW_SCHEMA_VERSION = 7
+OVERVIEW_SCHEMA_VERSION = 8
 
 st.markdown(
     """
@@ -245,6 +245,49 @@ st.markdown(
     .recent-item-inline-time.na {
         opacity: 0.58;
     }
+    .hero-overview-wrap {
+        overflow-x: auto;
+        margin-top: 0.45rem;
+        margin-bottom: 0.7rem;
+    }
+    .hero-overview-table {
+        width: 100%;
+        min-width: 1040px;
+        border-collapse: collapse;
+        font-size: 0.84rem;
+    }
+    .hero-overview-table th {
+        text-align: left;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        opacity: 0.72;
+        padding: 0.45rem 0.55rem;
+        border-bottom: 1px solid rgba(49, 51, 63, 0.18);
+        white-space: nowrap;
+    }
+    .hero-overview-table td {
+        padding: 0.55rem;
+        border-bottom: 1px solid rgba(49, 51, 63, 0.1);
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+    .hero-overview-icon-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .hero-overview-icon-link img {
+        width: 34px;
+        height: 34px;
+        border-radius: 6px;
+        display: block;
+        transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+    .hero-overview-icon-link:hover img {
+        transform: translateY(-1px);
+        box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.28);
+    }
     @media (max-width: 768px) {
         .block-container {
             padding-top: 1rem;
@@ -273,7 +316,8 @@ def build_service() -> DotaAnalyticsService:
         api_key=settings.api_key,
     )
     cache = JsonFileCache(cache_dir=get_cache_dir(), ttl_hours=settings.cache_ttl_hours)
-    return DotaAnalyticsService(client=client, cache=cache)
+    match_store = SQLiteMatchStore(get_match_store_path())
+    return DotaAnalyticsService(client=client, cache=cache, match_store=match_store)
 
 
 @st.cache_data(show_spinner=False)
@@ -521,9 +565,14 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
             {
                 "matches": 0,
                 "wins": 0,
+                "duration": 0.0,
                 "kills": 0.0,
                 "deaths": 0.0,
                 "assists": 0.0,
+                "lane_wins": 0,
+                "lane_samples": 0,
+                "max_kills": 0,
+                "max_hero_damage": 0,
                 "net_worth": 0.0,
                 "net_worth_samples": 0,
                 "hero_damage": 0.0,
@@ -532,15 +581,21 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
         )
         bucket["matches"] += 1
         bucket["wins"] += 1 if match.did_win else 0
+        bucket["duration"] += float(match.duration)
         bucket["kills"] += float(match.kills)
         bucket["deaths"] += float(match.deaths)
         bucket["assists"] += float(match.assists)
+        bucket["max_kills"] = max(float(bucket["max_kills"]), float(match.kills))
+        if match.lane_efficiency_known:
+            bucket["lane_samples"] += 1
+            bucket["lane_wins"] += 1 if match.lane_efficiency_pct >= 50.0 else 0
         if match.net_worth_known:
             bucket["net_worth"] += float(match.net_worth)
             bucket["net_worth_samples"] += 1
         if match.hero_damage_known:
             bucket["hero_damage"] += float(match.hero_damage)
             bucket["hero_damage_samples"] += 1
+            bucket["max_hero_damage"] = max(float(bucket["max_hero_damage"]), float(match.hero_damage))
 
     rows: list[dict] = []
     for hero_id, agg in grouped.items():
@@ -550,6 +605,8 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
         avg_k = agg["kills"] / games
         avg_d = agg["deaths"] / games
         avg_a = agg["assists"] / games
+        avg_duration_seconds = agg["duration"] / games
+        lane_samples = int(agg["lane_samples"])
         net_worth_samples = int(agg["net_worth_samples"])
         avg_net_worth = agg["net_worth"] / net_worth_samples if net_worth_samples > 0 else 0.0
         damage_samples = int(agg["hero_damage_samples"])
@@ -568,6 +625,11 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
                 "avg_kills": avg_k,
                 "avg_deaths": avg_d,
                 "avg_assists": avg_a,
+                "avg_duration_seconds": avg_duration_seconds,
+                "lane_winrate": (int(agg["lane_wins"]) / lane_samples * 100.0) if lane_samples else 0.0,
+                "lane_winrate_samples": lane_samples,
+                "max_kills": int(agg["max_kills"]),
+                "max_hero_damage": int(agg["max_hero_damage"]),
                 "avg_net_worth": avg_net_worth,
                 "avg_net_worth_samples": net_worth_samples,
                 "avg_damage": avg_damage,
@@ -954,16 +1016,25 @@ if not filtered_overview:
 hero_table = [
     {
         "Icon": row.get("hero_image", ""),
+        "Hero ID": int(row["hero_id"]),
         "Hero": row["hero"],
         "Matches": int(row["matches"]),
         "Winrate": f"{round(float(row['winrate']))}%",
+        "Lane Win %": (
+            f"{round(float(row.get('lane_winrate', 0.0)))}%"
+            if int(row.get("lane_winrate_samples", 0)) > 0
+            else "-"
+        ),
         "Avg K/D/A": (
             f"{round(float(row['avg_kills']))}/"
             f"{round(float(row['avg_deaths']))}/"
             f"{round(float(row['avg_assists']))}"
         ),
         "KDA": round(float(row["kda"]), 1),
+        "Avg Duration": format_duration(int(round(float(row.get("avg_duration_seconds", 0.0))))),
         "Avg NW": round(float(row.get("avg_net_worth", 0.0))),
+        "Max Kills": int(row.get("max_kills", 0)),
+        "Max Damage": int(row.get("max_hero_damage", 0)),
         "Wins": int(row["wins"]),
         "Losses": int(row["losses"]),
         "Avg Kills": round(float(row["avg_kills"])),
@@ -973,22 +1044,53 @@ hero_table = [
     }
     for row in filtered_overview
 ]
-hero_table_df = pd.DataFrame(hero_table)
-if not hero_table_df.empty and "Avg Damage" in hero_table_df.columns:
-    hero_table_df["Avg Damage"] = hero_table_df["Avg Damage"].astype("int64")
-if not hero_table_df.empty and "Avg NW" in hero_table_df.columns:
-    hero_table_df["Avg NW"] = hero_table_df["Avg NW"].astype("int64")
-
-st.dataframe(
-    hero_table_df,
-    use_container_width=True,
-    hide_index=True,
-    column_config={
-        "Icon": st.column_config.ImageColumn("Hero", help="Hero icon", width="small"),
-    },
-)
 hero_rows_by_id = {int(row["hero_id"]): row for row in filtered_overview}
 hero_ids = list(hero_rows_by_id.keys())
+
+hero_table_headers = [
+    "Icon",
+    "Hero",
+    "Matches",
+    "Winrate",
+    "Lane Win %",
+    "Avg K/D/A",
+    "KDA",
+    "Avg Duration",
+    "Avg NW",
+    "Max Kills",
+    "Max Damage",
+]
+hero_table_rows_html = ""
+for row in hero_table:
+    hero_id = int(row["Hero ID"])
+    hero_name = str(row["Hero"])
+    hero_table_rows_html += (
+        "<tr>"
+        f'<td><a class="hero-overview-icon-link" href="?hero_id={hero_id}" title="Select {hero_name}">'
+        f'<img src="{row["Icon"]}" alt="{hero_name}"/></a></td>'
+        f"<td>{hero_name}</td>"
+        f"<td>{row['Matches']}</td>"
+        f"<td>{row['Winrate']}</td>"
+        f"<td>{row['Lane Win %']}</td>"
+        f"<td>{row['Avg K/D/A']}</td>"
+        f"<td>{row['KDA']}</td>"
+        f"<td>{row['Avg Duration']}</td>"
+        f"<td>{row['Avg NW']}</td>"
+        f"<td>{row['Max Kills']}</td>"
+        f"<td>{row['Max Damage']}</td>"
+        "</tr>"
+    )
+st.markdown(
+    (
+        '<div class="hero-overview-wrap">'
+        '<table class="hero-overview-table">'
+        f"<thead><tr>{''.join(f'<th>{header}</th>' for header in hero_table_headers)}</tr></thead>"
+        f"<tbody>{hero_table_rows_html}</tbody>"
+        "</table>"
+        "</div>"
+    ),
+    unsafe_allow_html=True,
+)
 
 
 def _hero_option_label(hero_id: int) -> str:
@@ -999,7 +1101,27 @@ def _hero_option_label(hero_id: int) -> str:
     )
 
 
-selected_hero_id = st.selectbox("Select Hero", options=hero_ids, format_func=_hero_option_label)
+query_hero_raw = st.query_params.get("hero_id")
+if isinstance(query_hero_raw, list):
+    query_hero_raw = query_hero_raw[0] if query_hero_raw else None
+if query_hero_raw is not None:
+    try:
+        query_hero_id = int(str(query_hero_raw))
+        if query_hero_id in hero_ids:
+            st.session_state["selected_hero_id"] = query_hero_id
+    except ValueError:
+        pass
+if st.session_state.get("selected_hero_id") not in hero_ids:
+    st.session_state["selected_hero_id"] = hero_ids[0]
+
+selected_hero_id = st.selectbox(
+    "Select Hero",
+    options=hero_ids,
+    format_func=_hero_option_label,
+    key="selected_hero_id",
+)
+if st.query_params.get("hero_id") != str(selected_hero_id):
+    st.query_params["hero_id"] = str(selected_hero_id)
 selected_hero_row = hero_rows_by_id[selected_hero_id]
 selected_hero_name = service.resolve_hero_name(selected_hero_id)
 
@@ -1066,10 +1188,14 @@ if hero_matches_loaded:
         stats_cards = [
             ("Matches", f"{round(stats.matches)}"),
             ("Winrate", f"{round(stats.winrate)}%"),
+            ("Lane Win %", f"{round(stats.lane_winrate)}%" if stats.lane_sample_count > 0 else "-"),
             ("Avg K/D/A", f"{round(stats.avg_kills)}/{round(stats.avg_deaths)}/{round(stats.avg_assists)}"),
             ("KDA", f"{round(stats.kda_ratio, 1)}"),
+            ("Avg Duration", format_duration(int(round(stats.avg_duration_seconds)))),
             ("Avg Net Worth", f"{round(stats.avg_net_worth):,}"),
             ("Avg Damage", f"{round(stats.avg_damage):,}"),
+            ("Max Kills", f"{stats.max_kills}"),
+            ("Max Damage", f"{stats.max_hero_damage:,}"),
             ("Radiant WR", f"{round(stats.radiant_wr)}%"),
             ("Dire WR", f"{round(stats.dire_wr)}%"),
         ]

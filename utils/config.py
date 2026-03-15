@@ -26,3 +26,7 @@ def get_settings() -> Settings:
 
 def get_cache_dir() -> Path:
     return Path(".cache")
+
+
+def get_match_store_path() -> Path:
+    return get_cache_dir() / "matches.sqlite3"

@@ -8,9 +8,10 @@ from models.dtos import Intent, QueryFilters
 from parsers.input_parser import find_hero_by_name, parse_ask_query, parse_days, parse_mode
 from services.analytics_service import DotaAnalyticsService
 from utils.cache import JsonFileCache
-from utils.config import get_cache_dir, get_settings
+from utils.config import get_cache_dir, get_match_store_path, get_settings
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError, ValidationError
 from utils.helpers import parse_player_id
+from utils.match_store import SQLiteMatchStore
 
 
 app = typer.Typer(help="OpenDota CLI analyzer")
@@ -24,7 +25,8 @@ def _build_service() -> tuple[DotaAnalyticsService, TerminalFormatter]:
         api_key=settings.api_key,
     )
     cache = JsonFileCache(cache_dir=get_cache_dir(), ttl_hours=settings.cache_ttl_hours)
-    service = DotaAnalyticsService(client=client, cache=cache)
+    match_store = SQLiteMatchStore(get_match_store_path())
+    service = DotaAnalyticsService(client=client, cache=cache, match_store=match_store)
     formatter = TerminalFormatter()
     return service, formatter
 

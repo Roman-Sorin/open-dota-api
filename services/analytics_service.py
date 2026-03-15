@@ -12,6 +12,7 @@ from parsers.input_parser import HeroParser
 from utils.cache import JsonFileCache
 from utils.exceptions import OpenDotaNotFoundError, OpenDotaRateLimitError
 from utils.helpers import calculate_kda_ratio, format_duration, unix_to_dt, winrate_percent
+from utils.match_store import SQLiteMatchStore
 
 
 @dataclass(slots=True)
@@ -59,9 +60,10 @@ class CachePolicy:
 
 
 class DotaAnalyticsService:
-    def __init__(self, client: OpenDotaClient, cache: JsonFileCache) -> None:
+    def __init__(self, client: OpenDotaClient, cache: JsonFileCache, match_store: SQLiteMatchStore | None = None) -> None:
         self.client = client
         self.cache = cache
+        self.match_store = match_store
         self.references = self._load_references()
         self._match_details_memory_cache: dict[int, dict[str, Any]] = {}
         self._patch_starts, self._patch_names = self._load_patch_timeline()
@@ -236,6 +238,152 @@ class DotaAnalyticsService:
         )
 
     @staticmethod
+    def _min_start_time(filters: QueryFilters) -> int | None:
+        min_start = None
+        if filters.days:
+            min_start = int((datetime.now(tz=timezone.utc).timestamp()) - filters.days * 86400)
+        if filters.start_date:
+            start_date_ts = int(datetime.combine(filters.start_date, time.min, tzinfo=timezone.utc).timestamp())
+            min_start = max(min_start, start_date_ts) if min_start is not None else start_date_ts
+        return min_start
+
+    @staticmethod
+    def _sync_scope_key(game_mode: int | None) -> str:
+        return f"gm:{game_mode}" if game_mode is not None else "gm:all"
+
+    def _parse_match_summary_row(
+        self,
+        row: dict[str, Any],
+        *,
+        selected_patches: set[str] | None = None,
+        min_start: int | None = None,
+    ) -> MatchSummary | None:
+        start_time = int(row.get("start_time") or 0)
+        if min_start is not None and start_time < min_start:
+            return None
+        if selected_patches:
+            patch_name = self._resolve_patch_name_for_start_time(start_time)
+            if patch_name not in selected_patches:
+                return None
+
+        hero_damage = int(row.get("hero_damage") or 0)
+        lane_efficiency_pct = row.get("lane_efficiency_pct")
+        net_worth = int(row.get("net_worth") or 0)
+        match = MatchSummary(
+            match_id=int(row.get("match_id") or 0),
+            start_time=start_time,
+            player_slot=int(row.get("player_slot") or 0),
+            radiant_win=bool(row.get("radiant_win")),
+            kills=int(row.get("kills") or 0),
+            deaths=int(row.get("deaths") or 0),
+            assists=int(row.get("assists") or 0),
+            duration=int(row.get("duration") or 0),
+            hero_id=int(row.get("hero_id") or 0) if row.get("hero_id") is not None else None,
+            lane_efficiency_pct=float(lane_efficiency_pct or 0.0),
+            lane_efficiency_known=lane_efficiency_pct is not None,
+            net_worth=net_worth,
+            net_worth_known=net_worth > 0,
+            hero_damage=hero_damage,
+            hero_damage_known=hero_damage > 0,
+            item_0=int(row.get("item_0") or 0),
+            item_1=int(row.get("item_1") or 0),
+            item_2=int(row.get("item_2") or 0),
+            item_3=int(row.get("item_3") or 0),
+            item_4=int(row.get("item_4") or 0),
+            item_5=int(row.get("item_5") or 0),
+        )
+        return match if match.match_id > 0 else None
+
+    def _sync_player_matches(self, filters: QueryFilters) -> None:
+        if self.match_store is None:
+            return
+
+        significant = 0 if filters.game_mode == 23 else None
+        scope_key = self._sync_scope_key(filters.game_mode)
+        state = self.match_store.get_sync_state(filters.player_id, scope_key)
+        batch_size = 100
+        now_iso = datetime.now(tz=timezone.utc).isoformat()
+        min_sync_interval = timedelta(minutes=10)
+        if filters.days is not None and filters.days > 30:
+            min_sync_interval = timedelta(hours=12)
+        if filters.start_date is not None:
+            age_days = max((datetime.now(tz=timezone.utc).date() - filters.start_date).days, 0)
+            if age_days > 30:
+                min_sync_interval = timedelta(hours=12)
+            elif age_days > 7:
+                min_sync_interval = timedelta(hours=2)
+
+        def fetch_page(offset: int) -> list[dict[str, Any]]:
+            return self.client.get_player_matches(
+                account_id=filters.player_id,
+                game_mode=filters.game_mode,
+                limit=batch_size,
+                offset=offset,
+                significant=significant,
+            )
+
+        if state and state.get("last_incremental_sync_at"):
+            try:
+                last_sync = datetime.fromisoformat(str(state["last_incremental_sync_at"]))
+                if datetime.now(tz=timezone.utc) - last_sync < min_sync_interval:
+                    return
+            except ValueError:
+                pass
+
+        if state is None:
+            offset = 0
+            total_rows = 0
+            while True:
+                chunk = fetch_page(offset)
+                if not chunk:
+                    break
+                self.match_store.upsert_player_matches(filters.player_id, chunk)
+                total_rows += len(chunk)
+                if len(chunk) < batch_size:
+                    break
+                offset += batch_size
+
+            self.match_store.upsert_sync_state(
+                filters.player_id,
+                scope_key,
+                last_incremental_sync_at=now_iso,
+                last_full_sync_at=now_iso,
+                known_match_count=self.match_store.count_player_matches(filters.player_id, filters.game_mode),
+            )
+            return
+
+        first_page = fetch_page(0)
+        if not first_page:
+            self.match_store.upsert_sync_state(
+                filters.player_id,
+                scope_key,
+                last_incremental_sync_at=now_iso,
+                known_match_count=self.match_store.count_player_matches(filters.player_id, filters.game_mode),
+            )
+            return
+
+        page_index = 0
+        while True:
+            current_chunk = first_page if page_index == 0 else fetch_page(page_index * batch_size)
+            if not current_chunk:
+                break
+            existing_ids = self.match_store.get_existing_match_ids(
+                filters.player_id,
+                [int(row.get("match_id") or 0) for row in current_chunk],
+            )
+            self.match_store.upsert_player_matches(filters.player_id, current_chunk)
+            if existing_ids or len(current_chunk) < batch_size:
+                break
+            page_index += 1
+
+        self.match_store.upsert_sync_state(
+            filters.player_id,
+            scope_key,
+            last_incremental_sync_at=now_iso,
+            known_match_count=self.match_store.count_player_matches(filters.player_id, filters.game_mode),
+        )
+
+    @staticmethod
     def _serialize_match_summary(match: MatchSummary) -> dict[str, Any]:
         return {
             "match_id": match.match_id,
@@ -247,6 +395,8 @@ class DotaAnalyticsService:
             "assists": match.assists,
             "duration": match.duration,
             "hero_id": match.hero_id,
+            "lane_efficiency_pct": match.lane_efficiency_pct,
+            "lane_efficiency_known": match.lane_efficiency_known,
             "net_worth": match.net_worth,
             "net_worth_known": match.net_worth_known,
             "hero_damage": match.hero_damage,
@@ -279,6 +429,8 @@ class DotaAnalyticsService:
                         assists=int(row.get("assists") or 0),
                         duration=int(row.get("duration") or 0),
                         hero_id=int(row["hero_id"]) if row.get("hero_id") is not None else None,
+                        lane_efficiency_pct=float(row.get("lane_efficiency_pct") or 0.0),
+                        lane_efficiency_known=bool(row.get("lane_efficiency_known")),
                         net_worth=int(row.get("net_worth") or 0),
                         net_worth_known=bool(row.get("net_worth_known")),
                         hero_damage=int(row.get("hero_damage") or 0),
@@ -298,6 +450,27 @@ class DotaAnalyticsService:
     def fetch_matches(self, filters: QueryFilters, limit: int | None = None) -> list[MatchSummary]:
         significant = 0 if filters.game_mode == 23 else None
         selected_patches = set(filters.patch_names or [])
+        min_start = self._min_start_time(filters)
+
+        if self.match_store is not None:
+            self._sync_player_matches(filters)
+            stored_rows = self.match_store.query_player_matches(
+                filters.player_id,
+                hero_id=filters.hero_id,
+                game_mode=filters.game_mode,
+                min_start_time=min_start,
+                limit=None,
+            )
+            parsed_store_rows = [
+                match
+                for match in (
+                    self._parse_match_summary_row(row, selected_patches=selected_patches, min_start=min_start)
+                    for row in stored_rows
+                )
+                if match is not None
+            ]
+            return parsed_store_rows[:limit] if limit is not None else parsed_store_rows
+
         cache_policy = self._build_matches_cache_policy(filters, limit)
         cached_matches = self._deserialize_match_summaries(
             self.cache.get(cache_policy.key, max_age=cache_policy.ttl)
@@ -305,47 +478,11 @@ class DotaAnalyticsService:
         if cached_matches is not None:
             return cached_matches
 
-        min_start = None
-        if filters.days:
-            min_start = int((datetime.now(tz=timezone.utc).timestamp()) - filters.days * 86400)
-        if filters.start_date:
-            start_date_ts = int(datetime.combine(filters.start_date, time.min, tzinfo=timezone.utc).timestamp())
-            min_start = max(min_start, start_date_ts) if min_start is not None else start_date_ts
-
         def parse_rows(rows: list[dict]) -> list[MatchSummary]:
             parsed: list[MatchSummary] = []
             for row in rows:
-                start_time = int(row.get("start_time") or 0)
-                if min_start is not None and start_time < min_start:
-                    continue
-                if selected_patches:
-                    patch_name = self._resolve_patch_name_for_start_time(start_time)
-                    if patch_name not in selected_patches:
-                        continue
-
-                hero_damage = int(row.get("hero_damage") or 0)
-                match = MatchSummary(
-                    match_id=int(row.get("match_id") or 0),
-                    start_time=start_time,
-                    player_slot=int(row.get("player_slot") or 0),
-                    radiant_win=bool(row.get("radiant_win")),
-                    kills=int(row.get("kills") or 0),
-                    deaths=int(row.get("deaths") or 0),
-                    assists=int(row.get("assists") or 0),
-                    duration=int(row.get("duration") or 0),
-                    hero_id=int(row.get("hero_id") or 0) if row.get("hero_id") is not None else None,
-                    net_worth=int(row.get("net_worth") or 0),
-                    net_worth_known=int(row.get("net_worth") or 0) > 0,
-                    hero_damage=hero_damage,
-                    hero_damage_known=hero_damage > 0,
-                    item_0=int(row.get("item_0") or 0),
-                    item_1=int(row.get("item_1") or 0),
-                    item_2=int(row.get("item_2") or 0),
-                    item_3=int(row.get("item_3") or 0),
-                    item_4=int(row.get("item_4") or 0),
-                    item_5=int(row.get("item_5") or 0),
-                )
-                if match.match_id > 0:
+                match = self._parse_match_summary_row(row, selected_patches=selected_patches, min_start=min_start)
+                if match is not None:
                     parsed.append(match)
             return parsed
 
@@ -402,7 +539,25 @@ class DotaAnalyticsService:
     def build_stats(self, matches: list[MatchSummary]) -> StatsResult:
         total = len(matches)
         if total == 0:
-            return StatsResult(0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+            return StatsResult(
+                matches=0,
+                wins=0,
+                losses=0,
+                winrate=0.0,
+                avg_kills=0.0,
+                avg_deaths=0.0,
+                avg_assists=0.0,
+                kda_ratio=0.0,
+                avg_duration_seconds=0.0,
+                avg_net_worth=0.0,
+                avg_damage=0.0,
+                lane_winrate=0.0,
+                lane_sample_count=0,
+                max_kills=0,
+                max_hero_damage=0,
+                radiant_wr=0.0,
+                dire_wr=0.0,
+            )
 
         wins = sum(1 for m in matches if m.did_win)
         losses = total - wins
@@ -410,10 +565,13 @@ class DotaAnalyticsService:
         kills = sum(m.kills for m in matches)
         deaths = sum(m.deaths for m in matches)
         assists = sum(m.assists for m in matches)
+        duration_total = sum(m.duration for m in matches)
         net_worth_total = sum(float(m.net_worth) for m in matches if m.net_worth_known)
         net_worth_samples = sum(1 for m in matches if m.net_worth_known)
         hero_damage_total = sum(float(m.hero_damage) for m in matches if m.hero_damage_known)
         hero_damage_samples = sum(1 for m in matches if m.hero_damage_known)
+        lane_wins = sum(1 for m in matches if m.lane_efficiency_known and m.lane_efficiency_pct >= 50.0)
+        lane_samples = sum(1 for m in matches if m.lane_efficiency_known)
 
         radiant_matches = [m for m in matches if m.side == "Radiant"]
         dire_matches = [m for m in matches if m.side == "Dire"]
@@ -433,8 +591,13 @@ class DotaAnalyticsService:
             avg_deaths=avg_d,
             avg_assists=avg_a,
             kda_ratio=calculate_kda_ratio(avg_k, avg_d, avg_a),
+            avg_duration_seconds=duration_total / total,
             avg_net_worth=(net_worth_total / net_worth_samples) if net_worth_samples > 0 else 0.0,
             avg_damage=(hero_damage_total / hero_damage_samples) if hero_damage_samples > 0 else 0.0,
+            lane_winrate=winrate_percent(lane_wins, lane_samples),
+            lane_sample_count=lane_samples,
+            max_kills=max(int(m.kills) for m in matches),
+            max_hero_damage=max(int(m.hero_damage) for m in matches if m.hero_damage_known) if hero_damage_samples > 0 else 0,
             radiant_wr=winrate_percent(radiant_wins, len(radiant_matches)),
             dire_wr=winrate_percent(dire_wins, len(dire_matches)),
         )
@@ -487,6 +650,9 @@ class DotaAnalyticsService:
         if match_id in self._match_details_memory_cache:
             return True
 
+        if self.match_store is not None and isinstance(self.match_store.get_match_detail(match_id), dict):
+            return True
+
         cache_key = f"match_details_{match_id}"
         return isinstance(self.cache.get(cache_key), dict)
 
@@ -494,14 +660,24 @@ class DotaAnalyticsService:
         if match_id in self._match_details_memory_cache:
             return self._match_details_memory_cache[match_id]
 
+        if self.match_store is not None:
+            stored = self.match_store.get_match_detail(match_id)
+            if isinstance(stored, dict):
+                self._match_details_memory_cache[match_id] = stored
+                return stored
+
         cache_key = f"match_details_{match_id}"
         cached = self.cache.get(cache_key)
         if isinstance(cached, dict):
             self._match_details_memory_cache[match_id] = cached
+            if self.match_store is not None:
+                self.match_store.upsert_match_detail(match_id, cached)
             return cached
 
         details = self.client.get_match_details(match_id)
         self._match_details_memory_cache[match_id] = details
+        if self.match_store is not None:
+            self.match_store.upsert_match_detail(match_id, details)
         self.cache.set(cache_key, details)
         return details
 
@@ -513,7 +689,7 @@ class DotaAnalyticsService:
     ) -> None:
         fallback_detail_calls = 0
         for match in matches:
-            if match.hero_damage_known and match.net_worth_known:
+            if match.hero_damage_known and match.net_worth_known and match.lane_efficiency_known:
                 continue
             details_cached = self._has_match_details_cached(match.match_id)
             if not details_cached and fallback_detail_calls >= max_fallback_detail_calls:
@@ -530,12 +706,24 @@ class DotaAnalyticsService:
                 if player_row:
                     hero_damage = int(player_row.get("hero_damage") or 0)
                     net_worth = int(player_row.get("net_worth") or 0)
+                    lane_efficiency_pct = player_row.get("lane_efficiency_pct")
                     if hero_damage > 0:
                         match.hero_damage = hero_damage
                         match.hero_damage_known = True
                     if net_worth > 0:
                         match.net_worth = net_worth
                         match.net_worth_known = True
+                    if lane_efficiency_pct is not None:
+                        match.lane_efficiency_pct = float(lane_efficiency_pct or 0.0)
+                        match.lane_efficiency_known = True
+                    if self.match_store is not None:
+                        self.match_store.update_player_match_enrichment(
+                            player_id,
+                            match.match_id,
+                            hero_damage=hero_damage if hero_damage > 0 else None,
+                            net_worth=net_worth if net_worth > 0 else None,
+                            lane_efficiency_pct=float(lane_efficiency_pct) if lane_efficiency_pct is not None else None,
+                        )
             except OpenDotaRateLimitError:
                 break
 
@@ -749,6 +937,24 @@ class DotaAnalyticsService:
             return "Any"
         return self.references.hero_names_by_id.get(hero_id, f"Hero #{hero_id}")
 
+    def backfill_match_details(
+        self,
+        player_id: int,
+        game_mode: int | None = None,
+        max_matches: int | None = None,
+    ) -> int:
+        if self.match_store is None:
+            return 0
+        match_ids = self.match_store.get_match_ids_without_details(player_id, game_mode=game_mode, limit=max_matches)
+        completed = 0
+        for match_id in match_ids:
+            try:
+                self._get_match_details_cached(match_id)
+                completed += 1
+            except OpenDotaRateLimitError:
+                break
+        return completed
+
     def get_turbo_hero_overview(
         self,
         player_id: int,
@@ -779,9 +985,14 @@ class DotaAnalyticsService:
                 {
                     "matches": 0,
                     "wins": 0,
+                    "duration": 0.0,
                     "kills": 0.0,
                     "deaths": 0.0,
                     "assists": 0.0,
+                    "lane_wins": 0,
+                    "lane_samples": 0,
+                    "max_kills": 0,
+                    "max_hero_damage": 0,
                     "net_worth": 0.0,
                     "net_worth_samples": 0,
                     "hero_damage": 0.0,
@@ -790,15 +1001,21 @@ class DotaAnalyticsService:
             )
             bucket["matches"] += 1
             bucket["wins"] += 1 if match.did_win else 0
+            bucket["duration"] += float(match.duration)
             bucket["kills"] += float(match.kills)
             bucket["deaths"] += float(match.deaths)
             bucket["assists"] += float(match.assists)
+            bucket["max_kills"] = max(float(bucket["max_kills"]), float(match.kills))
+            if match.lane_efficiency_known:
+                bucket["lane_samples"] += 1
+                bucket["lane_wins"] += 1 if match.lane_efficiency_pct >= 50.0 else 0
             if match.net_worth_known:
                 bucket["net_worth"] += float(match.net_worth)
                 bucket["net_worth_samples"] += 1
             if match.hero_damage_known:
                 bucket["hero_damage"] += float(match.hero_damage)
                 bucket["hero_damage_samples"] += 1
+                bucket["max_hero_damage"] = max(float(bucket["max_hero_damage"]), float(match.hero_damage))
 
         result: list[dict[str, Any]] = []
         for hero_id, agg in grouped.items():
@@ -808,6 +1025,8 @@ class DotaAnalyticsService:
             k = agg["kills"] / games
             d = agg["deaths"] / games
             a = agg["assists"] / games
+            avg_duration_seconds = agg["duration"] / games
+            lane_samples = int(agg["lane_samples"])
             net_worth_samples = int(agg["net_worth_samples"])
             avg_net_worth = agg["net_worth"] / net_worth_samples if net_worth_samples > 0 else 0.0
             damage_samples = int(agg["hero_damage_samples"])
@@ -825,6 +1044,11 @@ class DotaAnalyticsService:
                     "avg_kills": k,
                     "avg_deaths": d,
                     "avg_assists": a,
+                    "avg_duration_seconds": avg_duration_seconds,
+                    "lane_winrate": winrate_percent(int(agg["lane_wins"]), lane_samples),
+                    "lane_winrate_samples": lane_samples,
+                    "max_kills": int(agg["max_kills"]),
+                    "max_hero_damage": int(agg["max_hero_damage"]),
                     "avg_net_worth": avg_net_worth,
                     "avg_net_worth_samples": net_worth_samples,
                     "avg_damage": avg_damage,

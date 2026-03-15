@@ -4,6 +4,7 @@ from rich.console import Console
 from rich.table import Table
 
 from models.dtos import ItemStat, ItemsResult, MatchRow, QueryFilters, StatsResult
+from utils.helpers import format_duration
 
 
 class TerminalFormatter:
@@ -33,15 +34,23 @@ class TerminalFormatter:
         table.add_column("Deaths", justify="right")
         table.add_column("Assists", justify="right")
         table.add_column("KDA", justify="right")
+        table.add_column("Avg Duration", justify="right")
         table.add_column("Net Worth", justify="right")
         table.add_column("Damage", justify="right")
+        table.add_column("Lane Win %", justify="right")
+        table.add_column("Max Kills", justify="right")
+        table.add_column("Max Damage", justify="right")
         table.add_row(
             f"{stats.avg_kills:.2f}",
             f"{stats.avg_deaths:.2f}",
             f"{stats.avg_assists:.2f}",
             f"{stats.kda_ratio:.2f}",
+            format_duration(int(round(stats.avg_duration_seconds))),
             f"{stats.avg_net_worth:,.0f}",
             f"{stats.avg_damage:,.0f}",
+            f"{stats.lane_winrate:.2f}%" if stats.lane_sample_count > 0 else "-",
+            str(stats.max_kills),
+            f"{stats.max_hero_damage:,}",
         )
         self.console.print(table)
         self.console.print()

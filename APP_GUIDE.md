@@ -11,14 +11,15 @@ The project includes two interfaces:
 
 ## Main capabilities
 
-- Turbo-only hero overview (matches, wins, losses, winrate, avg net worth, avg damage)
+- Turbo-only hero overview (matches, wins, losses, winrate, avg duration, avg net worth, avg damage, max kills, max hero damage)
+- Hero Overview icons are clickable and can be used to select the hero without opening the dropdown
 - Hero overview avg damage/net worth use match-detail fallback when player match rows don't include `hero_damage` or `net_worth`
 - Dashboard summary cards: Turbo matches, wins, losses, winrate
 - Time filter modes: `Days`, `Patches`, `Start Date`
 - Dashboard sections load manually and independently to reduce one-shot API work on page open
 - `Load Turbo Dashboard` fetches the hero overview only
 - `Load Hero Details`, `Load Item Winrates`, and `Load Recent Matches` can each fetch the selected hero dataset on demand
-- Per-hero detailed stats (avg K/D/A, KDA, avg net worth, avg damage, Radiant/Dire WR)
+- Per-hero detailed stats (avg K/D/A, KDA, avg duration, avg net worth, avg damage, max kills, max hero damage, Radiant/Dire WR)
 - Most frequent final items
 - Item winrate table (wins with item / matches with item), includes per-item match count
 - Item winrate table is sorted by highest item winrate first (ties by larger sample)
@@ -28,7 +29,10 @@ The project includes two interfaces:
 - Recent hero matches include `Net Worth` and player `Hero Damage`
 - Recent hero matches support incremental loading via `Load 10 more matches`
 - Supports player input as account id or OpenDota profile URL
-- Caching for constants, match details, and player-match list requests with TTLs based on recency
+- Local `SQLite` storage for player match summaries
+- Separate persisted storage for fetched match details
+- Incremental summary sync to avoid repeated full-history calls
+- Match details can be backfilled later without rebuilding summary history
 - Graceful handling of missing OpenDota fields and rate limits
 
 ## Project entry points
@@ -82,6 +86,7 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 
 - Some Turbo rows from `players/{id}/matches` can have empty item slots.
 - The app uses fallback match-detail calls for item enrichment and hero economy/damage enrichment when needed.
+- Some requested metrics may depend on detail payload fields that are not guaranteed in every parsed match. When lane-specific data is unavailable, the app should prefer showing `-` instead of pretending the value is `0%`.
 - `purchase_log` is often incomplete; purchased-item stats may have partial coverage.
 
 ## Troubleshooting
