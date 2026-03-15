@@ -11,15 +11,14 @@ The project includes two interfaces:
 
 ## Main capabilities
 
-- Turbo-only hero overview (matches, wins, losses, winrate, avg damage)
-- Hero overview avg damage uses match-detail fallback when player match rows don't include `hero_damage`
+- Turbo-only hero overview (matches, wins, losses, winrate, avg net worth, avg damage)
+- Hero overview avg damage/net worth use match-detail fallback when player match rows don't include `hero_damage` or `net_worth`
 - Dashboard summary cards: Turbo matches, wins, losses, winrate
 - Time filter modes: `Days`, `Patches`, `Start Date`
-- Dashboard sections load manually to reduce one-shot API work on page open
+- Dashboard sections load manually and independently to reduce one-shot API work on page open
 - `Load Turbo Dashboard` fetches the hero overview only
-- `Load Hero Details` fetches matches and the detailed hero stat cards
-- `Load Item Winrates` and `Load Recent Matches` fetch those heavier sections only when clicked
-- Per-hero detailed stats (avg K/D/A, KDA, Radiant/Dire WR)
+- `Load Hero Details`, `Load Item Winrates`, and `Load Recent Matches` can each fetch the selected hero dataset on demand
+- Per-hero detailed stats (avg K/D/A, KDA, avg net worth, avg damage, Radiant/Dire WR)
 - Most frequent final items
 - Item winrate table (wins with item / matches with item), includes per-item match count
 - Item winrate table is sorted by highest item winrate first (ties by larger sample)
@@ -29,7 +28,7 @@ The project includes two interfaces:
 - Recent hero matches include `Net Worth` and player `Hero Damage`
 - Recent hero matches support incremental loading via `Load 10 more matches`
 - Supports player input as account id or OpenDota profile URL
-- Caching for constants and match details
+- Caching for constants, match details, and player-match list requests with TTLs based on recency
 - Graceful handling of missing OpenDota fields and rate limits
 
 ## Project entry points
@@ -82,7 +81,7 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 ## Notes on OpenDota data
 
 - Some Turbo rows from `players/{id}/matches` can have empty item slots.
-- The app uses fallback match-detail calls for item enrichment when needed.
+- The app uses fallback match-detail calls for item enrichment and hero economy/damage enrichment when needed.
 - `purchase_log` is often incomplete; purchased-item stats may have partial coverage.
 
 ## Troubleshooting

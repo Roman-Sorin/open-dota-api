@@ -33,11 +33,15 @@ class TerminalFormatter:
         table.add_column("Deaths", justify="right")
         table.add_column("Assists", justify="right")
         table.add_column("KDA", justify="right")
+        table.add_column("Net Worth", justify="right")
+        table.add_column("Damage", justify="right")
         table.add_row(
             f"{stats.avg_kills:.2f}",
             f"{stats.avg_deaths:.2f}",
             f"{stats.avg_assists:.2f}",
             f"{stats.kda_ratio:.2f}",
+            f"{stats.avg_net_worth:,.0f}",
+            f"{stats.avg_damage:,.0f}",
         )
         self.console.print(table)
         self.console.print()
@@ -79,6 +83,7 @@ class TerminalFormatter:
         table.add_column("result")
         table.add_column("K/D/A")
         table.add_column("duration")
+        table.add_column("net_worth", justify="right")
         table.add_column("items")
 
         for row in rows:
@@ -88,6 +93,7 @@ class TerminalFormatter:
                 row.result,
                 row.kda,
                 row.duration,
+                f"{row.net_worth:,}" if row.net_worth is not None else "-",
                 ", ".join(row.items[:4]) if row.items else "-",
             )
 

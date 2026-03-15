@@ -40,6 +40,8 @@ class MatchSummary:
     assists: int
     duration: int
     hero_id: int | None
+    net_worth: int = 0
+    net_worth_known: bool = False
     hero_damage: int = 0
     hero_damage_known: bool = False
     item_0: int = 0
@@ -69,6 +71,8 @@ class StatsResult:
     avg_deaths: float
     avg_assists: float
     kda_ratio: float
+    avg_net_worth: float
+    avg_damage: float
     radiant_wr: float
     dire_wr: float
 
@@ -97,6 +101,7 @@ class MatchRow:
     result: str
     kda: str
     duration: str
+    net_worth: int | None
     items: list[str]
 
 

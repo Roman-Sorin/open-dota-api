@@ -26,7 +26,7 @@ class _FakeCache:
     def __init__(self) -> None:
         self._store: dict[str, object] = {}
 
-    def get(self, key: str):
+    def get(self, key: str, max_age=None):
         return self._store.get(key)
 
     def set(self, key: str, value: object) -> None:
@@ -145,6 +145,47 @@ def test_turbo_hero_overview_uses_confirmed_damage_samples_only() -> None:
     assert rows[0]["avg_damage_samples"] == 1
 
 
+def test_build_stats_tracks_avg_net_worth_and_damage() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=1,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=10,
+            deaths=2,
+            assists=8,
+            duration=1200,
+            hero_id=1,
+            net_worth=18000,
+            net_worth_known=True,
+            hero_damage=15000,
+            hero_damage_known=True,
+        ),
+        MatchSummary(
+            match_id=2,
+            start_time=0,
+            player_slot=0,
+            radiant_win=False,
+            kills=4,
+            deaths=6,
+            assists=10,
+            duration=1200,
+            hero_id=1,
+            net_worth=24000,
+            net_worth_known=True,
+            hero_damage=21000,
+            hero_damage_known=True,
+        ),
+    ]
+
+    stats = service.build_stats(matches)
+
+    assert stats.avg_net_worth == 21000
+    assert stats.avg_damage == 18000
+
+
 def test_turbo_hero_overview_matches_reported_phantom_lancer_example() -> None:
     service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
     matches = [
@@ -198,6 +239,50 @@ def test_turbo_hero_overview_matches_reported_phantom_lancer_example() -> None:
     assert rows[0]["matches"] == 3
     assert rows[0]["avg_damage"] == 12366.666666666666
     assert rows[0]["avg_damage_samples"] == 3
+
+
+def test_turbo_hero_overview_includes_avg_net_worth() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=1,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=2,
+            deaths=1,
+            assists=10,
+            duration=1200,
+            hero_id=1,
+            net_worth=22000,
+            net_worth_known=True,
+            hero_damage=10000,
+            hero_damage_known=True,
+        ),
+        MatchSummary(
+            match_id=2,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=3,
+            deaths=2,
+            assists=12,
+            duration=1200,
+            hero_id=1,
+            net_worth=26000,
+            net_worth_known=True,
+            hero_damage=14000,
+            hero_damage_known=True,
+        ),
+    ]
+
+    service.fetch_matches = lambda filters: matches  # type: ignore[method-assign]
+    service.enrich_hero_damage = lambda player_id, matches, max_fallback_detail_calls=45: None  # type: ignore[method-assign]
+
+    rows = service.get_turbo_hero_overview(player_id=123, days=60)
+
+    assert rows[0]["avg_net_worth"] == 24000
+    assert rows[0]["avg_net_worth_samples"] == 2
 
 
 def test_fetch_matches_supports_lettered_patch_names() -> None:
@@ -273,6 +358,44 @@ def test_fetch_matches_respects_start_date_filter() -> None:
 
     assert len(rows) == 1
     assert rows[0].match_id == 2
+
+
+def test_fetch_matches_uses_cache_for_historical_query() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    calls: list[int] = []
+
+    def _fake_get_player_matches(**kwargs):
+        calls.append(1)
+        return [
+            {
+                "match_id": 1,
+                "start_time": 1738540800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "kills": 1,
+                "deaths": 1,
+                "assists": 1,
+                "duration": 1200,
+                "hero_id": 1,
+                "net_worth": 20500,
+                "hero_damage": 10000,
+            }
+        ]
+
+    service.client.get_player_matches = _fake_get_player_matches  # type: ignore[method-assign]
+    filters = QueryFilters(
+        player_id=123,
+        game_mode=23,
+        game_mode_name="Turbo",
+        start_date=date(2025, 2, 1),
+    )
+
+    first = service.fetch_matches(filters)
+    second = service.fetch_matches(filters)
+
+    assert len(calls) == 1
+    assert first[0].net_worth == 20500
+    assert second[0].net_worth == 20500
 
 
 def test_recent_hero_matches_use_final_slots_with_matching_final_item_timings() -> None:

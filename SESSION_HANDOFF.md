@@ -16,7 +16,7 @@ CLI remains available as a secondary interface.
 - Time filter supports:
   - days period
   - multi-select patch list (OpenDota patch constants)
-- Per-hero Turbo deep dive
+- Per-hero Turbo deep dive with avg damage and avg net worth
 - Item winrate table (`wins with item / matches with item` based on final slots)
 
 ## Data caveats implemented
@@ -106,7 +106,7 @@ CLI remains available as a secondary interface.
 
 - Removed `Most Frequent Final Items` section from `webapp/turbo_dashboard.py`.
 - Removed related `build_items(...)` calculation and note caption, since this section is no longer shown.
-- Item winrate and recent matches sections remain unchanged.
+- Item winrate and recent matches sections no longer depend on loading hero details first.
 
 ## 2026-03-08 deployment completion
 
@@ -344,7 +344,16 @@ CLI remains available as a secondary interface.
 - Removed the one-time automatic dashboard load on first page open.
 - Dashboard loading is now split into explicit buttons:
   - `Load Turbo Dashboard` loads only the overview/filter result.
-  - `Load Hero Details` loads the selected hero's filtered match set and stat cards.
+- `Load Hero Details` loads the selected hero's filtered match set and stat cards.
+
+## 2026-03-15 hero economy + independent section loading update
+
+- Added average net worth to Turbo hero overview and detailed hero stat cards.
+- Recent hero matches and CLI match rows now surface per-match net worth.
+- `Load Hero Details`, `Load Item Winrates`, and `Load Recent Matches` now resolve hero matches independently instead of blocking on each other.
+- Added request-level caching for player match-list queries with TTLs tuned by recency to cut repeated OpenDota API calls.
+- Bumped overview schema version so stale Streamlit sessions refresh after the new economy metrics shipped.
+- Added regression coverage for avg net worth formulas and cached historical match loading.
   - `Load Item Winrates` and `Load Recent Matches` load those heavier sections only when clicked.
 - Added request-key-based section state tracking so hero/item/recent sections do not display stale data after hero/filter changes.
 - Bumped `OVERVIEW_SCHEMA_VERSION` to `6` so old session overview data is cleared after deploy.

@@ -21,7 +21,7 @@ class _FakeCache:
     def __init__(self) -> None:
         self._store: dict[str, object] = {}
 
-    def get(self, key: str):
+    def get(self, key: str, max_age=None):
         return self._store.get(key)
 
     def set(self, key: str, value: object) -> None:

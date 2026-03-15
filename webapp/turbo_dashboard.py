@@ -26,7 +26,7 @@ from webapp.dashboard_state import build_hero_request_key
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
-OVERVIEW_SCHEMA_VERSION = 6
+OVERVIEW_SCHEMA_VERSION = 7
 
 st.markdown(
     """
@@ -524,6 +524,8 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
                 "kills": 0.0,
                 "deaths": 0.0,
                 "assists": 0.0,
+                "net_worth": 0.0,
+                "net_worth_samples": 0,
                 "hero_damage": 0.0,
                 "hero_damage_samples": 0,
             },
@@ -533,6 +535,9 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
         bucket["kills"] += float(match.kills)
         bucket["deaths"] += float(match.deaths)
         bucket["assists"] += float(match.assists)
+        if match.net_worth_known:
+            bucket["net_worth"] += float(match.net_worth)
+            bucket["net_worth_samples"] += 1
         if match.hero_damage_known:
             bucket["hero_damage"] += float(match.hero_damage)
             bucket["hero_damage_samples"] += 1
@@ -545,6 +550,8 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
         avg_k = agg["kills"] / games
         avg_d = agg["deaths"] / games
         avg_a = agg["assists"] / games
+        net_worth_samples = int(agg["net_worth_samples"])
+        avg_net_worth = agg["net_worth"] / net_worth_samples if net_worth_samples > 0 else 0.0
         damage_samples = int(agg["hero_damage_samples"])
         avg_damage = agg["hero_damage"] / damage_samples if damage_samples > 0 else 0.0
         wr = (wins / games * 100.0) if games else 0.0
@@ -561,6 +568,8 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
                 "avg_kills": avg_k,
                 "avg_deaths": avg_d,
                 "avg_assists": avg_a,
+                "avg_net_worth": avg_net_worth,
+                "avg_net_worth_samples": net_worth_samples,
                 "avg_damage": avg_damage,
                 "avg_damage_samples": damage_samples,
                 "kda": kda,
@@ -660,7 +669,8 @@ def _overview_looks_stale(overview: object) -> bool:
         return False
 
     has_avg_damage_key = any(isinstance(row, dict) and "avg_damage" in row for row in overview)
-    if not has_avg_damage_key:
+    has_avg_net_worth_key = any(isinstance(row, dict) and "avg_net_worth" in row for row in overview)
+    if not has_avg_damage_key or not has_avg_net_worth_key:
         return True
 
     positive_damage_rows = 0
@@ -705,6 +715,46 @@ def _clear_detail_sections() -> None:
         "recent_matches_loaded_limit",
     ):
         st.session_state.pop(key, None)
+
+
+def _load_selected_hero_matches(
+    service: DotaAnalyticsService,
+    player_id: int,
+    selected_hero_id: int,
+    selected_hero_name: str,
+    days: int | None,
+    active_patches: list[str],
+    active_start_date: date | None,
+    current_hero_request_key: tuple[object, ...],
+    *,
+    force_refresh: bool = False,
+) -> list[MatchSummary]:
+    if not force_refresh and st.session_state.get("hero_matches_request_key") == current_hero_request_key:
+        return st.session_state.get("hero_matches") or []
+
+    if active_patches and not supports_patch_overview:
+        patch_filtered_matches = st.session_state.get("patch_filtered_matches") or []
+        matches = [m for m in patch_filtered_matches if int(m.hero_id or 0) == selected_hero_id]
+    else:
+        filters_kwargs: dict[str, object] = {
+            "player_id": player_id,
+            "hero_id": selected_hero_id,
+            "hero_name": selected_hero_name,
+            "game_mode": 23,
+            "game_mode_name": "Turbo",
+            "days": days,
+            "start_date": active_start_date,
+        }
+        if active_patches and query_filters_supports_patch:
+            filters_kwargs["patch_names"] = active_patches
+        matches = run_with_rate_limit_retry(
+            lambda: service.fetch_matches(QueryFilters(**filters_kwargs)),
+            operation_label="hero matches",
+        )
+
+    st.session_state["hero_matches"] = matches
+    st.session_state["hero_matches_request_key"] = current_hero_request_key
+    return matches
 
 with st.sidebar:
     st.header("Filters")
@@ -900,6 +950,7 @@ hero_table = [
     {
         "Icon": row.get("hero_image", ""),
         "Hero": row["hero"],
+        "Matches": int(row["matches"]),
         "Winrate": f"{round(float(row['winrate']))}%",
         "Avg K/D/A": (
             f"{round(float(row['avg_kills']))}/"
@@ -907,7 +958,7 @@ hero_table = [
             f"{round(float(row['avg_assists']))}"
         ),
         "KDA": round(float(row["kda"]), 1),
-        "Matches": int(row["matches"]),
+        "Average Net Worth": round(float(row.get("avg_net_worth", 0.0))),
         "Wins": int(row["wins"]),
         "Losses": int(row["losses"]),
         "Avg Kills": round(float(row["avg_kills"])),
@@ -920,6 +971,8 @@ hero_table = [
 hero_table_df = pd.DataFrame(hero_table)
 if not hero_table_df.empty and "Avg Damage" in hero_table_df.columns:
     hero_table_df["Avg Damage"] = hero_table_df["Avg Damage"].astype("int64")
+if not hero_table_df.empty and "Average Net Worth" in hero_table_df.columns:
+    hero_table_df["Average Net Worth"] = hero_table_df["Average Net Worth"].astype("int64")
 
 st.dataframe(
     hero_table_df,
@@ -973,35 +1026,23 @@ action_col_1, action_col_2, action_col_3 = st.columns(3)
 with action_col_1:
     load_hero_matches = st.button("Load Hero Details", type="primary")
 with action_col_2:
-    load_item_winrates = st.button("Load Item Winrates", disabled=not hero_matches_loaded)
+    load_item_winrates = st.button("Load Item Winrates")
 with action_col_3:
-    load_recent_matches = st.button("Load Recent Matches", disabled=not hero_matches_loaded)
+    load_recent_matches = st.button("Load Recent Matches")
 
 if load_hero_matches:
     try:
-        if active_patches and not supports_patch_overview:
-            patch_filtered_matches = st.session_state.get("patch_filtered_matches") or []
-            matches = [m for m in patch_filtered_matches if int(m.hero_id or 0) == selected_hero_id]
-        else:
-            filters_kwargs: dict[str, object] = {
-                "player_id": player_id,
-                "hero_id": selected_hero_id,
-                "hero_name": selected_hero_name,
-                "game_mode": 23,
-                "game_mode_name": "Turbo",
-                "days": days,
-                "start_date": active_start_date,
-            }
-            if active_patches and query_filters_supports_patch:
-                filters_kwargs["patch_names"] = active_patches
-            filters = QueryFilters(**filters_kwargs)
-            matches = run_with_rate_limit_retry(
-                lambda: service.fetch_matches(filters),
-                operation_label="hero matches",
-            )
-
-        st.session_state["hero_matches"] = matches
-        st.session_state["hero_matches_request_key"] = current_hero_request_key
+        matches = _load_selected_hero_matches(
+            service,
+            player_id,
+            selected_hero_id,
+            selected_hero_name,
+            days,
+            active_patches,
+            active_start_date,
+            current_hero_request_key,
+            force_refresh=True,
+        )
         st.session_state.pop("item_winrate_rows", None)
         st.session_state.pop("item_rows_request_key", None)
         st.session_state.pop("recent_match_rows", None)
@@ -1011,38 +1052,44 @@ if load_hero_matches:
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
-if not hero_matches_loaded:
-    st.info("Select a hero and click `Load Hero Details` to fetch hero-specific sections.")
-    st.stop()
-
-if st.session_state.get("hero_matches_request_key") != current_hero_request_key:
-    st.info("Hero details shown below belong to the last loaded hero. Click `Load Hero Details` to refresh.")
-    st.stop()
-
-matches = st.session_state.get("hero_matches") or []
-if not matches:
-    st.warning("No matches for selected hero with current Turbo filter.")
-    st.stop()
-
-stats = service.build_stats(matches)
-
 st.markdown(f"### {selected_hero_name} - Detailed Turbo Stats")
-stats_cards = [
-    ("Matches", f"{round(stats.matches)}"),
-    ("Winrate", f"{round(stats.winrate)}%"),
-    ("Avg K/D/A", f"{round(stats.avg_kills)}/{round(stats.avg_deaths)}/{round(stats.avg_assists)}"),
-    ("KDA", f"{round(stats.kda_ratio, 1)}"),
-    ("Radiant WR", f"{round(stats.radiant_wr)}%"),
-    ("Dire WR", f"{round(stats.dire_wr)}%"),
-]
-stats_html = "".join(
-    f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div></div>'
-    for label, value in stats_cards
-)
-st.markdown(f'<div class="metrics-wrap">{stats_html}</div>', unsafe_allow_html=True)
+matches = st.session_state.get("hero_matches") if hero_matches_loaded else None
+if hero_matches_loaded:
+    matches = matches or []
+    if matches:
+        stats = service.build_stats(matches)
+        stats_cards = [
+            ("Matches", f"{round(stats.matches)}"),
+            ("Winrate", f"{round(stats.winrate)}%"),
+            ("Avg K/D/A", f"{round(stats.avg_kills)}/{round(stats.avg_deaths)}/{round(stats.avg_assists)}"),
+            ("KDA", f"{round(stats.kda_ratio, 1)}"),
+            ("Avg Net Worth", f"{round(stats.avg_net_worth):,}"),
+            ("Avg Damage", f"{round(stats.avg_damage):,}"),
+            ("Radiant WR", f"{round(stats.radiant_wr)}%"),
+            ("Dire WR", f"{round(stats.dire_wr)}%"),
+        ]
+        stats_html = "".join(
+            f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div></div>'
+            for label, value in stats_cards
+        )
+        st.markdown(f'<div class="metrics-wrap">{stats_html}</div>', unsafe_allow_html=True)
+    else:
+        st.warning("No matches for selected hero with current Turbo filter.")
+else:
+    st.info("Click `Load Hero Details` to fetch this section.")
 
 if load_item_winrates:
     try:
+        matches = _load_selected_hero_matches(
+            service,
+            player_id,
+            selected_hero_id,
+            selected_hero_name,
+            days,
+            active_patches,
+            active_start_date,
+            current_hero_request_key,
+        )
         item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50)
         item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
         item_wr_rows = _ensure_item_rows_have_kda(item_wr_rows, matches, service, player_id)
@@ -1098,6 +1145,16 @@ if recent_matches_key not in st.session_state:
 
 if load_recent_matches:
     try:
+        matches = _load_selected_hero_matches(
+            service,
+            player_id,
+            selected_hero_id,
+            selected_hero_name,
+            days,
+            active_patches,
+            active_start_date,
+            current_hero_request_key,
+        )
         visible_recent_matches = int(st.session_state[recent_matches_key])
         st.session_state["recent_match_rows"] = service.build_recent_hero_matches(
             player_id=player_id,
@@ -1116,6 +1173,7 @@ loaded_recent_matches = int(st.session_state.get("recent_matches_loaded_limit") 
 
 if recent_matches_loaded and loaded_recent_matches != visible_recent_matches:
     try:
+        matches = st.session_state.get("hero_matches") or []
         st.session_state["recent_match_rows"] = service.build_recent_hero_matches(
             player_id=player_id,
             matches=matches,

@@ -16,7 +16,7 @@ class JsonFileCache:
         safe = key.replace("/", "_")
         return self.cache_dir / f"{safe}.json"
 
-    def get(self, key: str) -> Any | None:
+    def get(self, key: str, max_age: timedelta | None = None) -> Any | None:
         path = self._path(key)
         if not path.exists():
             return None
@@ -24,7 +24,8 @@ class JsonFileCache:
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
             created = datetime.fromisoformat(raw["created_at"])
-            if datetime.now(tz=timezone.utc) - created > self.ttl:
+            ttl = max_age if max_age is not None else self.ttl
+            if datetime.now(tz=timezone.utc) - created > ttl:
                 return None
             return raw["payload"]
         except Exception:
