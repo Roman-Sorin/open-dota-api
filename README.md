@@ -15,12 +15,15 @@ Turbo-only dashboard for your account:
   - explicit `Start Date` mode
 - Hero overview in Turbo (matches, WR, avg K/D/A, avg duration, avg net worth, avg damage, KDA, max kills, max hero damage)
 - Hero overview and detailed hero stats now share one metric-definition source in the UI, so added hero fields stay aligned in both places
+- Hero overview aggregation now also comes from one shared service-side stats source, so values like `Rad WR` and `Dire WR` stay identical between overview and detailed hero stats
 - When Turbo match rows miss `hero_damage` or `net_worth`, the app enriches overview/detail stats from match details stored locally
 - Top dashboard metrics include Turbo matches, wins, losses, and winrate
 - Dashboard loading is manual by section:
   - `Load Turbo Dashboard` loads the overview only
-  - `Load Hero Details`, `Load Item Winrates`, and `Load Recent Matches` can each be loaded independently for the selected hero
+  - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` can each be loaded independently for the selected hero
 - Detailed hero section in Turbo includes avg duration, avg damage, avg net worth, max kills, and max hero damage
+- Hero detail, item stats, and recent matches stay cached per hero/filter in the current session when you switch between heroes
+- Section actions are refresh actions now; if dashboard data is newer than a section cache, the UI shows a stale hint instead of silently hiding that fact
 - Item winrates (when item appears in final slots), with match count shown
 - Recent hero matches shown as a compact one-row-per-match table under the item table
 - Recent hero matches show only final slots, and item timings are shown only when the final item completion time is available

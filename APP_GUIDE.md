@@ -13,13 +13,16 @@ The project includes two interfaces:
 
 - Turbo-only hero overview (matches, wins, losses, winrate, avg duration, avg net worth, avg damage, max kills, max hero damage)
 - Hero Overview and Detailed Turbo Stats use one shared metric-definition list in UI code, so hero fields stay synchronized between both sections
+- Hero Overview rows are also built from the same service-side stats aggregation used by Detailed Turbo Stats, so `Radiant WR` / `Dire WR` and other hero metrics stay consistent
 - Hero overview avg damage/net worth use match-detail fallback when player match rows don't include `hero_damage` or `net_worth`
 - Dashboard summary cards: Turbo matches, wins, losses, winrate
 - Time filter modes: `Days`, `Patches`, `Start Date`
 - Dashboard sections load manually and independently to reduce one-shot API work on page open
 - `Load Turbo Dashboard` fetches the hero overview only
-- `Load Hero Details`, `Load Item Winrates`, and `Load Recent Matches` can each fetch the selected hero dataset on demand
+- `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` can each fetch the selected hero dataset on demand
 - Per-hero detailed stats (avg K/D/A, KDA, avg duration, avg net worth, avg damage, max kills, max hero damage, Radiant/Dire WR)
+- When you switch away from a hero and return, already loaded hero details/item stats/recent matches are restored from session cache for that hero/filter combination
+- If the dashboard was refreshed later than a section, the section shows a hint that newer matches may exist and can be pulled with `Refresh ...`
 - Most frequent final items
 - Item winrate table (wins with item / matches with item), includes per-item match count
 - Item winrate table is sorted by highest item winrate first (ties by larger sample)

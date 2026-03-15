@@ -602,6 +602,47 @@ class DotaAnalyticsService:
             dire_wr=winrate_percent(dire_wins, len(dire_matches)),
         )
 
+    def build_turbo_hero_overview_rows(self, matches: list[MatchSummary]) -> list[dict[str, Any]]:
+        grouped: dict[int, list[MatchSummary]] = {}
+        for match in matches:
+            hero_id = int(match.hero_id or 0)
+            if hero_id <= 0:
+                continue
+            grouped.setdefault(hero_id, []).append(match)
+
+        rows: list[dict[str, Any]] = []
+        for hero_id, hero_matches in grouped.items():
+            stats = self.build_stats(hero_matches)
+            rows.append(
+                {
+                    "hero_id": hero_id,
+                    "hero": self.resolve_hero_name(hero_id),
+                    "hero_image": self.resolve_hero_image(hero_id),
+                    "matches": stats.matches,
+                    "wins": stats.wins,
+                    "losses": stats.losses,
+                    "winrate": stats.winrate,
+                    "avg_kills": stats.avg_kills,
+                    "avg_deaths": stats.avg_deaths,
+                    "avg_assists": stats.avg_assists,
+                    "avg_duration_seconds": stats.avg_duration_seconds,
+                    "lane_winrate": stats.lane_winrate,
+                    "lane_winrate_samples": stats.lane_sample_count,
+                    "max_kills": stats.max_kills,
+                    "max_hero_damage": stats.max_hero_damage,
+                    "radiant_wr": stats.radiant_wr,
+                    "dire_wr": stats.dire_wr,
+                    "avg_net_worth": stats.avg_net_worth,
+                    "avg_net_worth_samples": sum(1 for m in hero_matches if m.net_worth_known),
+                    "avg_damage": stats.avg_damage,
+                    "avg_damage_samples": sum(1 for m in hero_matches if m.hero_damage_known),
+                    "kda": stats.kda_ratio,
+                }
+            )
+
+        rows.sort(key=lambda x: (-x["matches"], -x["winrate"]))
+        return rows
+
     def _counter_to_item_stats(self, counter: Counter[int], total_matches: int, top_n: int = 12) -> list[ItemStat]:
         rows: list[ItemStat] = []
         for item_id, count in counter.most_common(top_n):
@@ -974,103 +1015,7 @@ class DotaAnalyticsService:
         if not matches:
             return []
         self.enrich_hero_damage(player_id, matches, max_fallback_detail_calls=max(120, len(matches)))
-
-        grouped: dict[int, dict[str, float]] = {}
-        for match in matches:
-            hero_id = int(match.hero_id or 0)
-            if hero_id <= 0:
-                continue
-            bucket = grouped.setdefault(
-                hero_id,
-                {
-                    "matches": 0,
-                    "wins": 0,
-                    "radiant_matches": 0,
-                    "radiant_wins": 0,
-                    "dire_matches": 0,
-                    "dire_wins": 0,
-                    "duration": 0.0,
-                    "kills": 0.0,
-                    "deaths": 0.0,
-                    "assists": 0.0,
-                    "lane_wins": 0,
-                    "lane_samples": 0,
-                    "max_kills": 0,
-                    "max_hero_damage": 0,
-                    "net_worth": 0.0,
-                    "net_worth_samples": 0,
-                    "hero_damage": 0.0,
-                    "hero_damage_samples": 0,
-                },
-            )
-            bucket["matches"] += 1
-            bucket["wins"] += 1 if match.did_win else 0
-            if match.side == "Radiant":
-                bucket["radiant_matches"] += 1
-                bucket["radiant_wins"] += 1 if match.did_win else 0
-            else:
-                bucket["dire_matches"] += 1
-                bucket["dire_wins"] += 1 if match.did_win else 0
-            bucket["duration"] += float(match.duration)
-            bucket["kills"] += float(match.kills)
-            bucket["deaths"] += float(match.deaths)
-            bucket["assists"] += float(match.assists)
-            bucket["max_kills"] = max(float(bucket["max_kills"]), float(match.kills))
-            if match.lane_efficiency_known:
-                bucket["lane_samples"] += 1
-                bucket["lane_wins"] += 1 if match.lane_efficiency_pct >= 50.0 else 0
-            if match.net_worth_known:
-                bucket["net_worth"] += float(match.net_worth)
-                bucket["net_worth_samples"] += 1
-            if match.hero_damage_known:
-                bucket["hero_damage"] += float(match.hero_damage)
-                bucket["hero_damage_samples"] += 1
-                bucket["max_hero_damage"] = max(float(bucket["max_hero_damage"]), float(match.hero_damage))
-
-        result: list[dict[str, Any]] = []
-        for hero_id, agg in grouped.items():
-            games = int(agg["matches"])
-            wins = int(agg["wins"])
-            losses = games - wins
-            k = agg["kills"] / games
-            d = agg["deaths"] / games
-            a = agg["assists"] / games
-            avg_duration_seconds = agg["duration"] / games
-            lane_samples = int(agg["lane_samples"])
-            net_worth_samples = int(agg["net_worth_samples"])
-            avg_net_worth = agg["net_worth"] / net_worth_samples if net_worth_samples > 0 else 0.0
-            damage_samples = int(agg["hero_damage_samples"])
-            avg_damage = agg["hero_damage"] / damage_samples if damage_samples > 0 else 0.0
-
-            result.append(
-                {
-                    "hero_id": hero_id,
-                    "hero": self.resolve_hero_name(hero_id),
-                    "hero_image": self.resolve_hero_image(hero_id),
-                    "matches": games,
-                    "wins": wins,
-                    "losses": losses,
-                    "winrate": winrate_percent(wins, games),
-                    "avg_kills": k,
-                    "avg_deaths": d,
-                    "avg_assists": a,
-                    "avg_duration_seconds": avg_duration_seconds,
-                    "lane_winrate": winrate_percent(int(agg["lane_wins"]), lane_samples),
-                    "lane_winrate_samples": lane_samples,
-                    "max_kills": int(agg["max_kills"]),
-                    "max_hero_damage": int(agg["max_hero_damage"]),
-                    "radiant_wr": winrate_percent(int(agg["radiant_wins"]), int(agg["radiant_matches"])),
-                    "dire_wr": winrate_percent(int(agg["dire_wins"]), int(agg["dire_matches"])),
-                    "avg_net_worth": avg_net_worth,
-                    "avg_net_worth_samples": net_worth_samples,
-                    "avg_damage": avg_damage,
-                    "avg_damage_samples": damage_samples,
-                    "kda": calculate_kda_ratio(k, d, a),
-                }
-            )
-
-        result.sort(key=lambda x: (-x["matches"], -x["winrate"]))
-        return result
+        return self.build_turbo_hero_overview_rows(matches)
 
     def get_item_winrates(self, player_id: int, matches: list[MatchSummary], top_n: int = 20) -> list[dict[str, Any]]:
         total = len(matches)

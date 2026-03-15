@@ -375,9 +375,21 @@ CLI remains available as a secondary interface.
 - Hero metric fields in `Hero Overview` and `Detailed Turbo Stats` should now be maintained from one shared UI definition, not two separate hardcoded lists.
 - User preference: after push, do not spend time on automated deployed-build verification; user checks deploy manually.
 - User preference: keep product/UX directives recorded in Markdown handoff/docs files.
+- User preference: section UX should feel persistent and human; when switching heroes, already loaded sections should reopen from cache instead of requiring repeated `Load ...` clicks.
 - Local OpenDota reference dump for future code-agent work:
   - `open_dota_api_docs.txt.txt`
   - `Load Item Winrates` and `Load Recent Matches` load those heavier sections only when clicked.
 - Added request-key-based section state tracking so hero/item/recent sections do not display stale data after hero/filter changes.
 - Bumped `OVERVIEW_SCHEMA_VERSION` to `6` so old session overview data is cleared after deploy.
 - Added regression tests for dashboard request-key normalization and invalidation behavior in `tests/test_dashboard_state.py`.
+
+## 2026-03-15 hero overview single-source stats fix
+
+- Fixed a real inconsistency where `Hero Overview` could show `Rad WR` / `Dire WR` as `0%` while `Detailed Turbo Stats` showed correct values for the same hero.
+- Root cause: hero overview still had a second aggregation path in `webapp/turbo_dashboard.py`, while detail cards used `service.build_stats(...)`.
+- Added `DotaAnalyticsService.build_turbo_hero_overview_rows(...)` and moved hero-overview row construction to the service layer.
+- `get_turbo_hero_overview(...)` now returns rows from that shared builder.
+- Patch-filter fallback in the Streamlit UI now also calls the same shared service builder instead of maintaining a duplicate overview aggregation in the UI.
+- Bumped `OVERVIEW_SCHEMA_VERSION` to `9` so stale session overview rows are invalidated after deploy.
+- Added regression coverage proving overview side-winrate values match detailed hero stats for the same match set.
+- User preference reminder: push after each completed code change, and keep Markdown docs current for code agents.

@@ -388,6 +388,51 @@ def test_turbo_hero_overview_tracks_side_winrates() -> None:
     assert rows[0]["dire_wr"] == 100.0
 
 
+def test_build_turbo_hero_overview_rows_uses_same_side_winrates_as_detail_stats() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=1,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=10,
+            deaths=2,
+            assists=8,
+            duration=1200,
+            hero_id=1,
+        ),
+        MatchSummary(
+            match_id=2,
+            start_time=0,
+            player_slot=0,
+            radiant_win=False,
+            kills=5,
+            deaths=6,
+            assists=7,
+            duration=1500,
+            hero_id=1,
+        ),
+        MatchSummary(
+            match_id=3,
+            start_time=0,
+            player_slot=128,
+            radiant_win=False,
+            kills=14,
+            deaths=4,
+            assists=9,
+            duration=1800,
+            hero_id=1,
+        ),
+    ]
+
+    overview_row = service.build_turbo_hero_overview_rows(matches)[0]
+    detail_stats = service.build_stats(matches)
+
+    assert overview_row["radiant_wr"] == detail_stats.radiant_wr == 50.0
+    assert overview_row["dire_wr"] == detail_stats.dire_wr == 100.0
+
+
 def test_fetch_matches_supports_lettered_patch_names() -> None:
     service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
     service._patch_starts = [1735689600, 1738368000]

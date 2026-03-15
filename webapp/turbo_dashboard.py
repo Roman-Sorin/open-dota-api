@@ -27,7 +27,7 @@ from webapp.dashboard_state import build_hero_request_key
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
-OVERVIEW_SCHEMA_VERSION = 8
+OVERVIEW_SCHEMA_VERSION = 9
 
 st.markdown(
     """
@@ -553,106 +553,7 @@ def _build_patch_options(patch_timeline: list[tuple[int, str]]) -> list[str]:
 
 
 def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnalyticsService) -> list[dict]:
-    grouped: dict[int, dict[str, float]] = {}
-    for match in matches:
-        hero_id = int(match.hero_id or 0)
-        if hero_id <= 0:
-            continue
-        bucket = grouped.setdefault(
-            hero_id,
-            {
-                "matches": 0,
-                "wins": 0,
-                "radiant_matches": 0,
-                "radiant_wins": 0,
-                "dire_matches": 0,
-                "dire_wins": 0,
-                "duration": 0.0,
-                "kills": 0.0,
-                "deaths": 0.0,
-                "assists": 0.0,
-                "lane_wins": 0,
-                "lane_samples": 0,
-                "max_kills": 0,
-                "max_hero_damage": 0,
-                "net_worth": 0.0,
-                "net_worth_samples": 0,
-                "hero_damage": 0.0,
-                "hero_damage_samples": 0,
-            },
-        )
-        bucket["matches"] += 1
-        bucket["wins"] += 1 if match.did_win else 0
-        if match.side == "Radiant":
-            bucket["radiant_matches"] += 1
-            bucket["radiant_wins"] += 1 if match.did_win else 0
-        else:
-            bucket["dire_matches"] += 1
-            bucket["dire_wins"] += 1 if match.did_win else 0
-        bucket["duration"] += float(match.duration)
-        bucket["kills"] += float(match.kills)
-        bucket["deaths"] += float(match.deaths)
-        bucket["assists"] += float(match.assists)
-        bucket["max_kills"] = max(float(bucket["max_kills"]), float(match.kills))
-        if match.lane_efficiency_known:
-            bucket["lane_samples"] += 1
-            bucket["lane_wins"] += 1 if match.lane_efficiency_pct >= 50.0 else 0
-        if match.net_worth_known:
-            bucket["net_worth"] += float(match.net_worth)
-            bucket["net_worth_samples"] += 1
-        if match.hero_damage_known:
-            bucket["hero_damage"] += float(match.hero_damage)
-            bucket["hero_damage_samples"] += 1
-            bucket["max_hero_damage"] = max(float(bucket["max_hero_damage"]), float(match.hero_damage))
-
-    rows: list[dict] = []
-    for hero_id, agg in grouped.items():
-        games = int(agg["matches"])
-        wins = int(agg["wins"])
-        losses = games - wins
-        avg_k = agg["kills"] / games
-        avg_d = agg["deaths"] / games
-        avg_a = agg["assists"] / games
-        avg_duration_seconds = agg["duration"] / games
-        lane_samples = int(agg["lane_samples"])
-        net_worth_samples = int(agg["net_worth_samples"])
-        avg_net_worth = agg["net_worth"] / net_worth_samples if net_worth_samples > 0 else 0.0
-        damage_samples = int(agg["hero_damage_samples"])
-        avg_damage = agg["hero_damage"] / damage_samples if damage_samples > 0 else 0.0
-        wr = (wins / games * 100.0) if games else 0.0
-        kda = (avg_k + avg_a) / avg_d if avg_d > 0 else (avg_k + avg_a)
-        rows.append(
-            {
-                "hero_id": hero_id,
-                "hero": service.resolve_hero_name(hero_id),
-                "hero_image": service.resolve_hero_image(hero_id),
-                "matches": games,
-                "wins": wins,
-                "losses": losses,
-                "winrate": wr,
-                "avg_kills": avg_k,
-                "avg_deaths": avg_d,
-                "avg_assists": avg_a,
-                "avg_duration_seconds": avg_duration_seconds,
-                "lane_winrate": (int(agg["lane_wins"]) / lane_samples * 100.0) if lane_samples else 0.0,
-                "lane_winrate_samples": lane_samples,
-                "max_kills": int(agg["max_kills"]),
-                "max_hero_damage": int(agg["max_hero_damage"]),
-                "radiant_wr": (int(agg["radiant_wins"]) / int(agg["radiant_matches"]) * 100.0)
-                if int(agg["radiant_matches"])
-                else 0.0,
-                "dire_wr": (int(agg["dire_wins"]) / int(agg["dire_matches"]) * 100.0)
-                if int(agg["dire_matches"])
-                else 0.0,
-                "avg_net_worth": avg_net_worth,
-                "avg_net_worth_samples": net_worth_samples,
-                "avg_damage": avg_damage,
-                "avg_damage_samples": damage_samples,
-                "kda": kda,
-            }
-        )
-    rows.sort(key=lambda x: (-x["matches"], -x["winrate"]))
-    return rows
+    return service.build_turbo_hero_overview_rows(matches)
 
 
 def _ensure_item_rows_have_kda(
@@ -782,15 +683,42 @@ patch_options = _build_patch_options(patch_timeline)
 
 def _clear_detail_sections() -> None:
     for key in (
-        "hero_matches",
-        "hero_matches_request_key",
-        "item_winrate_rows",
-        "item_rows_request_key",
-        "recent_match_rows",
-        "recent_matches_request_key",
-        "recent_matches_loaded_limit",
+        "hero_matches_by_key",
+        "hero_loaded_at_by_key",
+        "item_rows_by_key",
+        "item_loaded_at_by_key",
+        "recent_rows_by_key",
+        "recent_loaded_at_by_key",
+        "recent_limit_loaded_by_key",
     ):
         st.session_state.pop(key, None)
+
+
+def _session_dict(key: str) -> dict[object, object]:
+    value = st.session_state.get(key)
+    if not isinstance(value, dict):
+        value = {}
+        st.session_state[key] = value
+    return value
+
+
+def _cache_get(bucket_key: str, request_key: object) -> object | None:
+    return _session_dict(bucket_key).get(request_key)
+
+
+def _cache_set(bucket_key: str, request_key: object, value: object) -> None:
+    bucket = _session_dict(bucket_key)
+    bucket[request_key] = value
+
+
+def _utcnow_iso() -> str:
+    return datetime.utcnow().isoformat()
+
+
+def _is_section_stale(section_loaded_at: str | None, dashboard_loaded_at: str | None) -> bool:
+    if not section_loaded_at or not dashboard_loaded_at:
+        return False
+    return section_loaded_at < dashboard_loaded_at
 
 
 def _load_selected_hero_matches(
@@ -805,8 +733,10 @@ def _load_selected_hero_matches(
     *,
     force_refresh: bool = False,
 ) -> list[MatchSummary]:
-    if not force_refresh and st.session_state.get("hero_matches_request_key") == current_hero_request_key:
-        return st.session_state.get("hero_matches") or []
+    if not force_refresh:
+        cached_matches = _cache_get("hero_matches_by_key", current_hero_request_key)
+        if isinstance(cached_matches, list):
+            return cached_matches
 
     if active_patches and not supports_patch_overview:
         patch_filtered_matches = st.session_state.get("patch_filtered_matches") or []
@@ -833,8 +763,8 @@ def _load_selected_hero_matches(
             max_fallback_detail_calls=max(60, len(matches)),
         )
 
-    st.session_state["hero_matches"] = matches
-    st.session_state["hero_matches_request_key"] = current_hero_request_key
+    _cache_set("hero_matches_by_key", current_hero_request_key, matches)
+    _cache_set("hero_loaded_at_by_key", current_hero_request_key, _utcnow_iso())
     return matches
 
 with st.sidebar:
@@ -969,10 +899,10 @@ if load:
         st.session_state["active_patches"] = active_patches
         st.session_state["overview"] = overview
         st.session_state["overview_schema_version"] = OVERVIEW_SCHEMA_VERSION
+        st.session_state["dashboard_loaded_at"] = _utcnow_iso()
         st.session_state["patch_filtered_matches"] = patch_filtered_matches
         st.session_state["min_hero_matches"] = min_hero_matches
         st.session_state["min_item_matches"] = min_item_matches
-        _clear_detail_sections()
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
@@ -1083,19 +1013,26 @@ current_hero_request_key = build_hero_request_key(
     active_start_date=active_start_date,
 )
 current_item_request_key = (*current_hero_request_key, int(min_item_matches))
-hero_matches_loaded = st.session_state.get("hero_matches_request_key") == current_hero_request_key
+dashboard_loaded_at = st.session_state.get("dashboard_loaded_at")
+hero_matches = _cache_get("hero_matches_by_key", current_hero_request_key)
+hero_matches_loaded = isinstance(hero_matches, list)
+hero_loaded_at = _cache_get("hero_loaded_at_by_key", current_hero_request_key)
+hero_section_stale = _is_section_stale(
+    str(hero_loaded_at) if hero_loaded_at is not None else None,
+    str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
+)
 
 action_col_1, action_col_2, action_col_3 = st.columns(3)
 with action_col_1:
-    load_hero_matches = st.button("Load Hero Details", type="primary")
+    load_hero_matches = st.button("Refresh Hero Details")
 with action_col_2:
-    load_item_winrates = st.button("Load Item Winrates")
+    load_item_winrates = st.button("Refresh Item Winrates")
 with action_col_3:
-    load_recent_matches = st.button("Load Recent Matches")
+    load_recent_matches = st.button("Refresh Recent Matches")
 
 if load_hero_matches:
     try:
-        matches = _load_selected_hero_matches(
+        hero_matches = _load_selected_hero_matches(
             service,
             player_id,
             selected_hero_id,
@@ -1106,20 +1043,18 @@ if load_hero_matches:
             current_hero_request_key,
             force_refresh=True,
         )
-        st.session_state.pop("item_winrate_rows", None)
-        st.session_state.pop("item_rows_request_key", None)
-        st.session_state.pop("recent_match_rows", None)
-        st.session_state.pop("recent_matches_request_key", None)
-        st.session_state.pop("recent_matches_loaded_limit", None)
         hero_matches_loaded = True
+        hero_section_stale = False
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
 st.markdown(f"### {selected_hero_name} - Detailed Turbo Stats")
-matches = st.session_state.get("hero_matches") if hero_matches_loaded else None
+matches = hero_matches if hero_matches_loaded else None
 if hero_matches_loaded:
     matches = matches or []
     if matches:
+        if hero_section_stale:
+            st.caption("Hero details were loaded before the latest dashboard refresh. Click `Refresh Hero Details` to include newer matches.")
         stats = service.build_stats(matches)
         stats_cards = build_hero_metric_cards(
             {
@@ -1146,7 +1081,7 @@ if hero_matches_loaded:
     else:
         st.warning("No matches for selected hero with current Turbo filter.")
 else:
-    st.info("Click `Load Hero Details` to fetch this section.")
+    st.info("Hero details load automatically from cache when available. Click `Refresh Hero Details` to fetch or update this section.")
 
 if load_item_winrates:
     try:
@@ -1171,14 +1106,21 @@ if load_item_winrates:
                 str(row.get("item", "")),
             )
         )
-        st.session_state["item_winrate_rows"] = item_wr_rows
-        st.session_state["item_rows_request_key"] = current_item_request_key
+        _cache_set("item_rows_by_key", current_item_request_key, item_wr_rows)
+        _cache_set("item_loaded_at_by_key", current_item_request_key, _utcnow_iso())
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
 st.markdown("### Item Winrates (when item appears in final slots)")
-if st.session_state.get("item_rows_request_key") == current_item_request_key:
-    item_wr_rows = st.session_state.get("item_winrate_rows") or []
+item_wr_rows = _cache_get("item_rows_by_key", current_item_request_key)
+item_loaded_at = _cache_get("item_loaded_at_by_key", current_item_request_key)
+item_section_stale = _is_section_stale(
+    str(item_loaded_at) if item_loaded_at is not None else None,
+    str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
+)
+if isinstance(item_wr_rows, list):
+    if item_section_stale:
+        st.caption("Item stats were loaded before the latest dashboard refresh. Click `Refresh Item Winrates` to include newer matches.")
     if item_wr_rows:
         item_winrate_table = [
             {
@@ -1207,7 +1149,7 @@ if st.session_state.get("item_rows_request_key") == current_item_request_key:
     else:
         st.info("No items satisfy current minimum matches threshold.")
 else:
-    st.info("Click `Load Item Winrates` to fetch this section.")
+    st.info("Item stats stay cached per hero/filter during the session. Click `Refresh Item Winrates` to fetch this section.")
 
 recent_matches_key = recent_matches_state_key(selected_hero_id, days, active_patches, active_start_date)
 if recent_matches_key not in st.session_state:
@@ -1226,36 +1168,46 @@ if load_recent_matches:
             current_hero_request_key,
         )
         visible_recent_matches = int(st.session_state[recent_matches_key])
-        st.session_state["recent_match_rows"] = service.build_recent_hero_matches(
+        recent_rows = service.build_recent_hero_matches(
             player_id=player_id,
             matches=matches,
             limit=min(visible_recent_matches, len(matches)),
         )
-        st.session_state["recent_matches_request_key"] = current_hero_request_key
-        st.session_state["recent_matches_loaded_limit"] = visible_recent_matches
+        _cache_set("recent_rows_by_key", current_hero_request_key, recent_rows)
+        _cache_set("recent_loaded_at_by_key", current_hero_request_key, _utcnow_iso())
+        _cache_set("recent_limit_loaded_by_key", current_hero_request_key, visible_recent_matches)
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
 st.markdown("### Hero Matches - Recent Matches for Hero")
-recent_matches_loaded = st.session_state.get("recent_matches_request_key") == current_hero_request_key
+recent_match_rows = _cache_get("recent_rows_by_key", current_hero_request_key)
+recent_loaded_at = _cache_get("recent_loaded_at_by_key", current_hero_request_key)
+recent_matches_loaded = isinstance(recent_match_rows, list)
 visible_recent_matches = int(st.session_state[recent_matches_key])
-loaded_recent_matches = int(st.session_state.get("recent_matches_loaded_limit") or 0)
+loaded_recent_matches = int(_cache_get("recent_limit_loaded_by_key", current_hero_request_key) or 0)
+recent_section_stale = _is_section_stale(
+    str(recent_loaded_at) if recent_loaded_at is not None else None,
+    str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
+)
 
 if recent_matches_loaded and loaded_recent_matches != visible_recent_matches:
     try:
-        matches = st.session_state.get("hero_matches") or []
-        st.session_state["recent_match_rows"] = service.build_recent_hero_matches(
+        matches = hero_matches or []
+        recent_match_rows = service.build_recent_hero_matches(
             player_id=player_id,
             matches=matches,
             limit=min(visible_recent_matches, len(matches)),
         )
-        st.session_state["recent_matches_loaded_limit"] = visible_recent_matches
+        _cache_set("recent_rows_by_key", current_hero_request_key, recent_match_rows)
+        _cache_set("recent_limit_loaded_by_key", current_hero_request_key, visible_recent_matches)
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
         recent_matches_loaded = False
 
 if recent_matches_loaded:
-    recent_match_rows = st.session_state.get("recent_match_rows") or []
+    recent_match_rows = recent_match_rows or []
+    if recent_section_stale:
+        st.caption("Recent matches were loaded before the latest dashboard refresh. Click `Refresh Recent Matches` to include newer matches.")
     st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches)} matches")
 
     table_rows_html = ""
@@ -1331,4 +1283,4 @@ if recent_matches_loaded:
             st.session_state[recent_matches_key] = min(visible_recent_matches + 10, len(matches))
             st.rerun()
 else:
-    st.info("Click `Load Recent Matches` to fetch this section.")
+    st.info("Recent matches stay cached per hero/filter during the session. Click `Refresh Recent Matches` to fetch this section.")
