@@ -372,6 +372,9 @@ CLI remains available as a secondary interface.
   - `Max Kills`
   - `Max Damage`
 - Attempted clickable hero icons in `Hero Overview` were reverted because they broke dataframe interactions like sorting/filtering/resizing.
+- Hero metric fields in `Hero Overview` and `Detailed Turbo Stats` should now be maintained from one shared UI definition, not two separate hardcoded lists.
+- User preference: after push, do not spend time on automated deployed-build verification; user checks deploy manually.
+- User preference: keep product/UX directives recorded in Markdown handoff/docs files.
 - Local OpenDota reference dump for future code-agent work:
   - `open_dota_api_docs.txt.txt`
   - `Load Item Winrates` and `Load Recent Matches` load those heavier sections only when clicked.

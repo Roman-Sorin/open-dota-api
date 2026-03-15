@@ -12,6 +12,7 @@ The project includes two interfaces:
 ## Main capabilities
 
 - Turbo-only hero overview (matches, wins, losses, winrate, avg duration, avg net worth, avg damage, max kills, max hero damage)
+- Hero Overview and Detailed Turbo Stats use one shared metric-definition list in UI code, so hero fields stay synchronized between both sections
 - Hero overview avg damage/net worth use match-detail fallback when player match rows don't include `hero_damage` or `net_worth`
 - Dashboard summary cards: Turbo matches, wins, losses, winrate
 - Time filter modes: `Days`, `Patches`, `Start Date`

@@ -341,6 +341,53 @@ def test_turbo_hero_overview_tracks_duration_and_maxima() -> None:
     assert rows[0]["max_hero_damage"] == 28000
 
 
+def test_turbo_hero_overview_tracks_side_winrates() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=1,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=1,
+            deaths=1,
+            assists=1,
+            duration=1200,
+            hero_id=1,
+        ),
+        MatchSummary(
+            match_id=2,
+            start_time=0,
+            player_slot=0,
+            radiant_win=False,
+            kills=1,
+            deaths=1,
+            assists=1,
+            duration=1200,
+            hero_id=1,
+        ),
+        MatchSummary(
+            match_id=3,
+            start_time=0,
+            player_slot=128,
+            radiant_win=False,
+            kills=1,
+            deaths=1,
+            assists=1,
+            duration=1200,
+            hero_id=1,
+        ),
+    ]
+
+    service.fetch_matches = lambda filters: matches  # type: ignore[method-assign]
+    service.enrich_hero_damage = lambda player_id, matches, max_fallback_detail_calls=45: None  # type: ignore[method-assign]
+
+    rows = service.get_turbo_hero_overview(player_id=123, days=60)
+
+    assert rows[0]["radiant_wr"] == 50.0
+    assert rows[0]["dire_wr"] == 100.0
+
+
 def test_fetch_matches_supports_lettered_patch_names() -> None:
     service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
     service._patch_starts = [1735689600, 1738368000]

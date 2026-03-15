@@ -985,6 +985,10 @@ class DotaAnalyticsService:
                 {
                     "matches": 0,
                     "wins": 0,
+                    "radiant_matches": 0,
+                    "radiant_wins": 0,
+                    "dire_matches": 0,
+                    "dire_wins": 0,
                     "duration": 0.0,
                     "kills": 0.0,
                     "deaths": 0.0,
@@ -1001,6 +1005,12 @@ class DotaAnalyticsService:
             )
             bucket["matches"] += 1
             bucket["wins"] += 1 if match.did_win else 0
+            if match.side == "Radiant":
+                bucket["radiant_matches"] += 1
+                bucket["radiant_wins"] += 1 if match.did_win else 0
+            else:
+                bucket["dire_matches"] += 1
+                bucket["dire_wins"] += 1 if match.did_win else 0
             bucket["duration"] += float(match.duration)
             bucket["kills"] += float(match.kills)
             bucket["deaths"] += float(match.deaths)
@@ -1049,6 +1059,8 @@ class DotaAnalyticsService:
                     "lane_winrate_samples": lane_samples,
                     "max_kills": int(agg["max_kills"]),
                     "max_hero_damage": int(agg["max_hero_damage"]),
+                    "radiant_wr": winrate_percent(int(agg["radiant_wins"]), int(agg["radiant_matches"])),
+                    "dire_wr": winrate_percent(int(agg["dire_wins"]), int(agg["dire_matches"])),
                     "avg_net_worth": avg_net_worth,
                     "avg_net_worth_samples": net_worth_samples,
                     "avg_damage": avg_damage,

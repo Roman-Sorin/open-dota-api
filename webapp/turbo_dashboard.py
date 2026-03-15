@@ -371,6 +371,46 @@ def kda_bar_segments(kills: int, deaths: int, assists: int) -> tuple[float, floa
     )
 
 
+HERO_METRIC_COLUMNS: list[tuple[str, str, callable]] = [
+    ("Matches", "Matches", lambda row: int(row.get("matches", 0))),
+    ("WR", "Winrate", lambda row: f"{round(float(row.get('winrate', 0.0)))}%"),
+    (
+        "Avg K/D/A",
+        "Avg K/D/A",
+        lambda row: (
+            f"{round(float(row.get('avg_kills', 0.0)))}/"
+            f"{round(float(row.get('avg_deaths', 0.0)))}/"
+            f"{round(float(row.get('avg_assists', 0.0)))}"
+        ),
+    ),
+    ("KDA", "KDA", lambda row: round(float(row.get("kda", 0.0)), 1)),
+    ("Avg Dur", "Avg Duration", lambda row: format_duration(int(round(float(row.get("avg_duration_seconds", 0.0)))))),
+    ("Avg NW", "Avg Net Worth", lambda row: round(float(row.get("avg_net_worth", 0.0)))),
+    ("Avg Dmg", "Avg Damage", lambda row: round(float(row.get("avg_damage", 0.0)))),
+    ("Max K", "Max Kills", lambda row: int(row.get("max_kills", 0))),
+    ("Max Dmg", "Max Damage", lambda row: int(row.get("max_hero_damage", 0))),
+    ("Rad WR", "Radiant WR", lambda row: f"{round(float(row.get('radiant_wr', 0.0)))}%"),
+    ("Dire WR", "Dire WR", lambda row: f"{round(float(row.get('dire_wr', 0.0)))}%"),
+]
+
+
+def build_hero_metric_table_row(row: dict[str, object]) -> dict[str, object]:
+    table_row: dict[str, object] = {
+        "Icon": row.get("hero_image", ""),
+        "Hero": row["hero"],
+    }
+    for column_label, _, value_builder in HERO_METRIC_COLUMNS:
+        table_row[column_label] = value_builder(row)
+    return table_row
+
+
+def build_hero_metric_cards(row: dict[str, object]) -> list[tuple[str, str]]:
+    cards: list[tuple[str, str]] = []
+    for _, card_label, value_builder in HERO_METRIC_COLUMNS:
+        cards.append((card_label, str(value_builder(row))))
+    return cards
+
+
 def show_error(exc: Exception) -> None:
     if isinstance(exc, OpenDotaNotFoundError):
         st.error("Player was not found in OpenDota.")
@@ -523,6 +563,10 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
             {
                 "matches": 0,
                 "wins": 0,
+                "radiant_matches": 0,
+                "radiant_wins": 0,
+                "dire_matches": 0,
+                "dire_wins": 0,
                 "duration": 0.0,
                 "kills": 0.0,
                 "deaths": 0.0,
@@ -539,6 +583,12 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
         )
         bucket["matches"] += 1
         bucket["wins"] += 1 if match.did_win else 0
+        if match.side == "Radiant":
+            bucket["radiant_matches"] += 1
+            bucket["radiant_wins"] += 1 if match.did_win else 0
+        else:
+            bucket["dire_matches"] += 1
+            bucket["dire_wins"] += 1 if match.did_win else 0
         bucket["duration"] += float(match.duration)
         bucket["kills"] += float(match.kills)
         bucket["deaths"] += float(match.deaths)
@@ -588,6 +638,12 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
                 "lane_winrate_samples": lane_samples,
                 "max_kills": int(agg["max_kills"]),
                 "max_hero_damage": int(agg["max_hero_damage"]),
+                "radiant_wr": (int(agg["radiant_wins"]) / int(agg["radiant_matches"]) * 100.0)
+                if int(agg["radiant_matches"])
+                else 0.0,
+                "dire_wr": (int(agg["dire_wins"]) / int(agg["dire_matches"]) * 100.0)
+                if int(agg["dire_matches"])
+                else 0.0,
                 "avg_net_worth": avg_net_worth,
                 "avg_net_worth_samples": net_worth_samples,
                 "avg_damage": avg_damage,
@@ -971,39 +1027,17 @@ if not filtered_overview:
     st.warning(f"No heroes with at least {min_hero_matches} matches for selected period.")
     st.stop()
 
-hero_table = [
-    {
-        "Icon": row.get("hero_image", ""),
-        "Hero": row["hero"],
-        "Matches": int(row["matches"]),
-        "Winrate": f"{round(float(row['winrate']))}%",
-        "Avg K/D/A": (
-            f"{round(float(row['avg_kills']))}/"
-            f"{round(float(row['avg_deaths']))}/"
-            f"{round(float(row['avg_assists']))}"
-        ),
-        "KDA": round(float(row["kda"]), 1),
-        "Avg Duration": format_duration(int(round(float(row.get("avg_duration_seconds", 0.0))))),
-        "Avg NW": round(float(row.get("avg_net_worth", 0.0))),
-        "Max Kills": int(row.get("max_kills", 0)),
-        "Max Damage": int(row.get("max_hero_damage", 0)),
-        "Wins": int(row["wins"]),
-        "Losses": int(row["losses"]),
-        "Avg Kills": round(float(row["avg_kills"])),
-        "Avg Deaths": round(float(row["avg_deaths"])),
-        "Avg Assists": round(float(row["avg_assists"])),
-        "Avg Damage": round(float(row.get("avg_damage", 0.0))),
-    }
-    for row in filtered_overview
-]
+hero_table = [build_hero_metric_table_row(row) for row in filtered_overview]
 hero_rows_by_id = {int(row["hero_id"]): row for row in filtered_overview}
 hero_ids = list(hero_rows_by_id.keys())
 
 hero_table_df = pd.DataFrame(hero_table)
-if not hero_table_df.empty and "Avg Damage" in hero_table_df.columns:
-    hero_table_df["Avg Damage"] = hero_table_df["Avg Damage"].astype("int64")
 if not hero_table_df.empty and "Avg NW" in hero_table_df.columns:
     hero_table_df["Avg NW"] = hero_table_df["Avg NW"].astype("int64")
+if not hero_table_df.empty and "Avg Dmg" in hero_table_df.columns:
+    hero_table_df["Avg Dmg"] = hero_table_df["Avg Dmg"].astype("int64")
+if not hero_table_df.empty and "Max Dmg" in hero_table_df.columns:
+    hero_table_df["Max Dmg"] = hero_table_df["Max Dmg"].astype("int64")
 
 st.dataframe(
     hero_table_df,
@@ -1087,19 +1121,23 @@ if hero_matches_loaded:
     matches = matches or []
     if matches:
         stats = service.build_stats(matches)
-        stats_cards = [
-            ("Matches", f"{round(stats.matches)}"),
-            ("Winrate", f"{round(stats.winrate)}%"),
-            ("Avg K/D/A", f"{round(stats.avg_kills)}/{round(stats.avg_deaths)}/{round(stats.avg_assists)}"),
-            ("KDA", f"{round(stats.kda_ratio, 1)}"),
-            ("Avg Duration", format_duration(int(round(stats.avg_duration_seconds)))),
-            ("Avg Net Worth", f"{round(stats.avg_net_worth):,}"),
-            ("Avg Damage", f"{round(stats.avg_damage):,}"),
-            ("Max Kills", f"{stats.max_kills}"),
-            ("Max Damage", f"{stats.max_hero_damage:,}"),
-            ("Radiant WR", f"{round(stats.radiant_wr)}%"),
-            ("Dire WR", f"{round(stats.dire_wr)}%"),
-        ]
+        stats_cards = build_hero_metric_cards(
+            {
+                "matches": stats.matches,
+                "winrate": stats.winrate,
+                "avg_kills": stats.avg_kills,
+                "avg_deaths": stats.avg_deaths,
+                "avg_assists": stats.avg_assists,
+                "kda": stats.kda_ratio,
+                "avg_duration_seconds": stats.avg_duration_seconds,
+                "avg_net_worth": stats.avg_net_worth,
+                "avg_damage": stats.avg_damage,
+                "max_kills": stats.max_kills,
+                "max_hero_damage": stats.max_hero_damage,
+                "radiant_wr": stats.radiant_wr,
+                "dire_wr": stats.dire_wr,
+            }
+        )
         stats_html = "".join(
             f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div></div>'
             for label, value in stats_cards

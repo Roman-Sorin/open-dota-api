@@ -14,6 +14,7 @@ Turbo-only dashboard for your account:
   - multi-select patches (e.g. `7.40`, `7.40c`, `7.39b`)
   - explicit `Start Date` mode
 - Hero overview in Turbo (matches, WR, avg K/D/A, avg duration, avg net worth, avg damage, KDA, max kills, max hero damage)
+- Hero overview and detailed hero stats now share one metric-definition source in the UI, so added hero fields stay aligned in both places
 - When Turbo match rows miss `hero_damage` or `net_worth`, the app enriches overview/detail stats from match details stored locally
 - Top dashboard metrics include Turbo matches, wins, losses, and winrate
 - Dashboard loading is manual by section:
