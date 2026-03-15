@@ -721,6 +721,42 @@ def _is_section_stale(section_loaded_at: str | None, dashboard_loaded_at: str | 
     return section_loaded_at < dashboard_loaded_at
 
 
+def _store_dashboard_state(
+    *,
+    player_raw_value: str,
+    player_id: int,
+    time_filter_mode_value: str,
+    days_value: int | None,
+    active_days_value: int | None,
+    start_date_value: date | None,
+    active_start_date_value: date | None,
+    selected_patches_value: list[str],
+    active_patches_value: list[str],
+    overview_value: list[dict],
+    patch_filtered_matches_value: list[MatchSummary] | None,
+    min_hero_matches_value: int,
+    min_item_matches_value: int,
+    loaded_at_value: str,
+    cache_only: bool,
+) -> None:
+    st.session_state["player_raw"] = player_raw_value
+    st.session_state["player_id"] = player_id
+    st.session_state["time_filter_mode"] = time_filter_mode_value
+    st.session_state["days"] = days_value
+    st.session_state["active_days"] = active_days_value
+    st.session_state["start_date"] = start_date_value
+    st.session_state["active_start_date"] = active_start_date_value
+    st.session_state["selected_patches"] = selected_patches_value
+    st.session_state["active_patches"] = active_patches_value
+    st.session_state["overview"] = overview_value
+    st.session_state["overview_schema_version"] = OVERVIEW_SCHEMA_VERSION
+    st.session_state["dashboard_loaded_at"] = loaded_at_value
+    st.session_state["patch_filtered_matches"] = patch_filtered_matches_value
+    st.session_state["min_hero_matches"] = min_hero_matches_value
+    st.session_state["min_item_matches"] = min_item_matches_value
+    st.session_state["overview_cache_only"] = cache_only
+
+
 def _load_selected_hero_matches(
     service: DotaAnalyticsService,
     player_id: int,
@@ -825,7 +861,7 @@ with st.sidebar:
         value=st.session_state.get("min_item_matches", 3),
         step=1,
     )
-    load = st.button("Load Turbo Dashboard", type="primary")
+    load = st.button("Refresh Turbo Dashboard", type="primary")
 
 if "overview" in st.session_state and st.session_state.get("overview_schema_version") != OVERVIEW_SCHEMA_VERSION:
     st.session_state.pop("overview", None)
@@ -836,6 +872,57 @@ if "overview" in st.session_state and _overview_looks_stale(st.session_state.get
     st.session_state.pop("overview", None)
     st.session_state.pop("patch_filtered_matches", None)
     _clear_detail_sections()
+
+if "overview" not in st.session_state:
+    try:
+        active_days = days if time_filter_mode == "Days" else None
+        active_patches = selected_patches if time_filter_mode == "Patches" else []
+        active_start_date = start_date_value if time_filter_mode == "Start Date" else None
+        player_id = parse_player_id(player_raw)
+        cached_sync_state = service.get_cached_sync_state(player_id, game_mode=23)
+        if cached_sync_state and int(cached_sync_state.get("known_match_count") or 0) > 0:
+            if active_patches and not supports_patch_overview:
+                base_filters = QueryFilters(
+                    player_id=player_id,
+                    game_mode=23,
+                    game_mode_name="Turbo",
+                    days=None,
+                    start_date=active_start_date,
+                )
+                all_cached_matches = service.get_cached_matches(base_filters)
+                selected_set = set(active_patches)
+                patch_filtered_matches = [
+                    m for m in all_cached_matches if _resolve_patch_name(m.start_time, patch_timeline) in selected_set
+                ]
+                overview = _build_overview_from_matches(patch_filtered_matches, service)
+            else:
+                patch_filtered_matches = None
+                overview = service.get_cached_turbo_hero_overview(
+                    player_id=player_id,
+                    days=active_days,
+                    start_date=active_start_date,
+                    patch_names=active_patches,
+                )
+            if overview:
+                _store_dashboard_state(
+                    player_raw_value=player_raw,
+                    player_id=player_id,
+                    time_filter_mode_value=time_filter_mode,
+                    days_value=days,
+                    active_days_value=active_days,
+                    start_date_value=start_date_value,
+                    active_start_date_value=active_start_date,
+                    selected_patches_value=selected_patches,
+                    active_patches_value=active_patches,
+                    overview_value=overview,
+                    patch_filtered_matches_value=patch_filtered_matches,
+                    min_hero_matches_value=min_hero_matches,
+                    min_item_matches_value=min_item_matches,
+                    loaded_at_value=str(cached_sync_state.get("last_incremental_sync_at") or _utcnow_iso()),
+                    cache_only=True,
+                )
+    except ValidationError:
+        pass
 
 if load:
     try:
@@ -888,26 +975,28 @@ if load:
                 operation_label="hero overview",
             )
 
-        st.session_state["player_raw"] = player_raw
-        st.session_state["player_id"] = player_id
-        st.session_state["time_filter_mode"] = time_filter_mode
-        st.session_state["days"] = days
-        st.session_state["active_days"] = active_days
-        st.session_state["start_date"] = start_date_value
-        st.session_state["active_start_date"] = active_start_date
-        st.session_state["selected_patches"] = selected_patches
-        st.session_state["active_patches"] = active_patches
-        st.session_state["overview"] = overview
-        st.session_state["overview_schema_version"] = OVERVIEW_SCHEMA_VERSION
-        st.session_state["dashboard_loaded_at"] = _utcnow_iso()
-        st.session_state["patch_filtered_matches"] = patch_filtered_matches
-        st.session_state["min_hero_matches"] = min_hero_matches
-        st.session_state["min_item_matches"] = min_item_matches
+        _store_dashboard_state(
+            player_raw_value=player_raw,
+            player_id=player_id,
+            time_filter_mode_value=time_filter_mode,
+            days_value=days,
+            active_days_value=active_days,
+            start_date_value=start_date_value,
+            active_start_date_value=active_start_date,
+            selected_patches_value=selected_patches,
+            active_patches_value=active_patches,
+            overview_value=overview,
+            patch_filtered_matches_value=patch_filtered_matches,
+            min_hero_matches_value=min_hero_matches,
+            min_item_matches_value=min_item_matches,
+            loaded_at_value=_utcnow_iso(),
+            cache_only=False,
+        )
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
 if "overview" not in st.session_state:
-    st.info("Enter player and click 'Load Turbo Dashboard'.")
+    st.info("Enter player to auto-load cached dashboard data, or click `Refresh Turbo Dashboard` to fetch it.")
     st.stop()
 
 player_id = st.session_state["player_id"]
@@ -915,6 +1004,7 @@ days = st.session_state.get("active_days")
 active_start_date = st.session_state.get("active_start_date")
 active_patches = st.session_state.get("active_patches", [])
 overview = st.session_state["overview"]
+overview_cache_only = bool(st.session_state.get("overview_cache_only"))
 min_hero_matches = st.session_state.get("min_hero_matches", min_hero_matches)
 min_item_matches = st.session_state.get("min_item_matches", min_item_matches)
 effective_start_date = get_effective_start_date(days, active_start_date)
@@ -928,6 +1018,8 @@ elif effective_start_date:
 else:
     selected_filter_text = f"Last {days} days"
 st.subheader(f"Player {player_id} - Turbo - {selected_filter_text}")
+if overview_cache_only:
+    st.caption("Loaded from local cache. Click `Refresh Turbo Dashboard` to sync new matches from OpenDota.")
 
 if not overview:
     st.warning("No Turbo matches found for selected period.")

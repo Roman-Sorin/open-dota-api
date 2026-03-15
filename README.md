@@ -19,7 +19,8 @@ Turbo-only dashboard for your account:
 - When Turbo match rows miss `hero_damage` or `net_worth`, the app enriches overview/detail stats from match details stored locally
 - Top dashboard metrics include Turbo matches, wins, losses, and winrate
 - Dashboard loading is manual by section:
-  - `Load Turbo Dashboard` loads the overview only
+  - cached overview data can auto-open from local SQLite storage when available
+  - `Refresh Turbo Dashboard` syncs overview data from OpenDota when you want newer matches
   - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` can each be loaded independently for the selected hero
 - Detailed hero section in Turbo includes avg duration, avg damage, avg net worth, max kills, and max hero damage
 - Hero detail, item stats, and recent matches stay cached per hero/filter in the current session when you switch between heroes

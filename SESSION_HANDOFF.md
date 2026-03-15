@@ -393,3 +393,15 @@ CLI remains available as a secondary interface.
 - Bumped `OVERVIEW_SCHEMA_VERSION` to `9` so stale session overview rows are invalidated after deploy.
 - Added regression coverage proving overview side-winrate values match detailed hero stats for the same match set.
 - User preference reminder: push after each completed code change, and keep Markdown docs current for code agents.
+
+## 2026-03-15 cached dashboard autoload update
+
+- Added service methods for cache-only reads from the SQLite match store:
+  - `get_cached_matches(...)`
+  - `get_cached_sync_state(...)`
+  - `get_cached_turbo_hero_overview(...)`
+- Streamlit dashboard now auto-restores `Hero Overview` from local SQLite data when the current player/filter combination already has cached Turbo matches.
+- This cache-only restore does not call OpenDota and does not spend API quota.
+- Top button label changed from `Load Turbo Dashboard` to `Refresh Turbo Dashboard`.
+- When overview is restored from cache only, the UI now shows a caption explaining that it is local cached data and that `Refresh Turbo Dashboard` will sync newer matches.
+- Added regression coverage proving cached hero overview can be built from SQLite without any API calls.

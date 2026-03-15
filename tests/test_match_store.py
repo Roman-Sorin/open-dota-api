@@ -103,3 +103,38 @@ def test_service_fetch_matches_uses_sqlite_store_between_calls() -> None:
     assert len(first) == 1
     assert len(second) == 1
     assert client.calls == 1
+
+
+def test_service_can_build_cached_turbo_hero_overview_without_api_calls() -> None:
+    client = _FakeClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+
+    store.upsert_player_matches(
+        123,
+        [
+                {
+                    "match_id": 10,
+                    "start_time": 1771552800,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                "kills": 9,
+                "deaths": 3,
+                "assists": 12,
+                "duration": 1500,
+                "hero_id": 1,
+                "hero_damage": 24000,
+                "net_worth": 21000,
+            }
+        ],
+    )
+    store.upsert_sync_state(123, "gm:23", last_incremental_sync_at="2026-03-15T10:00:00", known_match_count=1)
+
+    rows = service.get_cached_turbo_hero_overview(player_id=123, days=60)
+
+    assert len(rows) == 1
+    assert rows[0]["hero"] == "Axe"
+    assert rows[0]["radiant_wr"] == 100.0
+    assert rows[0]["dire_wr"] == 0.0
+    assert client.calls == 0

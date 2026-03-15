@@ -18,7 +18,8 @@ The project includes two interfaces:
 - Dashboard summary cards: Turbo matches, wins, losses, winrate
 - Time filter modes: `Days`, `Patches`, `Start Date`
 - Dashboard sections load manually and independently to reduce one-shot API work on page open
-- `Load Turbo Dashboard` fetches the hero overview only
+- If matching dashboard data already exists in local SQLite storage, the app restores Hero Overview automatically on page load for the current filters
+- `Refresh Turbo Dashboard` fetches/syncs the hero overview from OpenDota when you want newer matches
 - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` can each fetch the selected hero dataset on demand
 - Per-hero detailed stats (avg K/D/A, KDA, avg duration, avg net worth, avg damage, max kills, max hero damage, Radiant/Dire WR)
 - When you switch away from a hero and return, already loaded hero details/item stats/recent matches are restored from session cache for that hero/filter combination
@@ -97,4 +98,4 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - `ModuleNotFoundError`: activate `.venv` and reinstall requirements.
 - `OpenDotaRateLimitError`: wait and retry, reduce period, or use `OPENDOTA_API_KEY`.
 - Empty/partial item data: this can happen due to OpenDota coverage limits; app will still show available data.
-- After app updates, dashboard data schema is auto-refreshed; if values still look stale, click `Load Turbo Dashboard` again.
+- After app updates, dashboard data schema is auto-refreshed; if values still look stale, click `Refresh Turbo Dashboard` again.

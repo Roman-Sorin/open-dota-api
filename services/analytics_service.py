@@ -536,6 +536,33 @@ class DotaAnalyticsService:
         self.cache.set(cache_policy.key, [self._serialize_match_summary(match) for match in all_matches])
         return all_matches
 
+    def get_cached_matches(self, filters: QueryFilters, limit: int | None = None) -> list[MatchSummary]:
+        if self.match_store is None:
+            return []
+        selected_patches = set(filters.patch_names or [])
+        min_start = self._min_start_time(filters)
+        stored_rows = self.match_store.query_player_matches(
+            filters.player_id,
+            hero_id=filters.hero_id,
+            game_mode=filters.game_mode,
+            min_start_time=min_start,
+            limit=None,
+        )
+        parsed_store_rows = [
+            match
+            for match in (
+                self._parse_match_summary_row(row, selected_patches=selected_patches, min_start=min_start)
+                for row in stored_rows
+            )
+            if match is not None
+        ]
+        return parsed_store_rows[:limit] if limit is not None else parsed_store_rows
+
+    def get_cached_sync_state(self, player_id: int, game_mode: int | None = None) -> dict[str, Any] | None:
+        if self.match_store is None:
+            return None
+        return self.match_store.get_sync_state(player_id, self._sync_scope_key(game_mode))
+
     def build_stats(self, matches: list[MatchSummary]) -> StatsResult:
         total = len(matches)
         if total == 0:
@@ -642,6 +669,26 @@ class DotaAnalyticsService:
 
         rows.sort(key=lambda x: (-x["matches"], -x["winrate"]))
         return rows
+
+    def get_cached_turbo_hero_overview(
+        self,
+        player_id: int,
+        days: int | None = 60,
+        start_date=None,
+        patch_names: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        filters = QueryFilters(
+            player_id=player_id,
+            game_mode=23,
+            game_mode_name="Turbo",
+            days=days,
+            start_date=start_date,
+            patch_names=patch_names,
+        )
+        matches = self.get_cached_matches(filters)
+        if not matches:
+            return []
+        return self.build_turbo_hero_overview_rows(matches)
 
     def _counter_to_item_stats(self, counter: Counter[int], total_matches: int, top_n: int = 12) -> list[ItemStat]:
         rows: list[ItemStat] = []
