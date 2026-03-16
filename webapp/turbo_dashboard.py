@@ -23,11 +23,11 @@ from utils.config import get_cache_dir, get_match_store_path, get_settings
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError, ValidationError
 from utils.helpers import format_duration, parse_player_id
 from utils.match_store import SQLiteMatchStore
-from webapp.dashboard_state import build_hero_request_key
+from webapp.dashboard_state import build_hero_snapshot_request_key
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
-OVERVIEW_SCHEMA_VERSION = 9
+OVERVIEW_SCHEMA_VERSION = 10
 
 st.markdown(
     """
@@ -789,10 +789,7 @@ def _load_selected_hero_matches(
         }
         if active_patches and query_filters_supports_patch:
             filters_kwargs["patch_names"] = active_patches
-        matches = run_with_rate_limit_retry(
-            lambda: service.fetch_matches(QueryFilters(**filters_kwargs)),
-            operation_label="hero matches",
-        )
+        matches = service.get_cached_matches(QueryFilters(**filters_kwargs))
         service.enrich_hero_damage(
             player_id,
             matches,
@@ -1097,18 +1094,19 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-current_hero_request_key = build_hero_request_key(
+dashboard_loaded_at = st.session_state.get("dashboard_loaded_at")
+current_hero_snapshot_key = build_hero_snapshot_request_key(
     player_id=player_id,
     hero_id=selected_hero_id,
     days=days,
     active_patches=active_patches,
     active_start_date=active_start_date,
+    dashboard_loaded_at=str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
 )
-current_item_request_key = (*current_hero_request_key, int(min_item_matches))
-dashboard_loaded_at = st.session_state.get("dashboard_loaded_at")
-hero_matches = _cache_get("hero_matches_by_key", current_hero_request_key)
+current_item_request_key = (*current_hero_snapshot_key, int(min_item_matches))
+hero_matches = _cache_get("hero_matches_by_key", current_hero_snapshot_key)
 hero_matches_loaded = isinstance(hero_matches, list)
-hero_loaded_at = _cache_get("hero_loaded_at_by_key", current_hero_request_key)
+hero_loaded_at = _cache_get("hero_loaded_at_by_key", current_hero_snapshot_key)
 hero_section_stale = _is_section_stale(
     str(hero_loaded_at) if hero_loaded_at is not None else None,
     str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
@@ -1132,7 +1130,7 @@ if load_hero_matches:
             days,
             active_patches,
             active_start_date,
-            current_hero_request_key,
+            current_hero_snapshot_key,
             force_refresh=True,
         )
         hero_matches_loaded = True
@@ -1146,7 +1144,7 @@ if hero_matches_loaded:
     matches = matches or []
     if matches:
         if hero_section_stale:
-            st.caption("Hero details were loaded before the latest dashboard refresh. Click `Refresh Hero Details` to include newer matches.")
+            st.caption("Hero details were loaded before the latest dashboard refresh. Click `Refresh Hero Details` to rebuild this section from the current dashboard snapshot.")
         stats = service.build_stats(matches)
         stats_cards = build_hero_metric_cards(
             {
@@ -1173,7 +1171,7 @@ if hero_matches_loaded:
     else:
         st.warning("No matches for selected hero with current Turbo filter.")
 else:
-    st.info("Hero details load automatically from cache when available. Click `Refresh Hero Details` to fetch or update this section.")
+    st.info("Hero details load automatically from cache when available. Click `Refresh Hero Details` to build this section from the current dashboard snapshot.")
 
 if load_item_winrates:
     try:
@@ -1185,7 +1183,7 @@ if load_item_winrates:
             days,
             active_patches,
             active_start_date,
-            current_hero_request_key,
+            current_hero_snapshot_key,
         )
         item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50)
         item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
@@ -1212,7 +1210,7 @@ item_section_stale = _is_section_stale(
 )
 if isinstance(item_wr_rows, list):
     if item_section_stale:
-        st.caption("Item stats were loaded before the latest dashboard refresh. Click `Refresh Item Winrates` to include newer matches.")
+        st.caption("Item stats were loaded before the latest dashboard refresh. Click `Refresh Item Winrates` to rebuild this section from the current dashboard snapshot.")
     if item_wr_rows:
         item_winrate_table = [
             {
@@ -1241,7 +1239,7 @@ if isinstance(item_wr_rows, list):
     else:
         st.info("No items satisfy current minimum matches threshold.")
 else:
-    st.info("Item stats stay cached per hero/filter during the session. Click `Refresh Item Winrates` to fetch this section.")
+    st.info("Item stats stay cached per hero/filter during the session. Click `Refresh Item Winrates` to build this section from the current dashboard snapshot.")
 
 recent_matches_key = recent_matches_state_key(selected_hero_id, days, active_patches, active_start_date)
 if recent_matches_key not in st.session_state:
@@ -1257,7 +1255,7 @@ if load_recent_matches:
             days,
             active_patches,
             active_start_date,
-            current_hero_request_key,
+            current_hero_snapshot_key,
         )
         visible_recent_matches = int(st.session_state[recent_matches_key])
         recent_rows = service.build_recent_hero_matches(
@@ -1265,18 +1263,18 @@ if load_recent_matches:
             matches=matches,
             limit=min(visible_recent_matches, len(matches)),
         )
-        _cache_set("recent_rows_by_key", current_hero_request_key, recent_rows)
-        _cache_set("recent_loaded_at_by_key", current_hero_request_key, _utcnow_iso())
-        _cache_set("recent_limit_loaded_by_key", current_hero_request_key, visible_recent_matches)
+        _cache_set("recent_rows_by_key", current_hero_snapshot_key, recent_rows)
+        _cache_set("recent_loaded_at_by_key", current_hero_snapshot_key, _utcnow_iso())
+        _cache_set("recent_limit_loaded_by_key", current_hero_snapshot_key, visible_recent_matches)
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
 st.markdown("### Hero Matches - Recent Matches for Hero")
-recent_match_rows = _cache_get("recent_rows_by_key", current_hero_request_key)
-recent_loaded_at = _cache_get("recent_loaded_at_by_key", current_hero_request_key)
+recent_match_rows = _cache_get("recent_rows_by_key", current_hero_snapshot_key)
+recent_loaded_at = _cache_get("recent_loaded_at_by_key", current_hero_snapshot_key)
 recent_matches_loaded = isinstance(recent_match_rows, list)
 visible_recent_matches = int(st.session_state[recent_matches_key])
-loaded_recent_matches = int(_cache_get("recent_limit_loaded_by_key", current_hero_request_key) or 0)
+loaded_recent_matches = int(_cache_get("recent_limit_loaded_by_key", current_hero_snapshot_key) or 0)
 recent_section_stale = _is_section_stale(
     str(recent_loaded_at) if recent_loaded_at is not None else None,
     str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
@@ -1290,8 +1288,8 @@ if recent_matches_loaded and loaded_recent_matches != visible_recent_matches:
             matches=matches,
             limit=min(visible_recent_matches, len(matches)),
         )
-        _cache_set("recent_rows_by_key", current_hero_request_key, recent_match_rows)
-        _cache_set("recent_limit_loaded_by_key", current_hero_request_key, visible_recent_matches)
+        _cache_set("recent_rows_by_key", current_hero_snapshot_key, recent_match_rows)
+        _cache_set("recent_limit_loaded_by_key", current_hero_snapshot_key, visible_recent_matches)
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
         recent_matches_loaded = False
@@ -1299,7 +1297,7 @@ if recent_matches_loaded and loaded_recent_matches != visible_recent_matches:
 if recent_matches_loaded:
     recent_match_rows = recent_match_rows or []
     if recent_section_stale:
-        st.caption("Recent matches were loaded before the latest dashboard refresh. Click `Refresh Recent Matches` to include newer matches.")
+        st.caption("Recent matches were loaded before the latest dashboard refresh. Click `Refresh Recent Matches` to rebuild this section from the current dashboard snapshot.")
     st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches)} matches")
 
     table_rows_html = ""
@@ -1375,4 +1373,4 @@ if recent_matches_loaded:
             st.session_state[recent_matches_key] = min(visible_recent_matches + 10, len(matches))
             st.rerun()
 else:
-    st.info("Recent matches stay cached per hero/filter during the session. Click `Refresh Recent Matches` to fetch this section.")
+    st.info("Recent matches stay cached per hero/filter during the session. Click `Refresh Recent Matches` to build this section from the current dashboard snapshot.")

@@ -6,7 +6,10 @@ from services.analytics_service import DotaAnalyticsService
 
 class _FakeClient:
     def get_constants_heroes(self) -> dict:
-        return {"1": {"id": 1, "localized_name": "Axe", "img": "/apps/dota2/images/heroes/axe.png"}}
+        return {
+            "1": {"id": 1, "localized_name": "Axe", "img": "/apps/dota2/images/heroes/axe.png"},
+            "138": {"id": 138, "localized_name": "Muerta", "img": "/apps/dota2/images/heroes/muerta.png"},
+        }
 
     def get_constants_items(self) -> dict:
         return {
@@ -605,3 +608,102 @@ def test_recent_hero_matches_use_final_slots_with_matching_final_item_timings() 
     assert rows[0].hero_damage == 15592
     assert [item.item_id for item in rows[0].items] == [63, 114, 160, 151, 108, 1]
     assert [item.purchase_time_min for item in rows[0].items] == [3, 5, 23, 9, 17, 12]
+
+
+def test_turbo_hero_overview_matches_reported_muerta_example() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=1001,
+            start_time=1,
+            player_slot=0,
+            radiant_win=True,
+            kills=9,
+            deaths=5,
+            assists=12,
+            duration=1571,
+            hero_id=138,
+            net_worth=38000,
+            net_worth_known=True,
+            hero_damage=85168,
+            hero_damage_known=True,
+        ),
+        MatchSummary(
+            match_id=1002,
+            start_time=2,
+            player_slot=0,
+            radiant_win=False,
+            kills=3,
+            deaths=8,
+            assists=10,
+            duration=1082,
+            hero_id=138,
+            net_worth=29000,
+            net_worth_known=True,
+            hero_damage=23000,
+            hero_damage_known=True,
+        ),
+        MatchSummary(
+            match_id=1003,
+            start_time=3,
+            player_slot=0,
+            radiant_win=True,
+            kills=6,
+            deaths=7,
+            assists=18,
+            duration=1631,
+            hero_id=138,
+            net_worth=37200,
+            net_worth_known=True,
+            hero_damage=32000,
+            hero_damage_known=True,
+        ),
+        MatchSummary(
+            match_id=1004,
+            start_time=4,
+            player_slot=128,
+            radiant_win=False,
+            kills=18,
+            deaths=6,
+            assists=8,
+            duration=2876,
+            hero_id=138,
+            net_worth=43000,
+            net_worth_known=True,
+            hero_damage=26000,
+            hero_damage_known=True,
+        ),
+        MatchSummary(
+            match_id=1005,
+            start_time=5,
+            player_slot=128,
+            radiant_win=True,
+            kills=5,
+            deaths=9,
+            assists=12,
+            duration=1930,
+            hero_id=138,
+            net_worth=36370,
+            net_worth_known=True,
+            hero_damage=23227,
+            hero_damage_known=True,
+        ),
+    ]
+
+    rows = service.build_turbo_hero_overview_rows(matches)
+
+    assert len(rows) == 1
+    assert rows[0]["hero"] == "Muerta"
+    assert rows[0]["matches"] == 5
+    assert rows[0]["winrate"] == 60.0
+    assert rows[0]["avg_kills"] == 8.2
+    assert rows[0]["avg_deaths"] == 7.0
+    assert rows[0]["avg_assists"] == 12.0
+    assert round(float(rows[0]["kda"]), 1) == 2.9
+    assert rows[0]["avg_duration_seconds"] == 1818.0
+    assert rows[0]["avg_net_worth"] == 36714.0
+    assert rows[0]["avg_damage"] == 37879.0
+    assert rows[0]["max_kills"] == 18
+    assert rows[0]["max_hero_damage"] == 85168
+    assert round(float(rows[0]["radiant_wr"]), 2) == round((2 / 3) * 100, 2)
+    assert rows[0]["dire_wr"] == 50.0

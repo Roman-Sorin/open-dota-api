@@ -20,10 +20,11 @@ The project includes two interfaces:
 - Dashboard sections load manually and independently to reduce one-shot API work on page open
 - If matching dashboard data already exists in local SQLite storage, the app restores Hero Overview automatically on page load for the current filters
 - `Refresh Turbo Dashboard` fetches/syncs the hero overview from OpenDota when you want newer matches
-- `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` can each fetch the selected hero dataset on demand
+- `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild the selected hero sections from the currently loaded dashboard snapshot
 - Per-hero detailed stats (avg K/D/A, KDA, avg duration, avg net worth, avg damage, max kills, max hero damage, Radiant/Dire WR)
 - When you switch away from a hero and return, already loaded hero details/item stats/recent matches are restored from session cache for that hero/filter combination
-- If the dashboard was refreshed later than a section, the section shows a hint that newer matches may exist and can be pulled with `Refresh ...`
+- Detail-section caches are tied to the current dashboard snapshot, so a newer overview will not silently reuse old hero/item/recent rows
+- If the dashboard was refreshed later than a section, the section shows a hint that it should be rebuilt from the current dashboard snapshot with `Refresh ...`
 - Most frequent final items
 - Item winrate table (wins with item / matches with item), includes per-item match count
 - Item winrate table is sorted by highest item winrate first (ties by larger sample)

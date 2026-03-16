@@ -34,3 +34,23 @@ def build_hero_request_key(
         ),
         int(hero_id),
     )
+
+
+def build_hero_snapshot_request_key(
+    player_id: int,
+    hero_id: int,
+    days: int | None,
+    active_patches: list[str] | None,
+    active_start_date: date | None,
+    dashboard_loaded_at: str | None,
+) -> tuple[object, ...]:
+    return (
+        *build_hero_request_key(
+            player_id=player_id,
+            hero_id=hero_id,
+            days=days,
+            active_patches=active_patches,
+            active_start_date=active_start_date,
+        ),
+        dashboard_loaded_at or "no-dashboard-snapshot",
+    )

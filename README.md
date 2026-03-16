@@ -21,9 +21,11 @@ Turbo-only dashboard for your account:
 - Dashboard loading is manual by section:
   - cached overview data can auto-open from local SQLite storage when available
   - `Refresh Turbo Dashboard` syncs overview data from OpenDota when you want newer matches
-  - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` can each be loaded independently for the selected hero
+  - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild from the currently loaded dashboard snapshot for the selected hero
+- Section refreshes no longer pull newer matches than the currently loaded overview; only `Refresh Turbo Dashboard` advances the dataset
 - Detailed hero section in Turbo includes avg duration, avg damage, avg net worth, max kills, and max hero damage
 - Hero detail, item stats, and recent matches stay cached per hero/filter in the current session when you switch between heroes
+- Detail-section caches are scoped to the current dashboard snapshot so old hero/recent/item rows are not reused after the overview changes
 - Section actions are refresh actions now; if dashboard data is newer than a section cache, the UI shows a stale hint instead of silently hiding that fact
 - Item winrates (when item appears in final slots), with match count shown
 - Recent hero matches shown as a compact one-row-per-match table under the item table

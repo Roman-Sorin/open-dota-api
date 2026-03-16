@@ -1,6 +1,6 @@
 from datetime import date
 
-from webapp.dashboard_state import build_filter_request_key, build_hero_request_key
+from webapp.dashboard_state import build_filter_request_key, build_hero_request_key, build_hero_snapshot_request_key
 
 
 def test_filter_request_key_normalizes_patch_order() -> None:
@@ -46,3 +46,24 @@ def test_hero_request_key_changes_with_hero_and_filters() -> None:
 
     assert base_key != different_hero_key
     assert base_key != different_filter_key
+
+
+def test_hero_snapshot_request_key_changes_with_dashboard_snapshot() -> None:
+    base_key = build_hero_snapshot_request_key(
+        player_id=123,
+        hero_id=138,
+        days=30,
+        active_patches=[],
+        active_start_date=None,
+        dashboard_loaded_at="2026-03-16T20:00:00+00:00",
+    )
+    newer_key = build_hero_snapshot_request_key(
+        player_id=123,
+        hero_id=138,
+        days=30,
+        active_patches=[],
+        active_start_date=None,
+        dashboard_loaded_at="2026-03-16T20:05:00+00:00",
+    )
+
+    assert base_key != newer_key
