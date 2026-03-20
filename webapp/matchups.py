@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+from collections import defaultdict
+from dataclasses import dataclass
+
+from models.dtos import MatchSummary
+from utils.helpers import calculate_kda_ratio, winrate_percent
+
+
+@dataclass(slots=True)
+class MatchupRow:
+    hero_id: int
+    hero: str
+    hero_image: str
+    matches: int
+    wins: int
+    losses: int
+    winrate: float
+    avg_kills: float
+    avg_deaths: float
+    avg_assists: float
+    kda: float
+
+
+def _finalize_rows(
+    buckets: dict[int, dict[str, float]],
+    resolve_hero_name,
+    resolve_hero_image,
+) -> list[MatchupRow]:
+    rows: list[MatchupRow] = []
+    for hero_id, bucket in buckets.items():
+        matches = int(bucket["matches"])
+        wins = int(bucket["wins"])
+        losses = matches - wins
+        avg_k = bucket["kills"] / matches if matches else 0.0
+        avg_d = bucket["deaths"] / matches if matches else 0.0
+        avg_a = bucket["assists"] / matches if matches else 0.0
+        rows.append(
+            MatchupRow(
+                hero_id=hero_id,
+                hero=resolve_hero_name(hero_id),
+                hero_image=resolve_hero_image(hero_id),
+                matches=matches,
+                wins=wins,
+                losses=losses,
+                winrate=winrate_percent(wins, matches),
+                avg_kills=avg_k,
+                avg_deaths=avg_d,
+                avg_assists=avg_a,
+                kda=calculate_kda_ratio(avg_k, avg_d, avg_a),
+            )
+        )
+    rows.sort(key=lambda row: (-row.matches, -row.winrate, row.hero))
+    return rows
+
+
+def build_matchup_rows(
+    matches: list[MatchSummary],
+    detail_lookup,
+    extract_player,
+    player_id: int,
+    resolve_hero_name,
+    resolve_hero_image,
+) -> dict[str, list[MatchupRow]]:
+    with_buckets: dict[int, dict[str, float]] = defaultdict(lambda: {"matches": 0.0, "wins": 0.0, "kills": 0.0, "deaths": 0.0, "assists": 0.0})
+    against_buckets: dict[int, dict[str, float]] = defaultdict(lambda: {"matches": 0.0, "wins": 0.0, "kills": 0.0, "deaths": 0.0, "assists": 0.0})
+
+    for match in matches:
+        details = detail_lookup(match.match_id)
+        players = details.get("players") if isinstance(details, dict) else None
+        if not isinstance(players, list):
+            continue
+
+        player_row = extract_player(details, player_id=player_id, player_slot=match.player_slot)
+        if not isinstance(player_row, dict):
+            continue
+
+        player_slot = int(player_row.get("player_slot") or match.player_slot)
+        is_radiant = player_slot < 128
+
+        for row in players:
+            if not isinstance(row, dict):
+                continue
+            hero_id = int(row.get("hero_id") or 0)
+            other_slot = int(row.get("player_slot") or -1)
+            if hero_id <= 0 or other_slot < 0 or other_slot == player_slot:
+                continue
+
+            target = with_buckets if (other_slot < 128) == is_radiant else against_buckets
+            bucket = target[hero_id]
+            bucket["matches"] += 1
+            if match.did_win:
+                bucket["wins"] += 1
+            bucket["kills"] += float(match.kills)
+            bucket["deaths"] += float(match.deaths)
+            bucket["assists"] += float(match.assists)
+
+    return {
+        "with": _finalize_rows(with_buckets, resolve_hero_name, resolve_hero_image),
+        "against": _finalize_rows(against_buckets, resolve_hero_name, resolve_hero_image),
+    }

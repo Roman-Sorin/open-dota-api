@@ -27,7 +27,8 @@ The project includes two interfaces:
 - `Refresh Turbo Dashboard` fetches/syncs the hero overview from OpenDota when you want newer matches
 - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild the selected hero sections from the currently loaded dashboard snapshot
 - Per-hero detailed stats (avg K/D/A, KDA, avg duration, avg net worth, avg damage, max kills, max hero damage, Radiant/Dire WR)
-- Hero Trends section supports weekly or rolling-match charts for WR, KDA, NW, damage, match volume, and side winrates
+- Matchups section shows best/worst `With / Against` heroes for the selected hero and globally for the current filter
+- Experimental Hero Trends stays at the bottom and currently shows daily trend charts for the selected hero
 - When you switch away from a hero and return, already loaded hero details/item stats/recent matches are restored from session cache for that hero/filter combination
 - Detail-section caches are tied to the current dashboard snapshot, so a newer overview will not silently reuse old hero/item/recent rows
 - If the dashboard was refreshed later than a section, the section shows a hint that it should be rebuilt from the current dashboard snapshot with `Refresh ...`

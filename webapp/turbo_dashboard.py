@@ -32,7 +32,8 @@ from webapp.hero_overview import (
     build_hero_detail_cards,
     build_hero_overview_row,
 )
-from webapp.hero_trends import build_rolling_trend_points, build_weekly_trend_points
+from webapp.hero_trends import build_daily_trend_points
+from webapp.matchups import build_matchup_rows
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
@@ -658,6 +659,24 @@ TREND_METRIC_LABELS: dict[str, str] = {
 }
 
 
+def _matchup_cache_key(
+    player_id: int,
+    days: int | None,
+    active_patches: list[str],
+    active_start_date: date | None,
+    dashboard_loaded_at: str | None,
+    selected_hero_id: int,
+) -> tuple[object, ...]:
+    return (
+        int(player_id),
+        days,
+        tuple(active_patches),
+        active_start_date.isoformat() if active_start_date else None,
+        dashboard_loaded_at,
+        int(selected_hero_id),
+    )
+
+
 def _store_dashboard_state(
     *,
     player_raw_value: str,
@@ -1149,80 +1168,133 @@ if hero_matches_loaded:
 else:
     st.info("Hero details load automatically from cache when available. Click `Refresh Hero Details` to build this section from the current dashboard snapshot.")
 
-st.markdown("### Hero Trends")
-trend_bucket_key = f"hero_trends_bucket_{current_hero_snapshot_key}"
-trend_metrics_key = f"hero_trends_metrics_{current_hero_snapshot_key}"
-trend_bucket_options = {
-    "Weekly": "weekly",
-    "Rolling 5": "rolling_5",
-    "Rolling 10": "rolling_10",
-    "Rolling 20": "rolling_20",
-}
-trend_metric_defaults = ["winrate", "kda", "avg_net_worth", "avg_damage", "matches"]
-
-trend_col_1, trend_col_2 = st.columns((1, 2))
-with trend_col_1:
-    selected_trend_bucket = st.selectbox(
-        "Trend View",
-        options=list(trend_bucket_options.keys()),
-        key=trend_bucket_key,
-    )
-with trend_col_2:
-    selected_trend_metrics = st.multiselect(
-        "Trend Metrics",
-        options=list(TREND_METRIC_LABELS.keys()),
-        default=trend_metric_defaults,
-        format_func=lambda metric: TREND_METRIC_LABELS[metric],
-        key=trend_metrics_key,
-    )
-
-if hero_matches_loaded:
-    matches = matches or []
-    if matches:
-        trend_mode = trend_bucket_options[selected_trend_bucket]
-        if trend_mode == "weekly":
-            trend_points = build_weekly_trend_points(matches, service.build_stats)
+st.markdown("### Matchups")
+matchup_request_key = _matchup_cache_key(
+    player_id=player_id,
+    days=days,
+    active_patches=active_patches,
+    active_start_date=active_start_date,
+    dashboard_loaded_at=str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
+    selected_hero_id=selected_hero_id,
+)
+load_matchups = st.button("Refresh Matchups")
+if load_matchups:
+    try:
+        if active_patches and not supports_patch_overview:
+            all_matchup_matches = st.session_state.get("patch_filtered_matches") or []
         else:
-            window_size = int(trend_mode.split("_")[1])
-            trend_points = build_rolling_trend_points(matches, service.build_stats, window_size=window_size)
+            all_matchup_matches = service.get_cached_matches(
+                QueryFilters(
+                    player_id=player_id,
+                    game_mode=23,
+                    game_mode_name="Turbo",
+                    days=days,
+                    start_date=active_start_date,
+                    patch_names=active_patches,
+                )
+            )
+        selected_matchup_matches = [m for m in all_matchup_matches if int(m.hero_id or 0) == selected_hero_id]
+        matchup_rows = {
+            "selected": build_matchup_rows(
+                matches=selected_matchup_matches,
+                detail_lookup=service._get_match_details_cached,  # noqa: SLF001
+                extract_player=service._extract_player_from_match_details,  # noqa: SLF001
+                player_id=player_id,
+                resolve_hero_name=service.resolve_hero_name,
+                resolve_hero_image=service.resolve_hero_image,
+            ),
+            "global": build_matchup_rows(
+                matches=all_matchup_matches,
+                detail_lookup=service._get_match_details_cached,  # noqa: SLF001
+                extract_player=service._extract_player_from_match_details,  # noqa: SLF001
+                player_id=player_id,
+                resolve_hero_name=service.resolve_hero_name,
+                resolve_hero_image=service.resolve_hero_image,
+            ),
+        }
+        _cache_set("matchup_rows_by_key", matchup_request_key, matchup_rows)
+        _cache_set("matchup_loaded_at_by_key", matchup_request_key, _utcnow_iso())
+    except Exception as exc:  # noqa: BLE001
+        show_error(exc)
 
-        if not trend_points:
-            required_matches = "at least 1 weekly bucket" if trend_mode == "weekly" else f"at least {window_size} matches"
-            st.info(f"Not enough matches to build trends for {required_matches}.")
-        elif not selected_trend_metrics:
-            st.info("Select at least one trend metric.")
-        else:
-            trend_df = pd.DataFrame(
-                [
-                    {
-                        "Label": point.label,
-                        **{TREND_METRIC_LABELS[key]: getattr(point, key) for key in selected_trend_metrics},
-                    }
-                    for point in trend_points
-                ]
-            ).set_index("Label")
+matchup_rows = _cache_get("matchup_rows_by_key", matchup_request_key)
+if isinstance(matchup_rows, dict):
+    min_matchup_matches = st.slider("Min matchup matches", min_value=1, max_value=20, value=3, step=1)
+    selected_tab, global_tab = st.tabs([f"{selected_hero_name}", "All Heroes"])
 
-            if "WR" in trend_df.columns:
-                trend_df["WR"] = trend_df["WR"].round(2)
-            if "KDA" in trend_df.columns:
-                trend_df["KDA"] = trend_df["KDA"].round(2)
-            if "NW" in trend_df.columns:
-                trend_df["NW"] = trend_df["NW"].round(0)
-            if "Dmg" in trend_df.columns:
-                trend_df["Dmg"] = trend_df["Dmg"].round(0)
-            if "Dur" in trend_df.columns:
-                trend_df["Dur"] = trend_df["Dur"].round(1)
-            if "Rad WR" in trend_df.columns:
-                trend_df["Rad WR"] = trend_df["Rad WR"].round(2)
-            if "Dire WR" in trend_df.columns:
-                trend_df["Dire WR"] = trend_df["Dire WR"].round(2)
+    def _matchup_df(rows: list) -> pd.DataFrame:
+        filtered_rows = [row for row in rows if int(row.matches) >= min_matchup_matches]
+        return pd.DataFrame(
+            [
+                {
+                    "Icon": row.hero_image,
+                    "Hero": row.hero,
+                    "Matches": row.matches,
+                    "Won": row.wins,
+                    "Lost": row.losses,
+                    "WR": f"{round(row.winrate)}%",
+                    "Avg K/D/A": f"{round(row.avg_kills)}/{round(row.avg_deaths)}/{round(row.avg_assists)}",
+                    "KDA": round(row.kda, 1),
+                }
+                for row in filtered_rows
+            ]
+        )
 
-            st.line_chart(trend_df, use_container_width=True)
-            st.dataframe(trend_df, use_container_width=True)
-    else:
-        st.info("No matches available for hero trends with current filter.")
+    with selected_tab:
+        best_with, worst_against = st.columns(2)
+        with best_with:
+            st.caption("Best/Worst With")
+            selected_with = _matchup_df(matchup_rows["selected"]["with"])
+            if not selected_with.empty:
+                st.caption("Best With")
+                best = selected_with.sort_values(by=["WR", "Matches", "Hero"], ascending=[False, False, True]).head(8)
+                worst = selected_with.sort_values(by=["WR", "Matches", "Hero"], ascending=[True, False, True]).head(8)
+                st.dataframe(best, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                st.caption("Worst With")
+                st.dataframe(worst, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+            else:
+                st.info("No selected-hero team matchup rows for current filter.")
+        with worst_against:
+            st.caption("Best/Worst Against")
+            selected_against = _matchup_df(matchup_rows["selected"]["against"])
+            if not selected_against.empty:
+                st.caption("Best Against")
+                best = selected_against.sort_values(by=["WR", "Matches", "Hero"], ascending=[False, False, True]).head(8)
+                worst = selected_against.sort_values(by=["WR", "Matches", "Hero"], ascending=[True, False, True]).head(8)
+                st.dataframe(best, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                st.caption("Worst Against")
+                st.dataframe(worst, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+            else:
+                st.info("No selected-hero opponent matchup rows for current filter.")
+
+    with global_tab:
+        global_with_col, global_against_col = st.columns(2)
+        with global_with_col:
+            st.caption("Global Best/Worst With")
+            global_with = _matchup_df(matchup_rows["global"]["with"])
+            if not global_with.empty:
+                st.caption("Global Best With")
+                best = global_with.sort_values(by=["WR", "Matches", "Hero"], ascending=[False, False, True]).head(8)
+                worst = global_with.sort_values(by=["WR", "Matches", "Hero"], ascending=[True, False, True]).head(8)
+                st.dataframe(best, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                st.caption("Global Worst With")
+                st.dataframe(worst, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+            else:
+                st.info("No global team matchup rows for current filter.")
+        with global_against_col:
+            st.caption("Global Best/Worst Against")
+            global_against = _matchup_df(matchup_rows["global"]["against"])
+            if not global_against.empty:
+                st.caption("Global Best Against")
+                best = global_against.sort_values(by=["WR", "Matches", "Hero"], ascending=[False, False, True]).head(8)
+                worst = global_against.sort_values(by=["WR", "Matches", "Hero"], ascending=[True, False, True]).head(8)
+                st.dataframe(best, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                st.caption("Global Worst Against")
+                st.dataframe(worst, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+            else:
+                st.info("No global opponent matchup rows for current filter.")
 else:
-    st.info("Hero trends use the same hero-match dataset as Detailed Turbo Stats. Click `Refresh Hero Details` to populate this section.")
+    st.info("Matchups need player match details. Click `Refresh Matchups` to build selected-hero and global With/Against tables from current cached matches.")
 
 if load_item_winrates:
     try:
@@ -1426,3 +1498,46 @@ if recent_matches_loaded:
             st.rerun()
 else:
     st.info("Recent matches stay cached per hero/filter during the session. Click `Refresh Recent Matches` to build this section from the current dashboard snapshot.")
+
+with st.expander("Experimental: Hero Trends", expanded=False):
+    st.caption("Daily trend view for the selected hero. Kept at the bottom because this section is still experimental.")
+    trend_metrics_key = f"hero_trends_metrics_{current_hero_snapshot_key}"
+    trend_metric_defaults = ["winrate", "kda", "avg_net_worth", "avg_damage", "matches"]
+    selected_trend_metrics = st.multiselect(
+        "Daily Trend Metrics",
+        options=list(TREND_METRIC_LABELS.keys()),
+        default=trend_metric_defaults,
+        format_func=lambda metric: TREND_METRIC_LABELS[metric],
+        key=trend_metrics_key,
+    )
+
+    if hero_matches_loaded:
+        matches = hero_matches or []
+        if matches:
+            trend_points = build_daily_trend_points(matches, service.build_stats)
+            if not selected_trend_metrics:
+                st.info("Select at least one trend metric.")
+            else:
+                trend_df = pd.DataFrame(
+                    [
+                        {
+                            "Date": point.label,
+                            **{TREND_METRIC_LABELS[key]: getattr(point, key) for key in selected_trend_metrics},
+                        }
+                        for point in trend_points
+                    ]
+                ).set_index("Date")
+                for column in ("WR", "Rad WR", "Dire WR", "KDA"):
+                    if column in trend_df.columns:
+                        trend_df[column] = trend_df[column].round(2)
+                for column in ("NW", "Dmg"):
+                    if column in trend_df.columns:
+                        trend_df[column] = trend_df[column].round(0)
+                if "Dur" in trend_df.columns:
+                    trend_df["Dur"] = trend_df["Dur"].round(1)
+                st.line_chart(trend_df, use_container_width=True)
+                st.dataframe(trend_df, use_container_width=True)
+        else:
+            st.info("No matches available for hero trends with current filter.")
+    else:
+        st.info("Hero trends use the selected hero match dataset. Click `Refresh Hero Details` first.")
