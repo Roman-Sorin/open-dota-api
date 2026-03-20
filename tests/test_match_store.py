@@ -44,6 +44,7 @@ def test_match_store_persists_summary_and_details() -> None:
     store.upsert_match_detail(1, {"match_id": 1, "players": [{"account_id": 123, "last_hits": 250}]})
     assert store.get_match_ids_without_details(123, game_mode=23) == []
     assert store.get_match_detail(1) == {"match_id": 1, "players": [{"account_id": 123, "last_hits": 250}]}
+    assert store.get_latest_player_match_update(123, game_mode=23) is not None
 
 
 class _FakeClient:
@@ -272,3 +273,33 @@ def test_cached_turbo_hero_overview_enriches_missing_viper_economy_and_damage_fr
     assert rows[0]["avg_damage"] == 20800.0
     assert rows[0]["max_hero_damage"] == 26000
     assert client.calls == 0
+
+
+def test_cached_sync_state_exposes_latest_match_update_timestamp() -> None:
+    client = _FakeClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 1,
+                "start_time": 1738540800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 5,
+                "deaths": 2,
+                "assists": 9,
+                "duration": 1800,
+                "hero_id": 1,
+            }
+        ],
+    )
+
+    state = service.get_cached_sync_state(123, game_mode=23)
+
+    assert state is not None
+    assert state["known_match_count"] == 1
+    assert state["latest_match_update_at"]

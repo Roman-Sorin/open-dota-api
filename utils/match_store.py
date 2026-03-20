@@ -329,3 +329,22 @@ class SQLiteMatchStore:
                 (int(account_id), int(game_mode)),
             ).fetchone()
         return int(row["total"]) if row is not None else 0
+
+    def get_latest_player_match_update(self, account_id: int, game_mode: int | None = None) -> str | None:
+        if game_mode is None:
+            row = self._conn.execute(
+                "SELECT MAX(updated_at) AS latest_updated_at FROM player_matches WHERE account_id = ?",
+                (int(account_id),),
+            ).fetchone()
+        else:
+            row = self._conn.execute(
+                """
+                SELECT MAX(updated_at) AS latest_updated_at
+                FROM player_matches
+                WHERE account_id = ? AND (game_mode = ? OR game_mode IS NULL)
+                """,
+                (int(account_id), int(game_mode)),
+            ).fetchone()
+        if row is None:
+            return None
+        return str(row["latest_updated_at"]) if row["latest_updated_at"] is not None else None

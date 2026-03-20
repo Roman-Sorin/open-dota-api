@@ -632,6 +632,17 @@ def _is_section_stale(section_loaded_at: str | None, dashboard_loaded_at: str | 
     return section_loaded_at < dashboard_loaded_at
 
 
+def _coalesce_dashboard_cache_timestamp(sync_state: dict[str, object] | None) -> str | None:
+    if not isinstance(sync_state, dict):
+        return None
+    timestamps = [
+        str(sync_state.get("last_incremental_sync_at") or ""),
+        str(sync_state.get("latest_match_update_at") or ""),
+    ]
+    normalized = [value for value in timestamps if value]
+    return max(normalized) if normalized else None
+
+
 def _store_dashboard_state(
     *,
     player_raw_value: str,
@@ -781,6 +792,19 @@ if "overview" in st.session_state and _overview_looks_stale(st.session_state.get
     st.session_state.pop("patch_filtered_matches", None)
     _clear_detail_sections()
 
+if "overview" in st.session_state:
+    try:
+        cached_player_id = parse_player_id(st.session_state.get("player_raw", player_raw))
+        cached_overview_state = service.get_cached_sync_state(cached_player_id, game_mode=23)
+        latest_cache_timestamp = _coalesce_dashboard_cache_timestamp(cached_overview_state)
+        dashboard_loaded_at = st.session_state.get("dashboard_loaded_at")
+        if latest_cache_timestamp and dashboard_loaded_at and str(dashboard_loaded_at) < latest_cache_timestamp:
+            st.session_state.pop("overview", None)
+            st.session_state.pop("patch_filtered_matches", None)
+            _clear_detail_sections()
+    except Exception:  # noqa: BLE001
+        pass
+
 if "overview" not in st.session_state:
     try:
         active_days = days if time_filter_mode == "Days" else None
@@ -831,7 +855,7 @@ if "overview" not in st.session_state:
                     patch_filtered_matches_value=patch_filtered_matches,
                     min_hero_matches_value=min_hero_matches,
                     min_item_matches_value=min_item_matches,
-                    loaded_at_value=str(cached_sync_state.get("last_incremental_sync_at") or _utcnow_iso()),
+                    loaded_at_value=str(_coalesce_dashboard_cache_timestamp(cached_sync_state) or _utcnow_iso()),
                     cache_only=True,
                 )
     except ValidationError:

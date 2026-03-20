@@ -561,7 +561,22 @@ class DotaAnalyticsService:
     def get_cached_sync_state(self, player_id: int, game_mode: int | None = None) -> dict[str, Any] | None:
         if self.match_store is None:
             return None
-        return self.match_store.get_sync_state(player_id, self._sync_scope_key(game_mode))
+        state = self.match_store.get_sync_state(player_id, self._sync_scope_key(game_mode))
+        latest_update = self.match_store.get_latest_player_match_update(player_id, game_mode=game_mode)
+        if state is None:
+            if latest_update is None:
+                return None
+            return {
+                "account_id": int(player_id),
+                "scope_key": self._sync_scope_key(game_mode),
+                "last_incremental_sync_at": None,
+                "last_full_sync_at": None,
+                "known_match_count": self.match_store.count_player_matches(player_id, game_mode),
+                "latest_match_update_at": latest_update,
+            }
+        merged = dict(state)
+        merged["latest_match_update_at"] = latest_update
+        return merged
 
     def build_stats(self, matches: list[MatchSummary]) -> StatsResult:
         total = len(matches)
