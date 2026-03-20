@@ -16,6 +16,7 @@ Turbo-only dashboard for your account:
   - default baseline/start is `2026-01-21`
 - Hero overview in Turbo (matches, won matches, lost matches, WR, avg K/D/A, avg duration, avg net worth, avg damage, KDA, max kills, max hero damage)
 - Hero overview highlights won matches in green and lost matches in red
+- Hero Overview column labels stay short and English-only: `All`, `Won`, `Lost`, `WR`, `Dur`, `NW`, `Dmg`
 - All winrates in the UI use the same colors: below `50%` red, exactly `50%` yellow, above `50%` green
 - Hero overview and detailed hero stats now share one metric-definition source in the UI, so added hero fields stay aligned in both places
 - Hero overview aggregation now also comes from one shared service-side stats source, so values like `Rad WR` and `Dire WR` stay identical between overview and detailed hero stats

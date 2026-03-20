@@ -24,6 +24,13 @@ from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateL
 from utils.helpers import format_duration, parse_player_id
 from utils.match_store import SQLiteMatchStore
 from webapp.dashboard_state import build_hero_snapshot_request_key
+from webapp.hero_overview import (
+    HERO_LOSSES_COLUMN,
+    HERO_MATCHES_COLUMN,
+    HERO_OVERVIEW_COLUMN_ORDER,
+    HERO_WINS_COLUMN,
+    build_hero_overview_row,
+)
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
@@ -404,7 +411,7 @@ HERO_METRIC_COLUMNS: list[tuple[str, str, callable]] = [
             f"{round(float(row.get('avg_assists', 0.0)))}"
         ),
     ),
-    ("KDA", "KDA", lambda row: round(float(row.get("kda", 0.0)), 1)),
+    ("KDA", "KDA", lambda row: f"{float(row.get('kda', 0.0)):.1f}"),
     ("Avg Dur", "Avg Duration", lambda row: format_duration(int(round(float(row.get("avg_duration_seconds", 0.0)))))),
     ("Avg NW", "Avg Net Worth", lambda row: round(float(row.get("avg_net_worth", 0.0)))),
     ("Avg Dmg", "Avg Damage", lambda row: round(float(row.get("avg_damage", 0.0)))),
@@ -413,20 +420,6 @@ HERO_METRIC_COLUMNS: list[tuple[str, str, callable]] = [
     ("Rad WR", "Radiant WR", lambda row: f"{round(float(row.get('radiant_wr', 0.0)))}%"),
     ("Dire WR", "Dire WR", lambda row: f"{round(float(row.get('dire_wr', 0.0)))}%"),
 ]
-HERO_WINS_COLUMN = "Матчи выигранные"
-HERO_LOSSES_COLUMN = "Матчи проигранные"
-
-
-def build_hero_metric_table_row(row: dict[str, object]) -> dict[str, object]:
-    table_row: dict[str, object] = {
-        "Icon": row.get("hero_image", ""),
-        "Hero": row["hero"],
-        HERO_WINS_COLUMN: int(row.get("wins", 0)),
-        HERO_LOSSES_COLUMN: int(row.get("losses", 0)),
-    }
-    for column_label, _, value_builder in HERO_METRIC_COLUMNS:
-        table_row[column_label] = value_builder(row)
-    return table_row
 
 
 def build_hero_metric_cards(row: dict[str, object]) -> list[tuple[str, str]]:
@@ -995,17 +988,11 @@ if not filtered_overview:
     st.warning(f"No heroes with at least {min_hero_matches} matches for selected period.")
     st.stop()
 
-hero_table = [build_hero_metric_table_row(row) for row in filtered_overview]
+hero_table = [build_hero_overview_row(row) for row in filtered_overview]
 hero_rows_by_id = {int(row["hero_id"]): row for row in filtered_overview}
 hero_ids = list(hero_rows_by_id.keys())
 
-hero_table_df = pd.DataFrame(hero_table)
-if not hero_table_df.empty and "Avg NW" in hero_table_df.columns:
-    hero_table_df["Avg NW"] = hero_table_df["Avg NW"].astype("int64")
-if not hero_table_df.empty and "Avg Dmg" in hero_table_df.columns:
-    hero_table_df["Avg Dmg"] = hero_table_df["Avg Dmg"].astype("int64")
-if not hero_table_df.empty and "Max Dmg" in hero_table_df.columns:
-    hero_table_df["Max Dmg"] = hero_table_df["Max Dmg"].astype("int64")
+hero_table_df = pd.DataFrame(hero_table, columns=HERO_OVERVIEW_COLUMN_ORDER)
 hero_table_styler = hero_table_df.style
 if not hero_table_df.empty:
     hero_table_styler = hero_table_styler.applymap(

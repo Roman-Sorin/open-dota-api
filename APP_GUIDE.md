@@ -13,6 +13,7 @@ The project includes two interfaces:
 
 - Turbo-only hero overview (matches, won matches, lost matches, winrate, avg duration, avg net worth, avg damage, max kills, max hero damage)
 - Hero Overview shows won matches in green and lost matches in red
+- Hero Overview column labels stay short and English-only: `All`, `Won`, `Lost`, `WR`, `Dur`, `NW`, `Dmg`
 - Hero Overview and Detailed Turbo Stats use one shared metric-definition list in UI code, so hero fields stay synchronized between both sections
 - Hero Overview rows are also built from the same service-side stats aggregation used by Detailed Turbo Stats, so `Radiant WR` / `Dire WR` and other hero metrics stay consistent
 - All winrate values in the UI use the same colors: below `50%` red, exactly `50%` yellow, above `50%` green
