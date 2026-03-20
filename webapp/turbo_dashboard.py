@@ -391,6 +391,10 @@ def colored_winrate_html(value: float) -> str:
     return f'<span style="color: {winrate_color(float(value))}; font-weight: 700;">{rounded}%</span>'
 
 
+def colored_metric_html(value: object, color: str) -> str:
+    return f'<span style="color: {color}; font-weight: 700;">{value}</span>'
+
+
 def _style_winrate_cell(value: object) -> str:
     text = str(value).strip().replace("%", "")
     try:
@@ -400,7 +404,7 @@ def _style_winrate_cell(value: object) -> str:
     return f"color: {winrate_color(numeric_value)}; font-weight: 700;"
 
 
-WINRATE_CARD_LABELS = {"WR", "Rad WR", "Dire WR"}
+WINRATE_CARD_LABELS = {"Winrate", "Radiant WR", "Dire WR"}
 
 
 def show_error(exc: Exception) -> None:
@@ -1090,7 +1094,7 @@ if hero_matches_loaded:
         stats_html = "".join(
             (
                 f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">'
-                f'{colored_winrate_html(float(value.strip("%")) if isinstance(value, str) else float(value)) if label in WINRATE_CARD_LABELS else value}'
+                f"{colored_winrate_html(float(value.strip('%')) if isinstance(value, str) else float(value)) if label in WINRATE_CARD_LABELS else colored_metric_html(value, '#23a55a') if label == 'Won Matches' else colored_metric_html(value, '#d9534f') if label == 'Lost Matches' else value}"
                 "</div></div>"
             )
             for label, value in stats_cards

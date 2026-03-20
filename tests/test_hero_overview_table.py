@@ -63,6 +63,6 @@ def test_hero_detail_cards_stay_in_same_order_as_shared_overview_metrics() -> No
     detail_cards = build_hero_detail_cards(source)
 
     assert [label for label, _ in detail_cards] == HERO_DETAIL_METRIC_ORDER
-    assert detail_cards[0] == (HERO_MATCHES_COLUMN, "63")
-    assert detail_cards[1] == (HERO_WINS_COLUMN, "38")
-    assert detail_cards[2] == (HERO_LOSSES_COLUMN, "25")
+    assert detail_cards[0] == ("Matches", "63")
+    assert detail_cards[1] == ("Won Matches", "38")
+    assert detail_cards[2] == ("Lost Matches", "25")
