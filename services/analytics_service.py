@@ -1071,9 +1071,6 @@ class DotaAnalyticsService:
 
         appear_counter: Counter[int] = Counter()
         win_counter: Counter[int] = Counter()
-        kills_sum: Counter[int] = Counter()
-        deaths_sum: Counter[int] = Counter()
-        assists_sum: Counter[int] = Counter()
 
         fallback_detail_calls = 0
         max_fallback_detail_calls = 35
@@ -1098,18 +1095,12 @@ class DotaAnalyticsService:
                 appear_counter[item_id] += 1
                 if match.did_win:
                     win_counter[item_id] += 1
-                kills_sum[item_id] += int(match.kills)
-                deaths_sum[item_id] += int(match.deaths)
-                assists_sum[item_id] += int(match.assists)
 
         rows: list[dict[str, Any]] = []
         for item_id, appearances in appear_counter.items():
             if appearances <= 0:
                 continue
             wins = win_counter[item_id]
-            avg_k = kills_sum[item_id] / appearances
-            avg_d = deaths_sum[item_id] / appearances
-            avg_a = assists_sum[item_id] / appearances
             rows.append(
                 {
                     "item_id": item_id,
@@ -1119,10 +1110,6 @@ class DotaAnalyticsService:
                     "item_pick_rate": winrate_percent(appearances, total),
                     "wins_with_item": wins,
                     "item_winrate": winrate_percent(wins, appearances),
-                    "avg_kills_with_item": avg_k,
-                    "avg_deaths_with_item": avg_d,
-                    "avg_assists_with_item": avg_a,
-                    "kda_with_item": calculate_kda_ratio(avg_k, avg_d, avg_a),
                 }
             )
 

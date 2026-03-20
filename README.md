@@ -13,7 +13,10 @@ Turbo-only dashboard for your account:
   - period in days, or
   - multi-select patches (e.g. `7.40`, `7.40c`, `7.39b`)
   - explicit `Start Date` mode
-- Hero overview in Turbo (matches, WR, avg K/D/A, avg duration, avg net worth, avg damage, KDA, max kills, max hero damage)
+  - default baseline/start is `2026-01-21`
+- Hero overview in Turbo (matches, won matches, lost matches, WR, avg K/D/A, avg duration, avg net worth, avg damage, KDA, max kills, max hero damage)
+- Hero overview highlights won matches in green and lost matches in red
+- All winrates in the UI use the same colors: below `50%` red, exactly `50%` yellow, above `50%` green
 - Hero overview and detailed hero stats now share one metric-definition source in the UI, so added hero fields stay aligned in both places
 - Hero overview aggregation now also comes from one shared service-side stats source, so values like `Rad WR` and `Dire WR` stay identical between overview and detailed hero stats
 - When Turbo match rows miss `hero_damage` or `net_worth`, the app enriches overview/detail stats from match details stored locally
@@ -28,6 +31,7 @@ Turbo-only dashboard for your account:
 - Detail-section caches are scoped to the current dashboard snapshot so old hero/recent/item rows are not reused after the overview changes
 - Section actions are refresh actions now; if dashboard data is newer than a section cache, the UI shows a stale hint instead of silently hiding that fact
 - Item winrates (when item appears in final slots), with match count shown
+- Item winrates no longer show Avg K/D/A or derived KDA columns
 - Recent hero matches shown as a compact one-row-per-match table under the item table
 - Recent hero matches show only final slots, and item timings are shown only when the final item completion time is available
 - Recent hero matches include `Net Worth` and player `Hero Damage`

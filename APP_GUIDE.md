@@ -11,12 +11,15 @@ The project includes two interfaces:
 
 ## Main capabilities
 
-- Turbo-only hero overview (matches, wins, losses, winrate, avg duration, avg net worth, avg damage, max kills, max hero damage)
+- Turbo-only hero overview (matches, won matches, lost matches, winrate, avg duration, avg net worth, avg damage, max kills, max hero damage)
+- Hero Overview shows won matches in green and lost matches in red
 - Hero Overview and Detailed Turbo Stats use one shared metric-definition list in UI code, so hero fields stay synchronized between both sections
 - Hero Overview rows are also built from the same service-side stats aggregation used by Detailed Turbo Stats, so `Radiant WR` / `Dire WR` and other hero metrics stay consistent
+- All winrate values in the UI use the same colors: below `50%` red, exactly `50%` yellow, above `50%` green
 - Hero overview avg damage/net worth use match-detail fallback when player match rows don't include `hero_damage` or `net_worth`
 - Dashboard summary cards: Turbo matches, wins, losses, winrate
 - Time filter modes: `Days`, `Patches`, `Start Date`
+- Default baseline/start date is `2026-01-21`
 - Dashboard sections load manually and independently to reduce one-shot API work on page open
 - If matching dashboard data already exists in local SQLite storage, the app restores Hero Overview automatically on page load for the current filters
 - `Refresh Turbo Dashboard` fetches/syncs the hero overview from OpenDota when you want newer matches
@@ -27,6 +30,7 @@ The project includes two interfaces:
 - If the dashboard was refreshed later than a section, the section shows a hint that it should be rebuilt from the current dashboard snapshot with `Refresh ...`
 - Most frequent final items
 - Item winrate table (wins with item / matches with item), includes per-item match count
+- Item winrate table no longer shows Avg K/D/A or derived KDA columns
 - Item winrate table is sorted by highest item winrate first (ties by larger sample)
 - Dashboard filter `Min matches per item` defaults to `3`
 - Recent hero matches are displayed as a compact table below the item table

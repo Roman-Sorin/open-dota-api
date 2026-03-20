@@ -65,3 +65,7 @@ def test_item_winrates_sorted_by_winrate_then_matches() -> None:
     assert [row["item"] for row in rows] == ["Manta Style", "Black King Bar", "Nullifier"]
     assert rows[0]["item_winrate"] == 100.0
     assert rows[0]["matches_with_item"] == 2
+    assert "avg_kills_with_item" not in rows[0]
+    assert "avg_deaths_with_item" not in rows[0]
+    assert "avg_assists_with_item" not in rows[0]
+    assert "kda_with_item" not in rows[0]

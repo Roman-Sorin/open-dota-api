@@ -309,7 +309,7 @@ def get_app_version() -> str:
 
 
 def get_default_days_period() -> int:
-    start_date = date(2026, 1, 22)
+    start_date = date(2026, 1, 21)
     today = datetime.now().date()
     days = max((today - start_date).days, 7)
     return min(days, 365)
@@ -371,6 +371,28 @@ def kda_bar_segments(kills: int, deaths: int, assists: int) -> tuple[float, floa
     )
 
 
+def winrate_color(value: float) -> str:
+    if value > 50.0:
+        return "#23a55a"
+    if value < 50.0:
+        return "#d9534f"
+    return "#d4a017"
+
+
+def colored_winrate_html(value: float) -> str:
+    rounded = round(float(value))
+    return f'<span style="color: {winrate_color(float(value))}; font-weight: 700;">{rounded}%</span>'
+
+
+def _style_winrate_cell(value: object) -> str:
+    text = str(value).strip().replace("%", "")
+    try:
+        numeric_value = float(text)
+    except ValueError:
+        return ""
+    return f"color: {winrate_color(numeric_value)}; font-weight: 700;"
+
+
 HERO_METRIC_COLUMNS: list[tuple[str, str, callable]] = [
     ("Matches", "Matches", lambda row: int(row.get("matches", 0))),
     ("WR", "Winrate", lambda row: f"{round(float(row.get('winrate', 0.0)))}%"),
@@ -392,12 +414,16 @@ HERO_METRIC_COLUMNS: list[tuple[str, str, callable]] = [
     ("Rad WR", "Radiant WR", lambda row: f"{round(float(row.get('radiant_wr', 0.0)))}%"),
     ("Dire WR", "Dire WR", lambda row: f"{round(float(row.get('dire_wr', 0.0)))}%"),
 ]
+HERO_WINS_COLUMN = "Матчи выигранные"
+HERO_LOSSES_COLUMN = "Матчи проигранные"
 
 
 def build_hero_metric_table_row(row: dict[str, object]) -> dict[str, object]:
     table_row: dict[str, object] = {
         "Icon": row.get("hero_image", ""),
         "Hero": row["hero"],
+        HERO_WINS_COLUMN: int(row.get("wins", 0)),
+        HERO_LOSSES_COLUMN: int(row.get("losses", 0)),
     }
     for column_label, _, value_builder in HERO_METRIC_COLUMNS:
         table_row[column_label] = value_builder(row)
@@ -407,7 +433,16 @@ def build_hero_metric_table_row(row: dict[str, object]) -> dict[str, object]:
 def build_hero_metric_cards(row: dict[str, object]) -> list[tuple[str, str]]:
     cards: list[tuple[str, str]] = []
     for _, card_label, value_builder in HERO_METRIC_COLUMNS:
-        cards.append((card_label, str(value_builder(row))))
+        value = value_builder(row)
+        if card_label in {"Winrate", "Radiant WR", "Dire WR"}:
+            source_key = {
+                "Winrate": "winrate",
+                "Radiant WR": "radiant_wr",
+                "Dire WR": "dire_wr",
+            }[card_label]
+            cards.append((card_label, colored_winrate_html(float(row.get(source_key, 0.0)))))
+            continue
+        cards.append((card_label, str(value)))
     return cards
 
 
@@ -554,91 +589,6 @@ def _build_patch_options(patch_timeline: list[tuple[int, str]]) -> list[str]:
 
 def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnalyticsService) -> list[dict]:
     return service.build_turbo_hero_overview_rows(matches)
-
-
-def _ensure_item_rows_have_kda(
-    item_rows: list[dict],
-    matches: list[MatchSummary],
-    service: DotaAnalyticsService,
-    player_id: int,
-) -> list[dict]:
-    if not item_rows:
-        return item_rows
-    if all("avg_kills_with_item" in row and "kda_with_item" in row for row in item_rows):
-        return item_rows
-
-    target_item_ids = {int(row.get("item_id") or 0) for row in item_rows}
-    target_item_ids.discard(0)
-
-    per_item: dict[int, dict[str, float]] = {
-        item_id: {"appearances": 0, "kills": 0.0, "deaths": 0.0, "assists": 0.0}
-        for item_id in target_item_ids
-    }
-
-    total_matches = max(len(matches), 1)
-    global_kills = sum(int(m.kills) for m in matches)
-    global_deaths = sum(int(m.deaths) for m in matches)
-    global_assists = sum(int(m.assists) for m in matches)
-    global_avg_k = global_kills / total_matches
-    global_avg_d = global_deaths / total_matches
-    global_avg_a = global_assists / total_matches
-
-    fallback_detail_calls = 0
-    max_fallback_detail_calls = 45
-
-    for match in matches:
-        item_ids = [
-            int(getattr(match, "item_0", 0) or 0),
-            int(getattr(match, "item_1", 0) or 0),
-            int(getattr(match, "item_2", 0) or 0),
-            int(getattr(match, "item_3", 0) or 0),
-            int(getattr(match, "item_4", 0) or 0),
-            int(getattr(match, "item_5", 0) or 0),
-        ]
-        if not any(item_ids) and fallback_detail_calls < max_fallback_detail_calls:
-            try:
-                details = service._get_match_details_cached(match.match_id)  # noqa: SLF001
-                fallback_detail_calls += 1
-                player_row = service._extract_player_from_match_details(  # noqa: SLF001
-                    details,
-                    player_id=player_id,
-                    player_slot=match.player_slot,
-                )
-                if player_row:
-                    item_ids = service._player_row_item_ids(player_row)  # noqa: SLF001
-            except OpenDotaRateLimitError:
-                pass
-
-        item_ids = set(item_ids)
-        item_ids.discard(0)
-        for item_id in item_ids:
-            if item_id not in per_item:
-                continue
-            bucket = per_item[item_id]
-            bucket["appearances"] += 1
-            bucket["kills"] += float(match.kills)
-            bucket["deaths"] += float(match.deaths)
-            bucket["assists"] += float(match.assists)
-
-    for row in item_rows:
-        item_id = int(row.get("item_id") or 0)
-        bucket = per_item.get(item_id)
-        if bucket and bucket["appearances"] > 0:
-            avg_k = bucket["kills"] / bucket["appearances"]
-            avg_d = bucket["deaths"] / bucket["appearances"]
-            avg_a = bucket["assists"] / bucket["appearances"]
-        else:
-            # Last-resort fallback for missing item-slot coverage.
-            avg_k = global_avg_k
-            avg_d = global_avg_d
-            avg_a = global_avg_a
-
-        row["avg_kills_with_item"] = avg_k
-        row["avg_deaths_with_item"] = avg_d
-        row["avg_assists_with_item"] = avg_a
-        row["kda_with_item"] = (avg_k + avg_a) / avg_d if avg_d > 0 else (avg_k + avg_a)
-
-    return item_rows
 
 
 def _overview_looks_stale(overview: object) -> bool:
@@ -816,7 +766,7 @@ with st.sidebar:
     )
 
     days = st.session_state.get("days", get_default_days_period())
-    start_date_value = st.session_state.get("start_date", date(2026, 1, 22))
+    start_date_value = st.session_state.get("start_date", date(2026, 1, 21))
     selected_patches = st.session_state.get("selected_patches", [])
     if time_filter_mode == "Days":
         days = st.slider("Period (days)", min_value=7, max_value=365, value=days, step=1)
@@ -1031,7 +981,7 @@ top_cards = [
     ("Turbo Matches", f"{total_matches}"),
     ("Turbo Wins", f"{total_wins}"),
     ("Turbo Losses", f"{total_losses}"),
-    ("Turbo Winrate", f"{round(overall_wr)}%"),
+    ("Turbo Winrate", colored_winrate_html(overall_wr)),
 ]
 top_html = "".join(
     f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div></div>'
@@ -1057,9 +1007,21 @@ if not hero_table_df.empty and "Avg Dmg" in hero_table_df.columns:
     hero_table_df["Avg Dmg"] = hero_table_df["Avg Dmg"].astype("int64")
 if not hero_table_df.empty and "Max Dmg" in hero_table_df.columns:
     hero_table_df["Max Dmg"] = hero_table_df["Max Dmg"].astype("int64")
+hero_table_styler = hero_table_df.style
+if not hero_table_df.empty:
+    hero_table_styler = hero_table_styler.applymap(
+        lambda _: "color: #23a55a; font-weight: 700;",
+        subset=[HERO_WINS_COLUMN],
+    ).applymap(
+        lambda _: "color: #d9534f; font-weight: 700;",
+        subset=[HERO_LOSSES_COLUMN],
+    ).applymap(
+        _style_winrate_cell,
+        subset=["WR", "Rad WR", "Dire WR"],
+    )
 
 st.dataframe(
-    hero_table_df,
+    hero_table_styler,
     use_container_width=True,
     hide_index=True,
     column_config={
@@ -1087,7 +1049,7 @@ st.markdown(
         "<div>"
         f'<div class="hero-select-name">{selected_hero_name}</div>'
         f'<div class="hero-select-meta">{int(selected_hero_row["matches"])} matches - '
-        f'{round(float(selected_hero_row["winrate"]))}% WR - KDA {round(float(selected_hero_row["kda"]), 1)}</div>'
+        f'{colored_winrate_html(float(selected_hero_row["winrate"]))} WR - KDA {round(float(selected_hero_row["kda"]), 1)}</div>'
         "</div>"
         "</div>"
     ),
@@ -1187,7 +1149,6 @@ if load_item_winrates:
         )
         item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50)
         item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
-        item_wr_rows = _ensure_item_rows_have_kda(item_wr_rows, matches, service, player_id)
         item_wr_rows.sort(
             key=lambda row: (
                 -round(float(row.get("item_winrate", 0.0))),
@@ -1212,23 +1173,23 @@ if isinstance(item_wr_rows, list):
     if item_section_stale:
         st.caption("Item stats were loaded before the latest dashboard refresh. Click `Refresh Item Winrates` to rebuild this section from the current dashboard snapshot.")
     if item_wr_rows:
-        item_winrate_table = [
-            {
-                "Icon": row.get("item_image", ""),
-                "Item": row["item"],
-                "Item Winrate": round(float(row["item_winrate"])),
-                "Matches": int(row.get("matches_with_item", 0)),
-                "Avg K/D/A": (
-                    f"{round(float(row.get('avg_kills_with_item', 0.0)))}/"
-                    f"{round(float(row.get('avg_deaths_with_item', 0.0)))}/"
-                    f"{round(float(row.get('avg_assists_with_item', 0.0)))}"
-                ),
-                "KDA": round(float(row.get("kda_with_item", 0.0)), 1),
-            }
-            for row in item_wr_rows
-        ]
+        item_winrate_table = pd.DataFrame(
+            [
+                {
+                    "Icon": row.get("item_image", ""),
+                    "Item": row["item"],
+                    "Item Winrate": round(float(row["item_winrate"])),
+                    "Matches": int(row.get("matches_with_item", 0)),
+                }
+                for row in item_wr_rows
+            ]
+        )
+        item_winrate_styler = item_winrate_table.style.applymap(
+            _style_winrate_cell,
+            subset=["Item Winrate"],
+        )
         st.dataframe(
-            item_winrate_table,
+            item_winrate_styler,
             use_container_width=True,
             hide_index=True,
             column_config={
