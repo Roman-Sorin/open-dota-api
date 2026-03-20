@@ -32,6 +32,7 @@ from webapp.hero_overview import (
     build_hero_detail_cards,
     build_hero_overview_row,
 )
+from webapp.hero_trends import build_rolling_trend_points, build_weekly_trend_points
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
@@ -643,6 +644,20 @@ def _coalesce_dashboard_cache_timestamp(sync_state: dict[str, object] | None) ->
     return max(normalized) if normalized else None
 
 
+TREND_METRIC_LABELS: dict[str, str] = {
+    "winrate": "WR",
+    "kda": "KDA",
+    "avg_net_worth": "NW",
+    "avg_damage": "Dmg",
+    "matches": "Matches",
+    "wins": "Won",
+    "losses": "Lost",
+    "avg_duration_minutes": "Dur",
+    "radiant_wr": "Rad WR",
+    "dire_wr": "Dire WR",
+}
+
+
 def _store_dashboard_state(
     *,
     player_raw_value: str,
@@ -1133,6 +1148,81 @@ if hero_matches_loaded:
         st.warning("No matches for selected hero with current Turbo filter.")
 else:
     st.info("Hero details load automatically from cache when available. Click `Refresh Hero Details` to build this section from the current dashboard snapshot.")
+
+st.markdown("### Hero Trends")
+trend_bucket_key = f"hero_trends_bucket_{current_hero_snapshot_key}"
+trend_metrics_key = f"hero_trends_metrics_{current_hero_snapshot_key}"
+trend_bucket_options = {
+    "Weekly": "weekly",
+    "Rolling 5": "rolling_5",
+    "Rolling 10": "rolling_10",
+    "Rolling 20": "rolling_20",
+}
+trend_metric_defaults = ["winrate", "kda", "avg_net_worth", "avg_damage", "matches"]
+
+trend_col_1, trend_col_2 = st.columns((1, 2))
+with trend_col_1:
+    selected_trend_bucket = st.selectbox(
+        "Trend View",
+        options=list(trend_bucket_options.keys()),
+        key=trend_bucket_key,
+    )
+with trend_col_2:
+    selected_trend_metrics = st.multiselect(
+        "Trend Metrics",
+        options=list(TREND_METRIC_LABELS.keys()),
+        default=trend_metric_defaults,
+        format_func=lambda metric: TREND_METRIC_LABELS[metric],
+        key=trend_metrics_key,
+    )
+
+if hero_matches_loaded:
+    matches = matches or []
+    if matches:
+        trend_mode = trend_bucket_options[selected_trend_bucket]
+        if trend_mode == "weekly":
+            trend_points = build_weekly_trend_points(matches, service.build_stats)
+        else:
+            window_size = int(trend_mode.split("_")[1])
+            trend_points = build_rolling_trend_points(matches, service.build_stats, window_size=window_size)
+
+        if not trend_points:
+            required_matches = "at least 1 weekly bucket" if trend_mode == "weekly" else f"at least {window_size} matches"
+            st.info(f"Not enough matches to build trends for {required_matches}.")
+        elif not selected_trend_metrics:
+            st.info("Select at least one trend metric.")
+        else:
+            trend_df = pd.DataFrame(
+                [
+                    {
+                        "Label": point.label,
+                        **{TREND_METRIC_LABELS[key]: getattr(point, key) for key in selected_trend_metrics},
+                    }
+                    for point in trend_points
+                ]
+            ).set_index("Label")
+
+            if "WR" in trend_df.columns:
+                trend_df["WR"] = trend_df["WR"].round(2)
+            if "KDA" in trend_df.columns:
+                trend_df["KDA"] = trend_df["KDA"].round(2)
+            if "NW" in trend_df.columns:
+                trend_df["NW"] = trend_df["NW"].round(0)
+            if "Dmg" in trend_df.columns:
+                trend_df["Dmg"] = trend_df["Dmg"].round(0)
+            if "Dur" in trend_df.columns:
+                trend_df["Dur"] = trend_df["Dur"].round(1)
+            if "Rad WR" in trend_df.columns:
+                trend_df["Rad WR"] = trend_df["Rad WR"].round(2)
+            if "Dire WR" in trend_df.columns:
+                trend_df["Dire WR"] = trend_df["Dire WR"].round(2)
+
+            st.line_chart(trend_df, use_container_width=True)
+            st.dataframe(trend_df, use_container_width=True)
+    else:
+        st.info("No matches available for hero trends with current filter.")
+else:
+    st.info("Hero trends use the same hero-match dataset as Detailed Turbo Stats. Click `Refresh Hero Details` to populate this section.")
 
 if load_item_winrates:
     try:
