@@ -606,8 +606,9 @@ def test_recent_hero_matches_use_final_slots_with_matching_final_item_timings() 
     assert rows[0].hero_variant == 2
     assert rows[0].net_worth == 26173
     assert rows[0].hero_damage == 15592
-    assert [item.item_id for item in rows[0].items] == [63, 114, 160, 151, 108, 1]
-    assert [item.purchase_time_min for item in rows[0].items] == [3, 5, 23, 9, 17, 12]
+    assert rows[0].kda_ratio == 9.0
+    assert [item.item_id for item in rows[0].items] == [63, 114, 151, 1, 108, 160]
+    assert [item.purchase_time_min for item in rows[0].items] == [3, 5, 9, 12, 17, 23]
 
 
 def test_turbo_hero_overview_matches_reported_muerta_example() -> None:

@@ -36,7 +36,9 @@ The project includes two interfaces:
 - Dashboard filter `Min matches per item` defaults to `3`
 - Recent hero matches are displayed as a compact table below the item table
 - Recent hero matches show final item slots only; timings are attached only to those final items when available from match details
+- When final-item timings are available, recent-match items are ordered by earliest completion time
 - Recent hero matches include `Net Worth` and player `Hero Damage`
+- Recent hero matches show both `K/D/A` and per-match `KDA` rounded to one decimal
 - Recent hero matches support incremental loading via `Load 10 more matches`
 - Supports player input as account id or OpenDota profile URL
 - Local `SQLite` storage for player match summaries

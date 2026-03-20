@@ -25,10 +25,11 @@ from utils.helpers import format_duration, parse_player_id
 from utils.match_store import SQLiteMatchStore
 from webapp.dashboard_state import build_hero_snapshot_request_key
 from webapp.hero_overview import (
+    HERO_DETAIL_METRIC_ORDER,
     HERO_LOSSES_COLUMN,
-    HERO_MATCHES_COLUMN,
     HERO_OVERVIEW_COLUMN_ORDER,
     HERO_WINS_COLUMN,
+    build_hero_detail_cards,
     build_hero_overview_row,
 )
 
@@ -399,43 +400,7 @@ def _style_winrate_cell(value: object) -> str:
     return f"color: {winrate_color(numeric_value)}; font-weight: 700;"
 
 
-HERO_METRIC_COLUMNS: list[tuple[str, str, callable]] = [
-    ("Matches", "Matches", lambda row: int(row.get("matches", 0))),
-    ("WR", "Winrate", lambda row: f"{round(float(row.get('winrate', 0.0)))}%"),
-    (
-        "Avg K/D/A",
-        "Avg K/D/A",
-        lambda row: (
-            f"{round(float(row.get('avg_kills', 0.0)))}/"
-            f"{round(float(row.get('avg_deaths', 0.0)))}/"
-            f"{round(float(row.get('avg_assists', 0.0)))}"
-        ),
-    ),
-    ("KDA", "KDA", lambda row: f"{float(row.get('kda', 0.0)):.1f}"),
-    ("Avg Dur", "Avg Duration", lambda row: format_duration(int(round(float(row.get("avg_duration_seconds", 0.0)))))),
-    ("Avg NW", "Avg Net Worth", lambda row: round(float(row.get("avg_net_worth", 0.0)))),
-    ("Avg Dmg", "Avg Damage", lambda row: round(float(row.get("avg_damage", 0.0)))),
-    ("Max K", "Max Kills", lambda row: int(row.get("max_kills", 0))),
-    ("Max Dmg", "Max Damage", lambda row: int(row.get("max_hero_damage", 0))),
-    ("Rad WR", "Radiant WR", lambda row: f"{round(float(row.get('radiant_wr', 0.0)))}%"),
-    ("Dire WR", "Dire WR", lambda row: f"{round(float(row.get('dire_wr', 0.0)))}%"),
-]
-
-
-def build_hero_metric_cards(row: dict[str, object]) -> list[tuple[str, str]]:
-    cards: list[tuple[str, str]] = []
-    for _, card_label, value_builder in HERO_METRIC_COLUMNS:
-        value = value_builder(row)
-        if card_label in {"Winrate", "Radiant WR", "Dire WR"}:
-            source_key = {
-                "Winrate": "winrate",
-                "Radiant WR": "radiant_wr",
-                "Dire WR": "dire_wr",
-            }[card_label]
-            cards.append((card_label, colored_winrate_html(float(row.get(source_key, 0.0)))))
-            continue
-        cards.append((card_label, str(value)))
-    return cards
+WINRATE_CARD_LABELS = {"WR", "Rad WR", "Dire WR"}
 
 
 def show_error(exc: Exception) -> None:
@@ -1024,7 +989,16 @@ def _hero_option_label(hero_id: int) -> str:
     )
 
 
-selected_hero_id = st.selectbox("Select Hero", options=hero_ids, format_func=_hero_option_label)
+default_hero_id = next(
+    (hero_id for hero_id in hero_ids if service.resolve_hero_name(hero_id) == "Wraith King"),
+    hero_ids[0],
+)
+selected_hero_id = st.selectbox(
+    "Select Hero",
+    options=hero_ids,
+    index=hero_ids.index(default_hero_id),
+    format_func=_hero_option_label,
+)
 selected_hero_row = hero_rows_by_id[selected_hero_id]
 selected_hero_name = service.resolve_hero_name(selected_hero_id)
 
@@ -1094,9 +1068,11 @@ if hero_matches_loaded:
         if hero_section_stale:
             st.caption("Hero details were loaded before the latest dashboard refresh. Click `Refresh Hero Details` to rebuild this section from the current dashboard snapshot.")
         stats = service.build_stats(matches)
-        stats_cards = build_hero_metric_cards(
+        stats_cards = build_hero_detail_cards(
             {
                 "matches": stats.matches,
+                "wins": stats.wins,
+                "losses": stats.losses,
                 "winrate": stats.winrate,
                 "avg_kills": stats.avg_kills,
                 "avg_deaths": stats.avg_deaths,
@@ -1112,7 +1088,11 @@ if hero_matches_loaded:
             }
         )
         stats_html = "".join(
-            f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div></div>'
+            (
+                f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">'
+                f'{colored_winrate_html(float(value.strip("%")) if isinstance(value, str) else float(value)) if label in WINRATE_CARD_LABELS else value}'
+                "</div></div>"
+            )
             for label, value in stats_cards
         )
         st.markdown(f'<div class="metrics-wrap">{stats_html}</div>', unsafe_allow_html=True)
@@ -1289,6 +1269,7 @@ if recent_matches_loaded:
             f'<div class="recent-kda-assists" style="width:{assists_pct:.1f}%"></div>'
             "</div>"
             "</td>"
+            f'<td><div class="recent-stat-value">{row.kda_ratio:.1f}</div></td>'
             f'<td><div class="recent-stat-value">{f"{round((row.net_worth or 0) / 1000, 1)}k" if row.net_worth else "-"}</div></td>'
             f'<td><div class="recent-stat-value">{f"{round((row.hero_damage or 0) / 1000, 1)}k" if row.hero_damage else "-"}</div></td>'
             f'<td><div class="recent-items-inline">{item_html}</div></td>'
@@ -1303,6 +1284,7 @@ if recent_matches_loaded:
             "<th>Hero</th>"
             "<th>Result</th>"
             "<th>Duration</th>"
+            "<th>K/D/A</th>"
             "<th>KDA</th>"
             "<th>Net Worth</th>"
             "<th>Damage</th>"

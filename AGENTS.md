@@ -8,4 +8,4 @@
 - When changing overview/stat formulas, bump the UI overview schema/version so stale Streamlit session data is forcibly refreshed.
 - After any app/UI/filter/behavior change, update the relevant `MD` documentation in the same task so the repository docs stay current.
 - UI column labels must stay English-only and abbreviated where practical; do not mix languages in the same table or view.
-- `Hero Overview` and `Detailed Turbo Stats` must stay synchronized on metric coverage. If a metric/column is added, removed, renamed, or reformatted in one, apply the same change in the other unless the task explicitly requires divergence.
+- `Hero Overview` and `Detailed Turbo Stats` must stay synchronized on metric coverage, labels, and order. If a metric/column is added, removed, renamed, reordered, or reformatted in one, apply the same change in the other unless the task explicitly requires divergence.

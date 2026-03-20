@@ -959,20 +959,26 @@ class DotaAnalyticsService:
                 purchase_times_by_item.setdefault(item_id, []).append(max(int(event.get("time") or 0) // 60, 0))
 
         items: list[RecentMatchItem] = []
-        for item_id in final_item_ids:
+        for original_index, item_id in enumerate(final_item_ids):
             if item_id <= 0:
                 continue
             purchase_times = purchase_times_by_item.get(item_id, [])
             purchase_time_min = purchase_times.pop(0) if purchase_times else None
-            items.append(
-                RecentMatchItem(
-                    item_id=item_id,
-                    item_name=self.references.item_names_by_id.get(item_id, f"Item #{item_id}"),
-                    item_image=self.references.item_images_by_id.get(item_id, ""),
-                    purchase_time_min=purchase_time_min,
-                )
+            item = RecentMatchItem(
+                item_id=item_id,
+                item_name=self.references.item_names_by_id.get(item_id, f"Item #{item_id}"),
+                item_image=self.references.item_images_by_id.get(item_id, ""),
+                purchase_time_min=purchase_time_min,
             )
-        return items[:6]
+            items.append((original_index, item))
+        items.sort(
+            key=lambda pair: (
+                pair[1].purchase_time_min is None,
+                pair[1].purchase_time_min if pair[1].purchase_time_min is not None else 10_000,
+                pair[0],
+            )
+        )
+        return [item for _, item in items[:6]]
 
     def build_recent_hero_matches(
         self,
