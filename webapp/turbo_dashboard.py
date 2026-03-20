@@ -278,7 +278,6 @@ def build_service() -> DotaAnalyticsService:
     return DotaAnalyticsService(client=client, cache=cache, match_store=match_store)
 
 
-@st.cache_data(show_spinner=False)
 def get_app_version() -> str:
     env_candidates = (
         os.getenv("APP_VERSION"),
