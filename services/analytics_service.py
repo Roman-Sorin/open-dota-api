@@ -688,6 +688,7 @@ class DotaAnalyticsService:
         matches = self.get_cached_matches(filters)
         if not matches:
             return []
+        self.enrich_hero_damage(player_id, matches, max_fallback_detail_calls=max(120, len(matches)))
         return self.build_turbo_hero_overview_rows(matches)
 
     def _counter_to_item_stats(self, counter: Counter[int], total_matches: int, top_n: int = 12) -> list[ItemStat]:

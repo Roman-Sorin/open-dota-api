@@ -35,7 +35,7 @@ from webapp.hero_overview import (
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
-OVERVIEW_SCHEMA_VERSION = 10
+OVERVIEW_SCHEMA_VERSION = 11
 
 st.markdown(
     """
@@ -802,6 +802,11 @@ if "overview" not in st.session_state:
                 patch_filtered_matches = [
                     m for m in all_cached_matches if _resolve_patch_name(m.start_time, patch_timeline) in selected_set
                 ]
+                service.enrich_hero_damage(
+                    player_id,
+                    patch_filtered_matches,
+                    max_fallback_detail_calls=max(120, len(patch_filtered_matches)),
+                )
                 overview = _build_overview_from_matches(patch_filtered_matches, service)
             else:
                 patch_filtered_matches = None

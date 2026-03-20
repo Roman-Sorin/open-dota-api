@@ -18,6 +18,7 @@ The project includes two interfaces:
 - Hero Overview rows are also built from the same service-side stats aggregation used by Detailed Turbo Stats, so `Radiant WR` / `Dire WR` and other hero metrics stay consistent
 - All winrate values in the UI use the same colors: below `50%` red, exactly `50%` yellow, above `50%` green
 - Hero overview avg damage/net worth use match-detail fallback when player match rows don't include `hero_damage` or `net_worth`
+- Cached Hero Overview also reuses stored match details to backfill missing hero economy/damage fields before rendering overview rows
 - Dashboard summary cards: Turbo matches, wins, losses, winrate
 - Time filter modes: `Days`, `Patches`, `Start Date`
 - Default baseline/start date is `2026-01-21`

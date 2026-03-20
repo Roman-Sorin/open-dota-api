@@ -21,6 +21,7 @@ Turbo-only dashboard for your account:
 - Hero overview and detailed hero stats now share one metric-definition source in the UI, so added hero fields stay aligned in both places
 - Hero overview aggregation now also comes from one shared service-side stats source, so values like `Rad WR` and `Dire WR` stay identical between overview and detailed hero stats
 - When Turbo match rows miss `hero_damage` or `net_worth`, the app enriches overview/detail stats from match details stored locally
+- Cached Hero Overview now also enriches missing `hero_damage` and `net_worth` from stored match details, so heroes do not stay stuck at zero when the local summary rows were incomplete
 - Top dashboard metrics include Turbo matches, wins, losses, and winrate
 - Dashboard loading is manual by section:
   - cached overview data can auto-open from local SQLite storage when available

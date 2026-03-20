@@ -79,6 +79,9 @@ class _FakeClient:
             }
         ]
 
+    def get_match_details(self, match_id: int) -> dict:
+        return {"match_id": match_id, "players": []}
+
 
 class _FakeCache:
     def __init__(self) -> None:
@@ -137,4 +140,135 @@ def test_service_can_build_cached_turbo_hero_overview_without_api_calls() -> Non
     assert rows[0]["hero"] == "Axe"
     assert rows[0]["radiant_wr"] == 100.0
     assert rows[0]["dire_wr"] == 0.0
+    assert client.calls == 0
+
+
+def test_cached_turbo_hero_overview_enriches_missing_viper_economy_and_damage_from_cached_details() -> None:
+    client = _FakeClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 100,
+                "start_time": 1771552800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 8,
+                "deaths": 6,
+                "assists": 8,
+                "duration": 1380,
+                "hero_id": 47,
+                "hero_damage": 0,
+                "net_worth": 0,
+            },
+            {
+                "match_id": 101,
+                "start_time": 1771466400,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 7,
+                "deaths": 5,
+                "assists": 9,
+                "duration": 1380,
+                "hero_id": 47,
+                "hero_damage": 0,
+                "net_worth": 0,
+            },
+            {
+                "match_id": 102,
+                "start_time": 1771380000,
+                "player_slot": 0,
+                "radiant_win": False,
+                "game_mode": 23,
+                "kills": 10,
+                "deaths": 7,
+                "assists": 6,
+                "duration": 1380,
+                "hero_id": 47,
+                "hero_damage": 0,
+                "net_worth": 0,
+            },
+            {
+                "match_id": 103,
+                "start_time": 1771293600,
+                "player_slot": 128,
+                "radiant_win": False,
+                "game_mode": 23,
+                "kills": 9,
+                "deaths": 8,
+                "assists": 7,
+                "duration": 1380,
+                "hero_id": 47,
+                "hero_damage": 0,
+                "net_worth": 0,
+            },
+            {
+                "match_id": 104,
+                "start_time": 1771207200,
+                "player_slot": 128,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 6,
+                "deaths": 5,
+                "assists": 10,
+                "duration": 1380,
+                "hero_id": 47,
+                "hero_damage": 0,
+                "net_worth": 0,
+            },
+            {
+                "match_id": 105,
+                "start_time": 1771120800,
+                "player_slot": 128,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 8,
+                "deaths": 7,
+                "assists": 7,
+                "duration": 1380,
+                "hero_id": 47,
+                "hero_damage": 0,
+                "net_worth": 0,
+            },
+        ],
+    )
+
+    for match_id, net_worth, hero_damage in (
+        (100, 25000, 24000),
+        (101, 26000, 26000),
+        (102, 25500, 22000),
+        (103, 27000, 18000),
+        (104, 28000, 14000),
+        (105, 26616, 0),
+    ):
+        store.upsert_match_detail(
+            match_id,
+            {
+                "match_id": match_id,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0 if match_id <= 102 else 128,
+                        "net_worth": net_worth,
+                        "hero_damage": hero_damage,
+                    }
+                ],
+            },
+        )
+
+    rows = service.get_cached_turbo_hero_overview(player_id=123, days=60)
+
+    assert len(rows) == 1
+    assert rows[0]["matches"] == 6
+    assert rows[0]["wins"] == 3
+    assert rows[0]["losses"] == 3
+    assert rows[0]["winrate"] == 50.0
+    assert rows[0]["avg_net_worth"] == 26352.666666666668
+    assert rows[0]["avg_damage"] == 20800.0
+    assert rows[0]["max_hero_damage"] == 26000
     assert client.calls == 0
