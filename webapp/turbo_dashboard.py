@@ -1132,7 +1132,9 @@ if not hero_matches_loaded:
         hero_matches_loaded = False
 
 st.caption("Selected hero actions")
-action_col_1, action_col_2, action_col_3, action_col_4 = st.columns(4)
+action_col_0, action_col_1, action_col_2, action_col_3, action_col_4 = st.columns(5)
+with action_col_0:
+    load_all_sections = st.button("Refresh All Hero Sections")
 with action_col_1:
     load_hero_matches = st.button("Refresh Hero Details")
 with action_col_2:
@@ -1141,8 +1143,9 @@ with action_col_3:
     load_item_winrates = st.button("Refresh Item Winrates")
 with action_col_4:
     load_recent_matches = st.button("Refresh Recent Matches")
+st.caption("Use `Refresh All Hero Sections` to rebuild all four selected-hero sections in one Streamlit rerun.")
 
-if load_hero_matches:
+if load_all_sections or load_hero_matches:
     try:
         hero_matches = _load_selected_hero_matches(
             service,
@@ -1210,7 +1213,7 @@ matchup_request_key = _matchup_cache_key(
     dashboard_loaded_at=str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
     selected_hero_id=selected_hero_id,
 )
-if load_matchups:
+if load_all_sections or load_matchups:
     try:
         if active_patches and not supports_patch_overview:
             all_matchup_matches = st.session_state.get("patch_filtered_matches") or []
@@ -1342,10 +1345,20 @@ if isinstance(matchup_rows, dict):
                 )
             else:
                 st.info("No global opponent matchup rows for current filter.")
+    if (
+        selected_with.empty
+        and selected_against.empty
+        and global_with_summary.empty
+        and global_matchup_summary.empty
+    ):
+        st.caption(
+            "No cached match-detail player compositions are available for the current snapshot yet. "
+            "Run `Refresh Turbo Dashboard` to hydrate them, then `Refresh Matchups` will rebuild from cache."
+        )
 else:
     st.info("Matchups use cached match details only. Use the hero action bar above to build selected-hero and global With/Against tables from already cached matches.")
 
-if load_item_winrates:
+if load_all_sections or load_item_winrates:
     try:
         matches = _load_selected_hero_matches(
             service,
@@ -1416,7 +1429,7 @@ recent_matches_key = recent_matches_state_key(selected_hero_id, days, active_pat
 if recent_matches_key not in st.session_state:
     st.session_state[recent_matches_key] = 10
 
-if load_recent_matches:
+if load_all_sections or load_recent_matches:
     try:
         matches = _load_selected_hero_matches(
             service,

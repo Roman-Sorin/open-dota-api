@@ -29,6 +29,7 @@ The project includes two interfaces:
 - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild the selected hero sections from the currently loaded dashboard snapshot
 - Selected-hero refresh actions are grouped into one shared action bar above the detail sections, including `Refresh Matchups`
 - Selected-hero sections restore independently from cache across reruns; refreshing one section must not hide another already loaded section for the same hero snapshot
+- The action bar also includes `Refresh All Hero Sections` so all four selected-hero sections can be rebuilt in one Streamlit rerun
 - `Refresh Hero Details`, `Refresh Matchups`, `Refresh Item Winrates`, and `Refresh Recent Matches` are cache-only section rebuilds and do not issue hidden OpenDota detail fetches
 - Per-hero detailed stats (avg K/D/A, KDA, avg duration, avg net worth, avg damage, max kills, max hero damage, Radiant/Dire WR)
 - Matchups section now uses the same two-table layout everywhere: `Teammates` and `Opponents`
@@ -38,6 +39,7 @@ The project includes two interfaces:
   - Matchup `WR` stays numeric in the dataframe; percent formatting is applied only at render time so sorting remains correct
   - Adjusting `Min matchup matches` filters the cached matchup rows and does not require a second `Refresh Matchups`
   - `Refresh Matchups` uses cached match details only; it will not spend API calls to hydrate missing details
+  - If the current snapshot does not yet have cached player-composition detail payloads, Matchups now shows an explicit hint to run `Refresh Turbo Dashboard`
 - Experimental Hero Trends stays at the bottom and currently shows daily trend charts for the selected hero
 - When you switch away from a hero and return, already loaded hero details/item stats/recent matches are restored from session cache for that hero/filter combination
 - Detail-section caches are tied to the current dashboard snapshot, so a newer overview will not silently reuse old hero/item/recent rows

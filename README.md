@@ -33,12 +33,14 @@ Turbo-only dashboard for your account:
 - Detailed hero section in Turbo includes avg duration, avg damage, avg net worth, max kills, and max hero damage
 - Selected-hero section refreshes are grouped into one action bar above the sections (`Hero Details`, `Matchups`, `Item Winrates`, `Recent Matches`)
 - Selected-hero sections restore independently from cache across reruns; refreshing one section must not hide another already loaded section for the same hero snapshot
+- The action bar also includes `Refresh All Hero Sections` so all four selected-hero sections can be rebuilt in one Streamlit rerun
 - Matchups section now uses the same two-table layout everywhere: `Teammates` and `Opponents`
   - Both `Selected Hero` and `All Heroes` show the same column order: `Hero Icon / Hero / WR / Matches / Won / Lost`
   - In Matchups, only `WR` is color-coded; `Won` and `Lost` stay neutral
   - Matchup winrates remain numeric under the hood so both built-in sorting and user-click sorting treat `100.00` correctly
   - Changing `Min matchup matches` only filters the already built matchup snapshot; it does not require pressing `Refresh Matchups` again
   - `Refresh Matchups` is cache-only for match details and does not call OpenDota for missing details
+  - If no cached player-composition details exist for the current snapshot yet, Matchups now says so explicitly and points you to `Refresh Turbo Dashboard`
 - `Refresh Hero Details`, `Refresh Matchups`, `Refresh Item Winrates`, and `Refresh Recent Matches` are all cache-only section rebuilds; they never fetch uncached match details from OpenDota
 - Experimental Hero Trends stays at the bottom and currently shows daily trends for the selected hero
 - Hero detail, item stats, and recent matches stay cached per hero/filter in the current session when you switch between heroes
