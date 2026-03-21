@@ -13,6 +13,7 @@ from utils.cache import JsonFileCache
 from utils.exceptions import OpenDotaNotFoundError, OpenDotaRateLimitError
 from utils.helpers import calculate_kda_ratio, format_duration, unix_to_dt, winrate_percent
 from utils.match_store import SQLiteMatchStore
+from utils.overview_validation import overview_looks_stale
 
 
 @dataclass(slots=True)
@@ -57,6 +58,26 @@ class RecentHeroMatch:
 class CachePolicy:
     key: str
     ttl: timedelta
+
+
+@dataclass(slots=True)
+class MatchDetailHydrationStatus:
+    requested: int
+    completed: int
+    remaining: int
+    rate_limited: bool
+
+    @property
+    def is_complete(self) -> bool:
+        return self.remaining == 0 and not self.rate_limited
+
+
+@dataclass(slots=True)
+class TurboOverviewSnapshot:
+    matches: list[MatchSummary]
+    overview: list[dict[str, Any]]
+    detail_status: MatchDetailHydrationStatus
+    is_valid: bool
 
 
 class DotaAnalyticsService:
@@ -703,24 +724,14 @@ class DotaAnalyticsService:
         start_date=None,
         patch_names: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        filters = QueryFilters(
+        return self.get_turbo_overview_snapshot(
             player_id=player_id,
-            game_mode=23,
-            game_mode_name="Turbo",
             days=days,
             start_date=start_date,
             patch_names=patch_names,
-        )
-        matches = self.get_cached_matches(filters)
-        if not matches:
-            return []
-        self.enrich_hero_damage(
-            player_id,
-            matches,
-            max_fallback_detail_calls=max(120, len(matches)),
-            allow_detail_fetch=False,
-        )
-        return self.build_turbo_hero_overview_rows(matches)
+            force_sync=False,
+            hydrate_details=False,
+        ).overview
 
     def _counter_to_item_stats(self, counter: Counter[int], total_matches: int, top_n: int = 12) -> list[ItemStat]:
         rows: list[ItemStat] = []
@@ -805,17 +816,27 @@ class DotaAnalyticsService:
                     break
         return missing_ids
 
-    def hydrate_match_details_for_match_ids(self, match_ids: list[int]) -> int:
+    def hydrate_match_details_for_match_ids(self, match_ids: list[int]) -> MatchDetailHydrationStatus:
+        requested_ids = [int(match_id) for match_id in match_ids if int(match_id) > 0]
+        requested = len(requested_ids)
         completed = 0
-        for match_id in match_ids:
+        rate_limited = False
+        for match_id in requested_ids:
             if match_id <= 0 or self._has_match_details_cached(match_id):
                 continue
             try:
                 self.get_or_fetch_match_details(match_id)
                 completed += 1
             except OpenDotaRateLimitError:
+                rate_limited = True
                 break
-        return completed
+        remaining = sum(1 for match_id in requested_ids if not self._has_match_details_cached(match_id))
+        return MatchDetailHydrationStatus(
+            requested=requested,
+            completed=completed,
+            remaining=remaining,
+            rate_limited=rate_limited,
+        )
 
     def refresh_cached_matches(self, filters: QueryFilters, *, hydrate_details: bool = False) -> list[MatchSummary]:
         if self.match_store is None:
@@ -829,6 +850,70 @@ class DotaAnalyticsService:
         if hydrate_details:
             self.hydrate_match_details_for_match_ids(self.get_missing_detail_match_ids(matches))
         return self.get_cached_matches(filters)
+
+    def load_match_snapshot(
+        self,
+        filters: QueryFilters,
+        *,
+        force_sync: bool = False,
+        hydrate_details: bool = False,
+    ) -> tuple[list[MatchSummary], MatchDetailHydrationStatus]:
+        if force_sync:
+            matches = self.refresh_cached_matches(filters, hydrate_details=False)
+        else:
+            matches = self.get_cached_matches(filters) if self.match_store is not None else self.fetch_matches(filters)
+
+        missing_before = self.get_missing_detail_match_ids(matches)
+        if hydrate_details and missing_before:
+            hydration_status = self.hydrate_match_details_for_match_ids(missing_before)
+            matches = self.get_cached_matches(filters) if self.match_store is not None else self.fetch_matches(filters)
+        else:
+            hydration_status = MatchDetailHydrationStatus(
+                requested=len(missing_before),
+                completed=0,
+                remaining=len(missing_before),
+                rate_limited=False,
+            )
+        return matches, hydration_status
+
+    def get_turbo_overview_snapshot(
+        self,
+        player_id: int,
+        days: int | None = 60,
+        start_date=None,
+        patch_names: list[str] | None = None,
+        *,
+        force_sync: bool = False,
+        hydrate_details: bool = False,
+    ) -> TurboOverviewSnapshot:
+        filters = QueryFilters(
+            player_id=player_id,
+            game_mode=23,
+            game_mode_name="Turbo",
+            days=days,
+            start_date=start_date,
+            patch_names=patch_names,
+        )
+        matches, detail_status = self.load_match_snapshot(
+            filters,
+            force_sync=force_sync,
+            hydrate_details=hydrate_details,
+        )
+        if not matches:
+            return TurboOverviewSnapshot(matches=[], overview=[], detail_status=detail_status, is_valid=True)
+        self.enrich_hero_damage(
+            player_id,
+            matches,
+            max_fallback_detail_calls=max(120, len(matches)),
+            allow_detail_fetch=False,
+        )
+        overview = self.build_turbo_hero_overview_rows(matches)
+        return TurboOverviewSnapshot(
+            matches=matches,
+            overview=overview,
+            detail_status=detail_status,
+            is_valid=not overview_looks_stale(overview),
+        )
 
     def enrich_hero_damage(
         self,
@@ -1148,6 +1233,16 @@ class DotaAnalyticsService:
         *,
         allow_detail_fetch: bool = True,
     ) -> list[dict[str, Any]]:
+        if not allow_detail_fetch:
+            return self.get_turbo_overview_snapshot(
+                player_id=player_id,
+                days=days,
+                start_date=start_date,
+                patch_names=patch_names,
+                force_sync=force_sync,
+                hydrate_details=False,
+            ).overview
+
         filters = QueryFilters(
             player_id=player_id,
             game_mode=23,

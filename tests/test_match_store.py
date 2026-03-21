@@ -468,3 +468,68 @@ def test_refresh_cached_matches_hydrates_details_once_and_reuses_them() -> None:
     assert recent[0].net_worth == 25555
     assert recent[0].hero_damage == 22222
     assert item_rows[0]["item"] == "Blink Dagger"
+
+
+def test_turbo_overview_snapshot_reports_incomplete_detail_coverage_for_zero_rows() -> None:
+    client = _FakeClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 200,
+                "start_time": 1771552800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 8,
+                "deaths": 6,
+                "assists": 8,
+                "duration": 1380,
+                "hero_id": 47,
+                "hero_damage": 0,
+                "net_worth": 0,
+            },
+            {
+                "match_id": 201,
+                "start_time": 1771466400,
+                "player_slot": 0,
+                "radiant_win": False,
+                "game_mode": 23,
+                "kills": 7,
+                "deaths": 5,
+                "assists": 9,
+                "duration": 1380,
+                "hero_id": 47,
+                "hero_damage": 0,
+                "net_worth": 0,
+            },
+            {
+                "match_id": 202,
+                "start_time": 1771380000,
+                "player_slot": 128,
+                "radiant_win": False,
+                "game_mode": 23,
+                "kills": 10,
+                "deaths": 7,
+                "assists": 6,
+                "duration": 1380,
+                "hero_id": 47,
+                "hero_damage": 0,
+                "net_worth": 0,
+            },
+        ],
+    )
+    store.upsert_sync_state(123, "gm:23", last_incremental_sync_at="2026-03-15T10:00:00", known_match_count=3)
+
+    snapshot = service.get_turbo_overview_snapshot(player_id=123, days=150, force_sync=False, hydrate_details=False)
+
+    assert snapshot.detail_status.requested == 3
+    assert snapshot.detail_status.remaining == 3
+    assert snapshot.is_valid is False
+    assert snapshot.overview[0]["hero"] == "Hero #47"
+    assert snapshot.overview[0]["avg_net_worth"] == 0.0
+    assert snapshot.overview[0]["avg_damage"] == 0.0
+    assert snapshot.overview[0]["max_hero_damage"] == 0

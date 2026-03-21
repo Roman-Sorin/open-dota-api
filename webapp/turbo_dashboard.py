@@ -699,6 +699,7 @@ def _store_dashboard_state(
     st.session_state["min_hero_matches"] = min_hero_matches_value
     st.session_state["min_item_matches"] = min_item_matches_value
     st.session_state["overview_cache_only"] = cache_only
+    st.session_state["overview_requires_refresh"] = False
 
 
 def _load_selected_hero_matches(
@@ -844,7 +845,7 @@ if "overview" not in st.session_state:
                     days=None,
                     start_date=active_start_date,
                 )
-                all_cached_matches = service.get_cached_matches(base_filters)
+                all_cached_matches, _ = service.load_match_snapshot(base_filters, force_sync=False, hydrate_details=False)
                 selected_set = set(active_patches)
                 patch_filtered_matches = [
                     m for m in all_cached_matches if _resolve_patch_name(m.start_time, patch_timeline) in selected_set
@@ -858,13 +859,18 @@ if "overview" not in st.session_state:
                 overview = _build_overview_from_matches(patch_filtered_matches, service)
             else:
                 patch_filtered_matches = None
-                overview = service.get_cached_turbo_hero_overview(
+                overview_snapshot = service.get_turbo_overview_snapshot(
                     player_id=player_id,
                     days=active_days,
                     start_date=active_start_date,
                     patch_names=active_patches,
+                    force_sync=False,
+                    hydrate_details=False,
                 )
-            if overview:
+                overview = overview_snapshot.overview
+            if overview and overview_looks_stale(overview):
+                st.session_state["overview_requires_refresh"] = True
+            elif overview:
                 _store_dashboard_state(
                     player_raw_value=player_raw,
                     player_id=player_id,
@@ -910,7 +916,7 @@ if load:
                 start_date=active_start_date,
             )
             all_turbo_matches = run_with_rate_limit_retry(
-                lambda: service.refresh_cached_matches(base_filters, hydrate_details=True),
+                lambda: service.load_match_snapshot(base_filters, force_sync=True, hydrate_details=True)[0],
                 operation_label="patch-filtered matches",
             )
             selected_set = set(active_patches)
@@ -929,54 +935,53 @@ if load:
                 "player_id": player_id,
                 "days": active_days,
                 "start_date": active_start_date,
+                "force_sync": True,
+                "hydrate_details": True,
             }
             if active_patches:
                 overview_kwargs["patch_names"] = active_patches
-            overview = run_with_rate_limit_retry(
-                lambda: (
-                    service.refresh_cached_matches(
-                        QueryFilters(
-                            player_id=player_id,
-                            game_mode=23,
-                            game_mode_name="Turbo",
-                            days=active_days,
-                            start_date=active_start_date,
-                            patch_names=active_patches,
-                        ),
-                        hydrate_details=True,
-                    ),
-                    service.get_cached_turbo_hero_overview(
-                        player_id=player_id,
-                        days=active_days,
-                        start_date=active_start_date,
-                        patch_names=active_patches,
-                    ),
-                )[1],
+            overview_snapshot = run_with_rate_limit_retry(
+                lambda: service.get_turbo_overview_snapshot(**overview_kwargs),
                 operation_label="hero overview",
             )
+            overview = overview_snapshot.overview
 
-        _store_dashboard_state(
-            player_raw_value=player_raw,
-            player_id=player_id,
-            time_filter_mode_value=time_filter_mode,
-            days_value=days,
-            active_days_value=active_days,
-            start_date_value=start_date_value,
-            active_start_date_value=active_start_date,
-            selected_patches_value=selected_patches,
-            active_patches_value=active_patches,
-            overview_value=overview,
-            patch_filtered_matches_value=patch_filtered_matches,
-            min_hero_matches_value=min_hero_matches,
-            min_item_matches_value=min_item_matches,
-            loaded_at_value=_utcnow_iso(),
-            cache_only=False,
-        )
+        if overview and overview_looks_stale(overview):
+            st.session_state["overview_requires_refresh"] = True
+            st.warning(
+                "The current overview snapshot is still incomplete for some heroes "
+                "(for example zero NW/Dmg/Max Dmg rows). The invalid snapshot was not rendered."
+            )
+        else:
+            _store_dashboard_state(
+                player_raw_value=player_raw,
+                player_id=player_id,
+                time_filter_mode_value=time_filter_mode,
+                days_value=days,
+                active_days_value=active_days,
+                start_date_value=start_date_value,
+                active_start_date_value=active_start_date,
+                selected_patches_value=selected_patches,
+                active_patches_value=active_patches,
+                overview_value=overview,
+                patch_filtered_matches_value=patch_filtered_matches,
+                min_hero_matches_value=min_hero_matches,
+                min_item_matches_value=min_item_matches,
+                loaded_at_value=_utcnow_iso(),
+                cache_only=False,
+            )
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
 if "overview" not in st.session_state:
-    st.info("Enter player to auto-load cached dashboard data, or click `Refresh Turbo Dashboard` to fetch it.")
+    if st.session_state.get("overview_requires_refresh"):
+        st.warning(
+            "Cached overview data for the current filter is incomplete "
+            "(for example heroes with zero NW/Dmg/Max Dmg rows). "
+            "Click `Refresh Turbo Dashboard` to rebuild a valid snapshot."
+        )
+    else:
+        st.info("Enter player to auto-load cached dashboard data, or click `Refresh Turbo Dashboard` to fetch it.")
     st.stop()
 
 player_id = st.session_state["player_id"]

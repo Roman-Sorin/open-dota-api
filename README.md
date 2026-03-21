@@ -22,6 +22,7 @@ Turbo-only dashboard for your account:
 - Hero overview aggregation now also comes from one shared service-side stats source, so values like `Rad WR` and `Dire WR` stay identical between overview and detailed hero stats
 - When Turbo match rows miss `hero_damage` or `net_worth`, the app enriches overview/detail stats from match details stored locally
 - Cached Hero Overview now also enriches missing `hero_damage` and `net_worth` from stored match details, so heroes do not stay stuck at zero when the local summary rows were incomplete
+- Hero Overview is now built from a validated snapshot that tracks match-detail coverage; incomplete zero-value snapshots are rejected instead of being rendered as valid analytics
 - Top dashboard metrics include Turbo matches, wins, losses, and winrate; Turbo wins are green and Turbo losses are red
 - Dashboard loading is manual by section:
   - cached overview data can auto-open from local SQLite storage when available
@@ -30,6 +31,7 @@ Turbo-only dashboard for your account:
 - Section refreshes no longer pull newer matches than the currently loaded overview; only `Refresh Turbo Dashboard` advances the dataset
 - `Refresh Turbo Dashboard` now forces an incremental sync check for new matches only; already cached summaries and match details are reused instead of being re-fetched
 - During dashboard refresh, missing match details for the current snapshot are hydrated once and then reused by all sections
+- If the current cached snapshot still lacks required match details for some heroes, the app does not render that overview as valid data and tells you to rebuild the snapshot
 - Detailed hero section in Turbo includes avg duration, avg damage, avg net worth, max kills, and max hero damage
 - Selected-hero section refreshes are grouped into one action bar above the sections (`Hero Details`, `Matchups`, `Item Winrates`, `Recent Matches`)
 - Selected-hero sections restore independently from cache across reruns; refreshing one section must not hide another already loaded section for the same hero snapshot

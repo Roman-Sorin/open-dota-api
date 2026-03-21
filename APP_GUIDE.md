@@ -19,6 +19,7 @@ The project includes two interfaces:
 - All winrate values in the UI use the same colors: below `50%` red, exactly `50%` yellow, above `50%` green
 - Hero overview avg damage/net worth use match-detail fallback when player match rows don't include `hero_damage` or `net_worth`
 - Cached Hero Overview also reuses stored match details to backfill missing hero economy/damage fields before rendering overview rows
+- Hero Overview is now built from a validated snapshot that tracks match-detail coverage; incomplete zero-value snapshots are rejected instead of being rendered as valid analytics
 - Dashboard summary cards: Turbo matches, wins, losses, winrate; Turbo wins are green and Turbo losses are red
 - Time filter modes: `Days`, `Patches`, `Start Date`
 - Default baseline/start date is `2026-01-21`
@@ -26,6 +27,7 @@ The project includes two interfaces:
 - If matching dashboard data already exists in local SQLite storage, the app restores Hero Overview automatically on page load for the current filters
 - `Refresh Turbo Dashboard` fetches/syncs the hero overview from OpenDota when you want newer matches
 - `Refresh Turbo Dashboard` is the only UI action that may talk to OpenDota; it performs an incremental new-match check and hydrates missing match details for the current snapshot exactly once
+- If the current cached snapshot still lacks required match details for some heroes, the app does not render that overview as valid data and tells you to rebuild the snapshot
 - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild the selected hero sections from the currently loaded dashboard snapshot
 - Selected-hero refresh actions are grouped into one shared action bar above the detail sections, including `Refresh Matchups`
 - Selected-hero sections restore independently from cache across reruns; refreshing one section must not hide another already loaded section for the same hero snapshot
