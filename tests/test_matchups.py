@@ -70,5 +70,7 @@ def test_sort_matchup_dataframe_uses_numeric_winrate_not_percent_string() -> Non
     worst = sort_matchup_dataframe(df, best_first=False)
     best = sort_matchup_dataframe(df, best_first=True)
 
+    assert "Avg K/D/A" not in df.columns
+    assert "KDA" not in df.columns
     assert list(worst["Hero"])[:2] == ["Lion", "Nyx Assassin"]
     assert list(best["Hero"])[:2] == ["Nature's Prophet", "Sniper"]

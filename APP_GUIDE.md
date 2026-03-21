@@ -29,6 +29,7 @@ The project includes two interfaces:
 - Per-hero detailed stats (avg K/D/A, KDA, avg duration, avg net worth, avg damage, max kills, max hero damage, Radiant/Dire WR)
 - Matchups section shows best/worst `With / Against` heroes for the selected hero and globally for the current filter
   - Matchup best/worst ordering uses numeric WR, not the rendered percent string
+  - Matchup tables intentionally omit `Avg K/D/A` and `KDA`
 - Experimental Hero Trends stays at the bottom and currently shows daily trend charts for the selected hero
 - When you switch away from a hero and return, already loaded hero details/item stats/recent matches are restored from session cache for that hero/filter combination
 - Detail-section caches are tied to the current dashboard snapshot, so a newer overview will not silently reuse old hero/item/recent rows

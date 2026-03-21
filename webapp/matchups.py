@@ -115,8 +115,6 @@ def build_matchup_dataframe(rows: list[MatchupRow], min_matches: int) -> pd.Data
                 "Lost": row.losses,
                 "WR Value": float(row.winrate),
                 "WR": f"{round(row.winrate)}%",
-                "Avg K/D/A": f"{round(row.avg_kills)}/{round(row.avg_deaths)}/{round(row.avg_assists)}",
-                "KDA": round(row.kda, 1),
             }
             for row in filtered_rows
         ]
