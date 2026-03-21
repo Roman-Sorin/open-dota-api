@@ -13,3 +13,4 @@
 - Visual meaning must stay synchronized too: if a metric is color-coded in `Hero Overview` (for example win/loss or winrate semantics), apply the same semantic color treatment in `Detailed Turbo Stats`.
 - In every app table or stat block, winrates must always use the same semantic colors: `<50%` red, `=50%` yellow, `>50%` green.
 - In every app table or stat block, won-match counts must be green and lost-match counts must be red.
+- Exception: in the four `Matchups` tables, apply semantic colors only to `WR`; keep `Won` and `Lost` neutral there.

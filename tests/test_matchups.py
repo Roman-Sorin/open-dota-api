@@ -76,7 +76,7 @@ def test_sort_matchup_dataframe_uses_numeric_winrate_not_percent_string() -> Non
     assert list(best["Hero"])[:2] == ["Nature's Prophet", "Sniper"]
 
 
-def test_build_matchup_styler_colors_win_loss_and_winrate() -> None:
+def test_build_matchup_styler_colors_only_winrate() -> None:
     df = build_matchup_dataframe(
         [
             MatchupRow(hero_id=1, hero="Axe", hero_image="axe.png", matches=4, wins=3, losses=1, winrate=75.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0),
@@ -86,8 +86,16 @@ def test_build_matchup_styler_colors_win_loss_and_winrate() -> None:
         min_matches=1,
     )
 
-    html = build_matchup_styler(df).to_html()
+    styler = build_matchup_styler(df)
+    html = styler.to_html()
+    ctx = styler._compute().ctx
+    wr_col_index = df.columns.get_loc("WR")
+    won_col_index = df.columns.get_loc("Won")
+    lost_col_index = df.columns.get_loc("Lost")
 
     assert "#23a55a" in html
     assert "#d9534f" in html
     assert "#d4a017" in html
+    assert (0, won_col_index) not in ctx
+    assert (0, lost_col_index) not in ctx
+    assert (0, wr_col_index) in ctx

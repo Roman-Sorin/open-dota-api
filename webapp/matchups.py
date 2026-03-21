@@ -137,19 +137,9 @@ def build_matchup_styler(df: pd.DataFrame) -> pd.io.formats.style.Styler:
     if df.empty:
         return styler
 
-    return (
-        styler.map(
-            lambda _: "color: #23a55a; font-weight: 700;",
-            subset=["Won"],
-        )
-        .map(
-            lambda _: "color: #d9534f; font-weight: 700;",
-            subset=["Lost"],
-        )
-        .map(
-            _style_matchup_winrate_cell,
-            subset=["WR"],
-        )
+    return styler.map(
+        _style_matchup_winrate_cell,
+        subset=["WR"],
     )
 
 
