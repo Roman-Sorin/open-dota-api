@@ -1,7 +1,7 @@
 from models.dtos import MatchSummary
 from services.analytics_service import DotaAnalyticsService
 from tests.test_hero_damage_enrichment import _FakeCache
-from webapp.matchups import build_matchup_rows
+from webapp.matchups import MatchupRow, build_matchup_dataframe, build_matchup_rows, sort_matchup_dataframe
 
 
 class _MatchupClient:
@@ -56,3 +56,19 @@ def test_build_matchup_rows_tracks_with_and_against() -> None:
     assert rows["with"][0].matches == 2
     assert rows["with"][0].winrate == 50.0
     assert [row.hero for row in rows["against"]] == ["Crystal Maiden", "Drow Ranger"]
+
+
+def test_sort_matchup_dataframe_uses_numeric_winrate_not_percent_string() -> None:
+    matchup_rows = [
+        MatchupRow(hero_id=1, hero="Nature's Prophet", hero_image="np.png", matches=3, wins=3, losses=0, winrate=100.0, avg_kills=9.0, avg_deaths=0.0, avg_assists=8.0, kda=50.0),
+        MatchupRow(hero_id=2, hero="Sniper", hero_image="sniper.png", matches=3, wins=3, losses=0, winrate=100.0, avg_kills=13.0, avg_deaths=4.0, avg_assists=13.0, kda=6.4),
+        MatchupRow(hero_id=3, hero="Lion", hero_image="lion.png", matches=3, wins=1, losses=2, winrate=33.0, avg_kills=10.0, avg_deaths=6.0, avg_assists=8.0, kda=2.8),
+        MatchupRow(hero_id=4, hero="Nyx Assassin", hero_image="nyx.png", matches=3, wins=1, losses=2, winrate=33.0, avg_kills=11.0, avg_deaths=7.0, avg_assists=10.0, kda=2.8),
+    ]
+
+    df = build_matchup_dataframe(matchup_rows, min_matches=3)
+    worst = sort_matchup_dataframe(df, best_first=False)
+    best = sort_matchup_dataframe(df, best_first=True)
+
+    assert list(worst["Hero"])[:2] == ["Lion", "Nyx Assassin"]
+    assert list(best["Hero"])[:2] == ["Nature's Prophet", "Sniper"]

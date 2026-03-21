@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 
+import pandas as pd
+
 from models.dtos import MatchSummary
 from utils.helpers import calculate_kda_ratio, winrate_percent
 
@@ -99,3 +101,34 @@ def build_matchup_rows(
         "with": _finalize_rows(with_buckets, resolve_hero_name, resolve_hero_image),
         "against": _finalize_rows(against_buckets, resolve_hero_name, resolve_hero_image),
     }
+
+
+def build_matchup_dataframe(rows: list[MatchupRow], min_matches: int) -> pd.DataFrame:
+    filtered_rows = [row for row in rows if int(row.matches) >= min_matches]
+    return pd.DataFrame(
+        [
+            {
+                "Icon": row.hero_image,
+                "Hero": row.hero,
+                "Matches": row.matches,
+                "Won": row.wins,
+                "Lost": row.losses,
+                "WR Value": float(row.winrate),
+                "WR": f"{round(row.winrate)}%",
+                "Avg K/D/A": f"{round(row.avg_kills)}/{round(row.avg_deaths)}/{round(row.avg_assists)}",
+                "KDA": round(row.kda, 1),
+            }
+            for row in filtered_rows
+        ]
+    )
+
+
+def sort_matchup_dataframe(df: pd.DataFrame, *, best_first: bool) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    sorted_df = df.sort_values(
+        by=["WR Value", "Matches", "Hero"],
+        ascending=[not best_first, False, True],
+    ).head(8)
+    return sorted_df.drop(columns=["WR Value"])

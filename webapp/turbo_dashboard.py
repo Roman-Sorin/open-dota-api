@@ -33,7 +33,7 @@ from webapp.hero_overview import (
     build_hero_overview_row,
 )
 from webapp.hero_trends import build_daily_trend_points
-from webapp.matchups import build_matchup_rows
+from webapp.matchups import build_matchup_dataframe, build_matchup_rows, sort_matchup_dataframe
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
@@ -1222,33 +1222,15 @@ if isinstance(matchup_rows, dict):
     min_matchup_matches = st.slider("Min matchup matches", min_value=1, max_value=20, value=3, step=1)
     selected_tab, global_tab = st.tabs([f"{selected_hero_name}", "All Heroes"])
 
-    def _matchup_df(rows: list) -> pd.DataFrame:
-        filtered_rows = [row for row in rows if int(row.matches) >= min_matchup_matches]
-        return pd.DataFrame(
-            [
-                {
-                    "Icon": row.hero_image,
-                    "Hero": row.hero,
-                    "Matches": row.matches,
-                    "Won": row.wins,
-                    "Lost": row.losses,
-                    "WR": f"{round(row.winrate)}%",
-                    "Avg K/D/A": f"{round(row.avg_kills)}/{round(row.avg_deaths)}/{round(row.avg_assists)}",
-                    "KDA": round(row.kda, 1),
-                }
-                for row in filtered_rows
-            ]
-        )
-
     with selected_tab:
         best_with, worst_against = st.columns(2)
         with best_with:
             st.caption("Best/Worst With")
-            selected_with = _matchup_df(matchup_rows["selected"]["with"])
+            selected_with = build_matchup_dataframe(matchup_rows["selected"]["with"], min_matchup_matches)
             if not selected_with.empty:
                 st.caption("Best With")
-                best = selected_with.sort_values(by=["WR", "Matches", "Hero"], ascending=[False, False, True]).head(8)
-                worst = selected_with.sort_values(by=["WR", "Matches", "Hero"], ascending=[True, False, True]).head(8)
+                best = sort_matchup_dataframe(selected_with, best_first=True)
+                worst = sort_matchup_dataframe(selected_with, best_first=False)
                 st.dataframe(best, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
                 st.caption("Worst With")
                 st.dataframe(worst, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
@@ -1256,11 +1238,11 @@ if isinstance(matchup_rows, dict):
                 st.info("No selected-hero team matchup rows for current filter.")
         with worst_against:
             st.caption("Best/Worst Against")
-            selected_against = _matchup_df(matchup_rows["selected"]["against"])
+            selected_against = build_matchup_dataframe(matchup_rows["selected"]["against"], min_matchup_matches)
             if not selected_against.empty:
                 st.caption("Best Against")
-                best = selected_against.sort_values(by=["WR", "Matches", "Hero"], ascending=[False, False, True]).head(8)
-                worst = selected_against.sort_values(by=["WR", "Matches", "Hero"], ascending=[True, False, True]).head(8)
+                best = sort_matchup_dataframe(selected_against, best_first=True)
+                worst = sort_matchup_dataframe(selected_against, best_first=False)
                 st.dataframe(best, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
                 st.caption("Worst Against")
                 st.dataframe(worst, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
@@ -1271,11 +1253,11 @@ if isinstance(matchup_rows, dict):
         global_with_col, global_against_col = st.columns(2)
         with global_with_col:
             st.caption("Global Best/Worst With")
-            global_with = _matchup_df(matchup_rows["global"]["with"])
+            global_with = build_matchup_dataframe(matchup_rows["global"]["with"], min_matchup_matches)
             if not global_with.empty:
                 st.caption("Global Best With")
-                best = global_with.sort_values(by=["WR", "Matches", "Hero"], ascending=[False, False, True]).head(8)
-                worst = global_with.sort_values(by=["WR", "Matches", "Hero"], ascending=[True, False, True]).head(8)
+                best = sort_matchup_dataframe(global_with, best_first=True)
+                worst = sort_matchup_dataframe(global_with, best_first=False)
                 st.dataframe(best, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
                 st.caption("Global Worst With")
                 st.dataframe(worst, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
@@ -1283,11 +1265,11 @@ if isinstance(matchup_rows, dict):
                 st.info("No global team matchup rows for current filter.")
         with global_against_col:
             st.caption("Global Best/Worst Against")
-            global_against = _matchup_df(matchup_rows["global"]["against"])
+            global_against = build_matchup_dataframe(matchup_rows["global"]["against"], min_matchup_matches)
             if not global_against.empty:
                 st.caption("Global Best Against")
-                best = global_against.sort_values(by=["WR", "Matches", "Hero"], ascending=[False, False, True]).head(8)
-                worst = global_against.sort_values(by=["WR", "Matches", "Hero"], ascending=[True, False, True]).head(8)
+                best = sort_matchup_dataframe(global_against, best_first=True)
+                worst = sort_matchup_dataframe(global_against, best_first=False)
                 st.dataframe(best, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
                 st.caption("Global Worst Against")
                 st.dataframe(worst, use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
