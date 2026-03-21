@@ -394,3 +394,77 @@ def test_force_sync_checks_only_new_matches_even_when_incremental_interval_has_n
     assert [match.match_id for match in third] == [3, 2, 1]
     assert client.calls == 2
     assert store.count_player_matches(123, game_mode=23) == 3
+
+
+def test_refresh_cached_matches_hydrates_details_once_and_reuses_them() -> None:
+    class _DetailHydrationClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.detail_calls = 0
+
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 10,
+                    "start_time": 1771552800,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 8,
+                    "deaths": 6,
+                    "assists": 8,
+                    "duration": 1380,
+                    "hero_id": 47,
+                    "hero_damage": 0,
+                    "net_worth": 0,
+                    "item_0": 0,
+                    "item_1": 0,
+                    "item_2": 0,
+                    "item_3": 0,
+                    "item_4": 0,
+                    "item_5": 0,
+                }
+            ]
+
+        def get_match_details(self, match_id: int) -> dict:
+            self.detail_calls += 1
+            return {
+                "match_id": match_id,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0,
+                        "net_worth": 25555,
+                        "hero_damage": 22222,
+                        "item_0": 1,
+                        "purchase_log": [{"key": "blink", "time": 600}],
+                    }
+                ],
+            }
+
+    client = _DetailHydrationClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    service.references.item_ids_by_key["blink"] = 1
+    service.references.item_names_by_id[1] = "Blink Dagger"
+
+    filters = QueryFilters(player_id=123, game_mode=23, game_mode_name="Turbo")
+    first = service.refresh_cached_matches(filters, hydrate_details=True)
+    second = service.refresh_cached_matches(filters, hydrate_details=True)
+
+    service.enrich_hero_damage(123, second, allow_detail_fetch=False)
+    recent = service.build_recent_hero_matches(123, second, limit=5, allow_detail_fetch=False)
+    item_rows = service.get_item_winrates(123, second, top_n=10, allow_detail_fetch=False)
+
+    assert [match.match_id for match in first] == [10]
+    assert [match.match_id for match in second] == [10]
+    assert client.calls == 2
+    assert client.detail_calls == 1
+    assert second[0].net_worth_known is True
+    assert second[0].hero_damage_known is True
+    assert second[0].net_worth == 25555
+    assert second[0].hero_damage == 22222
+    assert recent[0].net_worth == 25555
+    assert recent[0].hero_damage == 22222
+    assert item_rows[0]["item"] == "Blink Dagger"

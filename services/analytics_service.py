@@ -294,9 +294,9 @@ class DotaAnalyticsService:
         )
         return match if match.match_id > 0 else None
 
-    def _sync_player_matches(self, filters: QueryFilters, *, force: bool = False) -> None:
+    def _sync_player_matches(self, filters: QueryFilters, *, force: bool = False) -> list[int]:
         if self.match_store is None:
-            return
+            return []
 
         significant = 0 if filters.game_mode == 23 else None
         scope_key = self._sync_scope_key(filters.game_mode)
@@ -326,19 +326,24 @@ class DotaAnalyticsService:
             try:
                 last_sync = datetime.fromisoformat(str(state["last_incremental_sync_at"]))
                 if datetime.now(tz=timezone.utc) - last_sync < min_sync_interval:
-                    return
+                    return []
             except ValueError:
                 pass
 
+        inserted_match_ids: list[int] = []
+
         if state is None:
             offset = 0
-            total_rows = 0
             while True:
                 chunk = fetch_page(offset)
                 if not chunk:
                     break
+                inserted_match_ids.extend(
+                    int(row.get("match_id") or 0)
+                    for row in chunk
+                    if int(row.get("match_id") or 0) > 0
+                )
                 self.match_store.upsert_player_matches(filters.player_id, chunk)
-                total_rows += len(chunk)
                 if len(chunk) < batch_size:
                     break
                 offset += batch_size
@@ -350,7 +355,7 @@ class DotaAnalyticsService:
                 last_full_sync_at=now_iso,
                 known_match_count=self.match_store.count_player_matches(filters.player_id, filters.game_mode),
             )
-            return
+            return inserted_match_ids
 
         first_page = fetch_page(0)
         if not first_page:
@@ -360,7 +365,7 @@ class DotaAnalyticsService:
                 last_incremental_sync_at=now_iso,
                 known_match_count=self.match_store.count_player_matches(filters.player_id, filters.game_mode),
             )
-            return
+            return []
 
         page_index = 0
         while True:
@@ -370,6 +375,11 @@ class DotaAnalyticsService:
             existing_ids = self.match_store.get_existing_match_ids(
                 filters.player_id,
                 [int(row.get("match_id") or 0) for row in current_chunk],
+            )
+            inserted_match_ids.extend(
+                match_id
+                for match_id in (int(row.get("match_id") or 0) for row in current_chunk)
+                if match_id > 0 and match_id not in existing_ids
             )
             self.match_store.upsert_player_matches(filters.player_id, current_chunk)
             if existing_ids or len(current_chunk) < batch_size:
@@ -382,6 +392,7 @@ class DotaAnalyticsService:
             last_incremental_sync_at=now_iso,
             known_match_count=self.match_store.count_player_matches(filters.player_id, filters.game_mode),
         )
+        return inserted_match_ids
 
     @staticmethod
     def _serialize_match_summary(match: MatchSummary) -> dict[str, Any]:
@@ -703,7 +714,12 @@ class DotaAnalyticsService:
         matches = self.get_cached_matches(filters)
         if not matches:
             return []
-        self.enrich_hero_damage(player_id, matches, max_fallback_detail_calls=max(120, len(matches)))
+        self.enrich_hero_damage(
+            player_id,
+            matches,
+            max_fallback_detail_calls=max(120, len(matches)),
+            allow_detail_fetch=False,
+        )
         return self.build_turbo_hero_overview_rows(matches)
 
     def _counter_to_item_stats(self, counter: Counter[int], total_matches: int, top_n: int = 12) -> list[ItemStat]:
@@ -761,97 +777,119 @@ class DotaAnalyticsService:
         return isinstance(self.cache.get(cache_key), dict)
 
     def _get_match_details_cached(self, match_id: int) -> dict[str, Any]:
-        if match_id in self._match_details_memory_cache:
-            return self._match_details_memory_cache[match_id]
-
-        if self.match_store is not None:
-            stored = self.match_store.get_match_detail(match_id)
-            if isinstance(stored, dict):
-                self._match_details_memory_cache[match_id] = stored
-                return stored
-
-        cache_key = f"match_details_{match_id}"
-        cached = self.cache.get(cache_key)
-        if isinstance(cached, dict):
-            self._match_details_memory_cache[match_id] = cached
-            if self.match_store is not None:
-                self.match_store.upsert_match_detail(match_id, cached)
-            return cached
-
-        details = self.client.get_match_details(match_id)
-        self._match_details_memory_cache[match_id] = details
-        if self.match_store is not None:
-            self.match_store.upsert_match_detail(match_id, details)
-        self.cache.set(cache_key, details)
+        details = self._get_match_details(match_id, allow_fetch=True)
+        if details is None:
+            raise OpenDotaNotFoundError(f"Match details for {match_id} were not found")
         return details
 
     def get_match_details_if_cached(self, match_id: int) -> dict[str, Any] | None:
-        if match_id in self._match_details_memory_cache:
-            return self._match_details_memory_cache[match_id]
+        return self._get_match_details(match_id, allow_fetch=False)
 
-        if self.match_store is not None:
-            stored = self.match_store.get_match_detail(match_id)
-            if isinstance(stored, dict):
-                self._match_details_memory_cache[match_id] = stored
-                return stored
+    def get_or_fetch_match_details(self, match_id: int) -> dict[str, Any]:
+        details = self._get_match_details(match_id, allow_fetch=True)
+        if details is None:
+            raise OpenDotaNotFoundError(f"Match details for {match_id} were not found")
+        return details
 
-        cache_key = f"match_details_{match_id}"
-        cached = self.cache.get(cache_key)
-        if isinstance(cached, dict):
-            self._match_details_memory_cache[match_id] = cached
-            if self.match_store is not None:
-                self.match_store.upsert_match_detail(match_id, cached)
-            return cached
+    def get_missing_detail_match_ids(self, matches: list[MatchSummary], limit: int | None = None) -> list[int]:
+        missing_ids: list[int] = []
+        seen_ids: set[int] = set()
+        for match in matches:
+            match_id = int(match.match_id)
+            if match_id <= 0 or match_id in seen_ids:
+                continue
+            seen_ids.add(match_id)
+            if not self._has_match_details_cached(match_id):
+                missing_ids.append(match_id)
+                if limit is not None and len(missing_ids) >= limit:
+                    break
+        return missing_ids
 
-        return None
+    def hydrate_match_details_for_match_ids(self, match_ids: list[int]) -> int:
+        completed = 0
+        for match_id in match_ids:
+            if match_id <= 0 or self._has_match_details_cached(match_id):
+                continue
+            try:
+                self.get_or_fetch_match_details(match_id)
+                completed += 1
+            except OpenDotaRateLimitError:
+                break
+        return completed
+
+    def refresh_cached_matches(self, filters: QueryFilters, *, hydrate_details: bool = False) -> list[MatchSummary]:
+        if self.match_store is None:
+            matches = self.fetch_matches(filters, force_sync=True)
+            if hydrate_details:
+                self.hydrate_match_details_for_match_ids([match.match_id for match in matches])
+            return matches
+
+        self._sync_player_matches(filters, force=True)
+        matches = self.get_cached_matches(filters)
+        if hydrate_details:
+            self.hydrate_match_details_for_match_ids(self.get_missing_detail_match_ids(matches))
+        return self.get_cached_matches(filters)
 
     def enrich_hero_damage(
         self,
         player_id: int,
         matches: list[MatchSummary],
         max_fallback_detail_calls: int = 45,
+        *,
+        allow_detail_fetch: bool = True,
     ) -> None:
         fallback_detail_calls = 0
         for match in matches:
             if match.hero_damage_known and match.net_worth_known and match.lane_efficiency_known:
                 continue
             details_cached = self._has_match_details_cached(match.match_id)
+            if not details_cached and not allow_detail_fetch:
+                continue
             if not details_cached and fallback_detail_calls >= max_fallback_detail_calls:
                 break
             try:
-                details = self._get_match_details_cached(match.match_id)
-                if not details_cached:
-                    fallback_detail_calls += 1
-                player_row = self._extract_player_from_match_details(
-                    details,
-                    player_id=player_id,
-                    player_slot=match.player_slot,
-                )
-                if player_row:
-                    hero_damage = int(player_row.get("hero_damage") or 0)
-                    net_worth = int(player_row.get("net_worth") or 0)
-                    lane_efficiency_pct = player_row.get("lane_efficiency_pct")
-                    if hero_damage > 0:
-                        match.hero_damage = hero_damage
-                        match.hero_damage_known = True
-                    if net_worth > 0:
-                        match.net_worth = net_worth
-                        match.net_worth_known = True
-                    if lane_efficiency_pct is not None:
-                        match.lane_efficiency_pct = float(lane_efficiency_pct or 0.0)
-                        match.lane_efficiency_known = True
-                    if self.match_store is not None:
-                        self.match_store.update_player_match_enrichment(
-                            player_id,
-                            match.match_id,
-                            hero_damage=hero_damage if hero_damage > 0 else None,
-                            net_worth=net_worth if net_worth > 0 else None,
-                            lane_efficiency_pct=float(lane_efficiency_pct) if lane_efficiency_pct is not None else None,
-                        )
+                details = self._get_match_details(match.match_id, allow_fetch=allow_detail_fetch)
             except OpenDotaRateLimitError:
                 break
+            if not isinstance(details, dict):
+                continue
+            if not details_cached:
+                fallback_detail_calls += 1
+            player_row = self._extract_player_from_match_details(
+                details,
+                player_id=player_id,
+                player_slot=match.player_slot,
+            )
+            if player_row:
+                hero_damage = int(player_row.get("hero_damage") or 0)
+                net_worth = int(player_row.get("net_worth") or 0)
+                lane_efficiency_pct = player_row.get("lane_efficiency_pct")
+                if hero_damage > 0:
+                    match.hero_damage = hero_damage
+                    match.hero_damage_known = True
+                if net_worth > 0:
+                    match.net_worth = net_worth
+                    match.net_worth_known = True
+                if lane_efficiency_pct is not None:
+                    match.lane_efficiency_pct = float(lane_efficiency_pct or 0.0)
+                    match.lane_efficiency_known = True
+                if self.match_store is not None:
+                    self.match_store.update_player_match_enrichment(
+                        player_id,
+                        match.match_id,
+                        hero_damage=hero_damage if hero_damage > 0 else None,
+                        net_worth=net_worth if net_worth > 0 else None,
+                        lane_efficiency_pct=float(lane_efficiency_pct) if lane_efficiency_pct is not None else None,
+                    )
 
-    def build_items(self, player_id: int, matches: list[MatchSummary], include_purchase_logs: bool = True) -> ItemsResult:
+    def build_items(
+        self,
+        player_id: int,
+        matches: list[MatchSummary],
+        include_purchase_logs: bool = True,
+        *,
+        allow_detail_fetch: bool = True,
+    ) -> ItemsResult:
         total = len(matches)
         if total == 0:
             return ItemsResult(0, [], [], False, "No matches available for item stats")
@@ -866,7 +904,11 @@ class DotaAnalyticsService:
             if not any(ids) and fallback_detail_calls < max_fallback_detail_calls:
                 # Fallback: get final inventory from match details when players/matches projection is empty.
                 try:
-                    details = self._get_match_details_cached(match.match_id)
+                    details = self._get_match_details(match.match_id, allow_fetch=allow_detail_fetch)
+                except OpenDotaRateLimitError:
+                    rate_limited = True
+                    break
+                if isinstance(details, dict):
                     fallback_detail_calls += 1
                     player_row = self._extract_player_from_match_details(
                         details,
@@ -877,8 +919,6 @@ class DotaAnalyticsService:
                         ids = self._player_row_item_ids(player_row)
                         if any(ids):
                             fallback_item_matches += 1
-                except OpenDotaRateLimitError:
-                    rate_limited = True
 
             for item_id in ids:
                 if item_id > 0:
@@ -892,30 +932,32 @@ class DotaAnalyticsService:
         if include_purchase_logs:
             for match in matches[:25]:
                 try:
-                    details = self._get_match_details_cached(match.match_id)
-                    player_row = self._extract_player_from_match_details(
-                        details,
-                        player_id=player_id,
-                        player_slot=match.player_slot,
-                    )
-                    if not player_row:
-                        continue
-
-                    purchase_log = player_row.get("purchase_log")
-                    if not isinstance(purchase_log, list):
-                        continue
-
-                    analyzed_matches += 1
-                    seen_in_match: set[int] = set()
-                    for event in purchase_log:
-                        key = str(event.get("key") or "")
-                        item_id = self.references.item_ids_by_key.get(key)
-                        if item_id and item_id not in seen_in_match:
-                            purchase_counter[item_id] += 1
-                            seen_in_match.add(item_id)
+                    details = self._get_match_details(match.match_id, allow_fetch=allow_detail_fetch)
                 except OpenDotaRateLimitError:
                     rate_limited = True
                     break
+                if not isinstance(details, dict):
+                    continue
+                player_row = self._extract_player_from_match_details(
+                    details,
+                    player_id=player_id,
+                    player_slot=match.player_slot,
+                )
+                if not player_row:
+                    continue
+
+                purchase_log = player_row.get("purchase_log")
+                if not isinstance(purchase_log, list):
+                    continue
+
+                analyzed_matches += 1
+                seen_in_match: set[int] = set()
+                for event in purchase_log:
+                    key = str(event.get("key") or "")
+                    item_id = self.references.item_ids_by_key.get(key)
+                    if item_id and item_id not in seen_in_match:
+                        purchase_counter[item_id] += 1
+                        seen_in_match.add(item_id)
 
         # Percent is relative to all filtered matches so partial purchase-log coverage is not misleading.
         purchased_items = self._counter_to_item_stats(purchase_counter, total)
@@ -948,14 +990,24 @@ class DotaAnalyticsService:
             note=note,
         )
 
-    def build_match_rows(self, player_id: int, matches: list[MatchSummary], limit: int = 20) -> list[MatchRow]:
+    def build_match_rows(
+        self,
+        player_id: int,
+        matches: list[MatchSummary],
+        limit: int = 20,
+        *,
+        allow_detail_fetch: bool = True,
+    ) -> list[MatchRow]:
         rows: list[MatchRow] = []
 
         for match in matches[:limit]:
             item_ids = self._summary_item_ids(match)
             if not any(item_ids):
                 try:
-                    details = self._get_match_details_cached(match.match_id)
+                    details = self._get_match_details(match.match_id, allow_fetch=allow_detail_fetch)
+                except OpenDotaRateLimitError:
+                    details = None
+                if isinstance(details, dict):
                     player_row = self._extract_player_from_match_details(
                         details,
                         player_id=player_id,
@@ -963,8 +1015,6 @@ class DotaAnalyticsService:
                     )
                     if player_row:
                         item_ids = self._player_row_item_ids(player_row)
-                except OpenDotaRateLimitError:
-                    item_ids = []
             item_names = [self.references.item_names_by_id.get(item_id, f"#{item_id}") for item_id in item_ids if item_id > 0]
 
             rows.append(
@@ -1021,6 +1071,8 @@ class DotaAnalyticsService:
         player_id: int,
         matches: list[MatchSummary],
         limit: int = 10,
+        *,
+        allow_detail_fetch: bool = True,
     ) -> list[RecentHeroMatch]:
         rows: list[RecentHeroMatch] = []
 
@@ -1028,7 +1080,10 @@ class DotaAnalyticsService:
             item_ids = self._summary_item_ids(match)
             player_row = None
             try:
-                details = self._get_match_details_cached(match.match_id)
+                details = self._get_match_details(match.match_id, allow_fetch=allow_detail_fetch)
+            except OpenDotaRateLimitError:
+                details = None
+            if isinstance(details, dict):
                 player_row = self._extract_player_from_match_details(
                     details,
                     player_id=player_id,
@@ -1036,8 +1091,6 @@ class DotaAnalyticsService:
                 )
                 if player_row:
                     item_ids = self._player_row_item_ids(player_row)
-            except OpenDotaRateLimitError:
-                player_row = None
 
             rows.append(
                 RecentHeroMatch(
@@ -1092,6 +1145,8 @@ class DotaAnalyticsService:
         start_date=None,
         patch_names: list[str] | None = None,
         force_sync: bool = False,
+        *,
+        allow_detail_fetch: bool = True,
     ) -> list[dict[str, Any]]:
         filters = QueryFilters(
             player_id=player_id,
@@ -1104,10 +1159,29 @@ class DotaAnalyticsService:
         matches = self.fetch_matches(filters, force_sync=force_sync) if force_sync else self.fetch_matches(filters)
         if not matches:
             return []
-        self.enrich_hero_damage(player_id, matches, max_fallback_detail_calls=max(120, len(matches)))
+        try:
+            self.enrich_hero_damage(
+                player_id,
+                matches,
+                max_fallback_detail_calls=max(120, len(matches)),
+                allow_detail_fetch=allow_detail_fetch,
+            )
+        except TypeError:
+            self.enrich_hero_damage(
+                player_id,
+                matches,
+                max_fallback_detail_calls=max(120, len(matches)),
+            )
         return self.build_turbo_hero_overview_rows(matches)
 
-    def get_item_winrates(self, player_id: int, matches: list[MatchSummary], top_n: int = 20) -> list[dict[str, Any]]:
+    def get_item_winrates(
+        self,
+        player_id: int,
+        matches: list[MatchSummary],
+        top_n: int = 20,
+        *,
+        allow_detail_fetch: bool = True,
+    ) -> list[dict[str, Any]]:
         total = len(matches)
         if total == 0:
             return []
@@ -1121,17 +1195,19 @@ class DotaAnalyticsService:
             item_ids = self._summary_item_ids(match)
             if not any(item_ids) and fallback_detail_calls < max_fallback_detail_calls:
                 try:
-                    details = self._get_match_details_cached(match.match_id)
-                    fallback_detail_calls += 1
-                    player_row = self._extract_player_from_match_details(
-                        details,
-                        player_id=player_id,
-                        player_slot=match.player_slot,
-                    )
-                    if player_row:
-                        item_ids = self._player_row_item_ids(player_row)
+                    details = self._get_match_details(match.match_id, allow_fetch=allow_detail_fetch)
                 except OpenDotaRateLimitError:
                     break
+                if not isinstance(details, dict):
+                    continue
+                fallback_detail_calls += 1
+                player_row = self._extract_player_from_match_details(
+                    details,
+                    player_id=player_id,
+                    player_slot=match.player_slot,
+                )
+                if player_row:
+                    item_ids = self._player_row_item_ids(player_row)
 
             unique_items = {item_id for item_id in item_ids if item_id > 0}
             for item_id in unique_items:
@@ -1175,3 +1251,34 @@ class DotaAnalyticsService:
         if item_id is None:
             return ""
         return self.references.item_images_by_id.get(item_id, "")
+    def _get_match_details(self, match_id: int, *, allow_fetch: bool) -> dict[str, Any] | None:
+        custom_detail_loader = self.__dict__.get("_get_match_details_cached")
+        if allow_fetch and callable(custom_detail_loader):
+            return custom_detail_loader(match_id)
+
+        if match_id in self._match_details_memory_cache:
+            return self._match_details_memory_cache[match_id]
+
+        if self.match_store is not None:
+            stored = self.match_store.get_match_detail(match_id)
+            if isinstance(stored, dict):
+                self._match_details_memory_cache[match_id] = stored
+                return stored
+
+        cache_key = f"match_details_{match_id}"
+        cached = self.cache.get(cache_key)
+        if isinstance(cached, dict):
+            self._match_details_memory_cache[match_id] = cached
+            if self.match_store is not None:
+                self.match_store.upsert_match_detail(match_id, cached)
+            return cached
+
+        if not allow_fetch:
+            return None
+
+        details = self.client.get_match_details(match_id)
+        self._match_details_memory_cache[match_id] = details
+        if self.match_store is not None:
+            self.match_store.upsert_match_detail(match_id, details)
+        self.cache.set(cache_key, details)
+        return details

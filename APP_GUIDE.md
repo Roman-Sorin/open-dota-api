@@ -25,9 +25,10 @@ The project includes two interfaces:
 - Dashboard sections load manually and independently to reduce one-shot API work on page open
 - If matching dashboard data already exists in local SQLite storage, the app restores Hero Overview automatically on page load for the current filters
 - `Refresh Turbo Dashboard` fetches/syncs the hero overview from OpenDota when you want newer matches
-- `Refresh Turbo Dashboard` performs an incremental new-match check; it does not re-download already cached match summaries/details
+- `Refresh Turbo Dashboard` is the only UI action that may talk to OpenDota; it performs an incremental new-match check and hydrates missing match details for the current snapshot exactly once
 - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild the selected hero sections from the currently loaded dashboard snapshot
 - Selected-hero refresh actions are grouped into one shared action bar above the detail sections, including `Refresh Matchups`
+- `Refresh Hero Details`, `Refresh Matchups`, `Refresh Item Winrates`, and `Refresh Recent Matches` are cache-only section rebuilds and do not issue hidden OpenDota detail fetches
 - Per-hero detailed stats (avg K/D/A, KDA, avg duration, avg net worth, avg damage, max kills, max hero damage, Radiant/Dire WR)
 - Matchups section now uses the same two-table layout everywhere: `Allies` and `Opponents`
   - Both `Selected Hero` and `All Heroes` use `Hero Icon / Hero / WR / Matches / Won / Lost`
@@ -109,7 +110,7 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 ## Notes on OpenDota data
 
 - Some Turbo rows from `players/{id}/matches` can have empty item slots.
-- The app uses fallback match-detail calls for item enrichment and hero economy/damage enrichment when needed.
+- Match-detail-heavy fields are hydrated during the main dashboard refresh and then reused from local storage by all sections.
 - Some requested metrics may depend on detail payload fields that are not guaranteed in every parsed match. Lane-derived values are currently not shown in the UI until the data source is made reliable.
 - `purchase_log` is often incomplete; purchased-item stats may have partial coverage.
 

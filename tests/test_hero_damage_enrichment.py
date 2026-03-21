@@ -708,3 +708,38 @@ def test_turbo_hero_overview_matches_reported_muerta_example() -> None:
     assert rows[0]["max_hero_damage"] == 85168
     assert round(float(rows[0]["radiant_wr"]), 2) == round((2 / 3) * 100, 2)
     assert rows[0]["dire_wr"] == 50.0
+
+
+def test_recent_hero_matches_cache_only_skips_uncached_details() -> None:
+    class _NoDetailClient(_FakeClient):
+        def get_match_details(self, match_id: int) -> dict:
+            raise AssertionError("Recent matches should not fetch uncached match details in cache-only mode")
+
+    service = DotaAnalyticsService(client=_NoDetailClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=9001,
+            start_time=1,
+            player_slot=0,
+            radiant_win=True,
+            kills=8,
+            deaths=2,
+            assists=7,
+            duration=1400,
+            hero_id=1,
+            item_0=1,
+            item_1=0,
+            item_2=0,
+            item_3=0,
+            item_4=0,
+            item_5=0,
+        )
+    ]
+
+    rows = service.build_recent_hero_matches(player_id=123, matches=matches, limit=10, allow_detail_fetch=False)
+
+    assert len(rows) == 1
+    assert rows[0].hero_name == "Axe"
+    assert rows[0].net_worth is None
+    assert rows[0].hero_damage is None
+    assert [item.item_id for item in rows[0].items] == [1]

@@ -25,10 +25,11 @@ Turbo-only dashboard for your account:
 - Top dashboard metrics include Turbo matches, wins, losses, and winrate
 - Dashboard loading is manual by section:
   - cached overview data can auto-open from local SQLite storage when available
-  - `Refresh Turbo Dashboard` syncs overview data from OpenDota when you want newer matches
+  - `Refresh Turbo Dashboard` is the only action allowed to talk to OpenDota for match sync/detail hydration
   - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild from the currently loaded dashboard snapshot for the selected hero
 - Section refreshes no longer pull newer matches than the currently loaded overview; only `Refresh Turbo Dashboard` advances the dataset
 - `Refresh Turbo Dashboard` now forces an incremental sync check for new matches only; already cached summaries and match details are reused instead of being re-fetched
+- During dashboard refresh, missing match details for the current snapshot are hydrated once and then reused by all sections
 - Detailed hero section in Turbo includes avg duration, avg damage, avg net worth, max kills, and max hero damage
 - Selected-hero section refreshes are grouped into one action bar above the sections (`Hero Details`, `Matchups`, `Item Winrates`, `Recent Matches`)
 - Matchups section now uses the same two-table layout everywhere: `Allies` and `Opponents`
@@ -37,6 +38,7 @@ Turbo-only dashboard for your account:
   - Matchup winrates remain numeric under the hood so both built-in sorting and user-click sorting treat `100.00` correctly
   - Changing `Min matchup matches` only filters the already built matchup snapshot; it does not require pressing `Refresh Matchups` again
   - `Refresh Matchups` is cache-only for match details and does not call OpenDota for missing details
+- `Refresh Hero Details`, `Refresh Matchups`, `Refresh Item Winrates`, and `Refresh Recent Matches` are all cache-only section rebuilds; they never fetch uncached match details from OpenDota
 - Experimental Hero Trends stays at the bottom and currently shows daily trends for the selected hero
 - Hero detail, item stats, and recent matches stay cached per hero/filter in the current session when you switch between heroes
 - Detail-section caches are scoped to the current dashboard snapshot so old hero/recent/item rows are not reused after the overview changes
@@ -125,7 +127,7 @@ tests/
 ## OpenDota limitations
 
 - Some `players/{id}/matches` rows may have empty `item_0..item_5` (especially Turbo cases).
-- The app falls back to `matches/{match_id}` for final slots if needed.
+- Missing detail-heavy fields are hydrated during the main dashboard refresh and then reused from local storage by all sections.
 - Player matches are persisted in local `SQLite` storage and reused for later filters/analytics.
 - Match details are persisted separately and reused for enrichment-heavy sections.
 - The service performs incremental syncs instead of refetching whole history on each reload.

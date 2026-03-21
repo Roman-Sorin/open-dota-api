@@ -738,6 +738,7 @@ def _load_selected_hero_matches(
             player_id,
             matches,
             max_fallback_detail_calls=max(60, len(matches)),
+            allow_detail_fetch=False,
         )
 
     _cache_set("hero_matches_by_key", current_hero_request_key, matches)
@@ -852,6 +853,7 @@ if "overview" not in st.session_state:
                     player_id,
                     patch_filtered_matches,
                     max_fallback_detail_calls=max(120, len(patch_filtered_matches)),
+                    allow_detail_fetch=False,
                 )
                 overview = _build_overview_from_matches(patch_filtered_matches, service)
             else:
@@ -908,7 +910,7 @@ if load:
                 start_date=active_start_date,
             )
             all_turbo_matches = run_with_rate_limit_retry(
-                lambda: service.fetch_matches(base_filters, force_sync=True),
+                lambda: service.refresh_cached_matches(base_filters, hydrate_details=True),
                 operation_label="patch-filtered matches",
             )
             selected_set = set(active_patches)
@@ -919,6 +921,7 @@ if load:
                 player_id,
                 patch_filtered_matches,
                 max_fallback_detail_calls=max(120, len(patch_filtered_matches)),
+                allow_detail_fetch=False,
             )
             overview = _build_overview_from_matches(patch_filtered_matches, service)
         else:
@@ -930,7 +933,25 @@ if load:
             if active_patches:
                 overview_kwargs["patch_names"] = active_patches
             overview = run_with_rate_limit_retry(
-                lambda: service.get_turbo_hero_overview(**overview_kwargs, force_sync=True),
+                lambda: (
+                    service.refresh_cached_matches(
+                        QueryFilters(
+                            player_id=player_id,
+                            game_mode=23,
+                            game_mode_name="Turbo",
+                            days=active_days,
+                            start_date=active_start_date,
+                            patch_names=active_patches,
+                        ),
+                        hydrate_details=True,
+                    ),
+                    service.get_cached_turbo_hero_overview(
+                        player_id=player_id,
+                        days=active_days,
+                        start_date=active_start_date,
+                        patch_names=active_patches,
+                    ),
+                )[1],
                 operation_label="hero overview",
             )
 
@@ -1315,7 +1336,7 @@ if load_item_winrates:
             active_start_date,
             current_hero_snapshot_key,
         )
-        item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50)
+        item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50, allow_detail_fetch=False)
         item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
         item_wr_rows.sort(
             key=lambda row: (
@@ -1391,6 +1412,7 @@ if load_recent_matches:
             player_id=player_id,
             matches=matches,
             limit=min(visible_recent_matches, len(matches)),
+            allow_detail_fetch=False,
         )
         _cache_set("recent_rows_by_key", current_hero_snapshot_key, recent_rows)
         _cache_set("recent_loaded_at_by_key", current_hero_snapshot_key, _utcnow_iso())
@@ -1416,6 +1438,7 @@ if recent_matches_loaded and loaded_recent_matches != visible_recent_matches:
             player_id=player_id,
             matches=matches,
             limit=min(visible_recent_matches, len(matches)),
+            allow_detail_fetch=False,
         )
         _cache_set("recent_rows_by_key", current_hero_snapshot_key, recent_match_rows)
         _cache_set("recent_limit_loaded_by_key", current_hero_snapshot_key, visible_recent_matches)

@@ -69,3 +69,16 @@ def test_item_winrates_sorted_by_winrate_then_matches() -> None:
     assert "avg_deaths_with_item" not in rows[0]
     assert "avg_assists_with_item" not in rows[0]
     assert "kda_with_item" not in rows[0]
+
+
+def test_item_winrates_cache_only_does_not_fetch_missing_match_details() -> None:
+    class _NoDetailClient(_FakeClient):
+        def get_match_details(self, match_id: int) -> dict:
+            raise AssertionError("Item winrates should not fetch uncached match details when cache-only mode is used")
+
+    service = DotaAnalyticsService(client=_NoDetailClient(), cache=_FakeCache())
+    matches = [_match(1, True, [0, 0, 0, 0, 0, 0])]
+
+    rows = service.get_item_winrates(player_id=123, matches=matches, top_n=20, allow_detail_fetch=False)
+
+    assert rows == []
