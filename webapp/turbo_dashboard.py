@@ -604,11 +604,19 @@ def _cache_set(bucket_key: str, request_key: object, value: object) -> None:
 def _set_active_matchup_snapshot(request_key: object, rows: object) -> None:
     st.session_state["active_matchup_request_key"] = request_key
     st.session_state["active_matchup_rows"] = rows
+    st.session_state["current_matchup_request_key"] = request_key
+    st.session_state["current_matchup_rows"] = rows
 
 
 def _get_active_matchup_snapshot(request_key: object) -> object | None:
     if st.session_state.get("active_matchup_request_key") == request_key:
         return st.session_state.get("active_matchup_rows")
+    return None
+
+
+def _get_current_matchup_snapshot(request_key: object) -> object | None:
+    if st.session_state.get("current_matchup_request_key") == request_key:
+        return st.session_state.get("current_matchup_rows")
     return None
 
 
@@ -746,6 +754,56 @@ def _load_selected_hero_matches(
     _cache_set("hero_loaded_at_by_key", current_hero_request_key, _utcnow_iso())
     return matches
 
+
+def _get_turbo_overview_snapshot_safe(
+    service: DotaAnalyticsService,
+    *,
+    player_id: int,
+    days: int | None,
+    start_date: date | None,
+    patch_names: list[str],
+    force_sync: bool,
+    hydrate_details: bool,
+):
+    if hasattr(service, "get_turbo_overview_snapshot"):
+        return service.get_turbo_overview_snapshot(
+            player_id=player_id,
+            days=days,
+            start_date=start_date,
+            patch_names=patch_names,
+            force_sync=force_sync,
+            hydrate_details=hydrate_details,
+        )
+
+    filters = QueryFilters(
+        player_id=player_id,
+        game_mode=23,
+        game_mode_name="Turbo",
+        days=days,
+        start_date=start_date,
+        patch_names=patch_names,
+    )
+    if force_sync:
+        if hasattr(service, "refresh_cached_matches"):
+            matches = service.refresh_cached_matches(filters, hydrate_details=hydrate_details)
+        else:
+            matches = service.fetch_matches(filters, force_sync=True)
+    else:
+        matches = service.get_cached_matches(filters) if hasattr(service, "get_cached_matches") else service.fetch_matches(filters)
+    if matches:
+        service.enrich_hero_damage(
+            player_id,
+            matches,
+            max_fallback_detail_calls=max(120, len(matches)),
+            allow_detail_fetch=False,
+        )
+    class _FallbackSnapshot:
+        def __init__(self, rows):
+            self.overview = rows
+            self.matches = matches
+            self.is_valid = not overview_looks_stale(rows)
+    return _FallbackSnapshot(service.build_turbo_hero_overview_rows(matches) if matches else [])
+
 with st.sidebar:
     st.header("Filters")
     st.caption(f"Version: `{app_version}`")
@@ -859,7 +917,8 @@ if "overview" not in st.session_state:
                 overview = _build_overview_from_matches(patch_filtered_matches, service)
             else:
                 patch_filtered_matches = None
-                overview_snapshot = service.get_turbo_overview_snapshot(
+                overview_snapshot = _get_turbo_overview_snapshot_safe(
+                    service,
                     player_id=player_id,
                     days=active_days,
                     start_date=active_start_date,
@@ -941,7 +1000,7 @@ if load:
             if active_patches:
                 overview_kwargs["patch_names"] = active_patches
             overview_snapshot = run_with_rate_limit_retry(
-                lambda: service.get_turbo_overview_snapshot(**overview_kwargs),
+                lambda: _get_turbo_overview_snapshot_safe(service, **overview_kwargs),
                 operation_label="hero overview",
             )
             overview = overview_snapshot.overview
@@ -1261,6 +1320,10 @@ if load_all_sections or load_matchups:
 matchup_rows = _cache_get("matchup_rows_by_key", matchup_request_key)
 if matchup_rows is None:
     matchup_rows = _get_active_matchup_snapshot(matchup_request_key)
+    if matchup_rows is not None:
+        _cache_set("matchup_rows_by_key", matchup_request_key, matchup_rows)
+if matchup_rows is None:
+    matchup_rows = _get_current_matchup_snapshot(matchup_request_key)
     if matchup_rows is not None:
         _cache_set("matchup_rows_by_key", matchup_request_key, matchup_rows)
 if isinstance(matchup_rows, dict):

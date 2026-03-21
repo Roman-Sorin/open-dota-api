@@ -43,6 +43,7 @@ Turbo-only dashboard for your account:
   - Changing `Min matchup matches` only filters the already built matchup snapshot; it does not require pressing `Refresh Matchups` again
   - `Refresh Matchups` is cache-only for match details and does not call OpenDota for missing details
   - If no cached player-composition details exist for the current snapshot yet, Matchups now says so explicitly and points you to `Refresh Turbo Dashboard`
+  - Matchup tables now keep the current built snapshot across Streamlit reruns, so changing `Min matchup matches` does not discard already built rows
 - `Refresh Hero Details`, `Refresh Matchups`, `Refresh Item Winrates`, and `Refresh Recent Matches` are all cache-only section rebuilds; they never fetch uncached match details from OpenDota
 - Experimental Hero Trends stays at the bottom and currently shows daily trends for the selected hero
 - Hero detail, item stats, and recent matches stay cached per hero/filter in the current session when you switch between heroes

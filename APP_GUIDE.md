@@ -42,6 +42,7 @@ The project includes two interfaces:
   - Adjusting `Min matchup matches` filters the cached matchup rows and does not require a second `Refresh Matchups`
   - `Refresh Matchups` uses cached match details only; it will not spend API calls to hydrate missing details
   - If the current snapshot does not yet have cached player-composition detail payloads, Matchups now shows an explicit hint to run `Refresh Turbo Dashboard`
+  - Matchup tables keep the current built snapshot across Streamlit reruns, so changing `Min matchup matches` does not discard already built rows
 - Experimental Hero Trends stays at the bottom and currently shows daily trend charts for the selected hero
 - When you switch away from a hero and return, already loaded hero details/item stats/recent matches are restored from session cache for that hero/filter combination
 - Detail-section caches are tied to the current dashboard snapshot, so a newer overview will not silently reuse old hero/item/recent rows
