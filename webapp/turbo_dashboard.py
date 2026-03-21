@@ -1110,6 +1110,27 @@ hero_section_stale = _is_section_stale(
     str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
 )
 
+if not hero_matches_loaded:
+    try:
+        hero_matches = _load_selected_hero_matches(
+            service,
+            player_id,
+            selected_hero_id,
+            selected_hero_name,
+            days,
+            active_patches,
+            active_start_date,
+            current_hero_snapshot_key,
+        )
+        hero_matches_loaded = isinstance(hero_matches, list)
+        hero_loaded_at = _cache_get("hero_loaded_at_by_key", current_hero_snapshot_key)
+        hero_section_stale = _is_section_stale(
+            str(hero_loaded_at) if hero_loaded_at is not None else None,
+            str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
+        )
+    except Exception:  # noqa: BLE001
+        hero_matches_loaded = False
+
 st.caption("Selected hero actions")
 action_col_1, action_col_2, action_col_3, action_col_4 = st.columns(4)
 with action_col_1:
