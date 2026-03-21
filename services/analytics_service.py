@@ -785,6 +785,26 @@ class DotaAnalyticsService:
         self.cache.set(cache_key, details)
         return details
 
+    def get_match_details_if_cached(self, match_id: int) -> dict[str, Any] | None:
+        if match_id in self._match_details_memory_cache:
+            return self._match_details_memory_cache[match_id]
+
+        if self.match_store is not None:
+            stored = self.match_store.get_match_detail(match_id)
+            if isinstance(stored, dict):
+                self._match_details_memory_cache[match_id] = stored
+                return stored
+
+        cache_key = f"match_details_{match_id}"
+        cached = self.cache.get(cache_key)
+        if isinstance(cached, dict):
+            self._match_details_memory_cache[match_id] = cached
+            if self.match_store is not None:
+                self.match_store.upsert_match_detail(match_id, cached)
+            return cached
+
+        return None
+
     def enrich_hero_damage(
         self,
         player_id: int,

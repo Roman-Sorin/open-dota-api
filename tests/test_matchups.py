@@ -66,6 +66,29 @@ def test_build_matchup_rows_tracks_with_and_against() -> None:
     assert [row.hero for row in rows["against"]] == ["Crystal Maiden", "Drow Ranger"]
 
 
+def test_cached_matchup_build_skips_uncached_details_without_api_calls() -> None:
+    class _NoDetailClient(_MatchupClient):
+        def get_match_details(self, match_id: int) -> dict:
+            raise AssertionError("Matchups should not fetch uncached match details from API")
+
+    service = DotaAnalyticsService(client=_NoDetailClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(match_id=1, start_time=1, player_slot=0, radiant_win=True, kills=10, deaths=2, assists=8, duration=1800, hero_id=1),
+    ]
+
+    rows = build_matchup_rows(
+        matches=matches,
+        detail_lookup=service.get_match_details_if_cached,
+        extract_player=service._extract_player_from_match_details,
+        player_id=123,
+        resolve_hero_name=service.resolve_hero_name,
+        resolve_hero_image=service.resolve_hero_image,
+    )
+
+    assert rows["with"] == []
+    assert rows["against"] == []
+
+
 def test_sort_matchup_dataframe_uses_numeric_winrate_not_percent_string() -> None:
     matchup_rows = [
         MatchupRow(hero_id=1, hero="Nature's Prophet", hero_image="np.png", matches=3, wins=3, losses=0, winrate=100.0, avg_kills=9.0, avg_deaths=0.0, avg_assists=8.0, kda=50.0),

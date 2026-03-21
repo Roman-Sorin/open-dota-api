@@ -1187,7 +1187,7 @@ if load_matchups:
         matchup_rows = {
             "selected": matchup_utils.build_matchup_rows(
                 matches=selected_matchup_matches,
-                detail_lookup=service._get_match_details_cached,  # noqa: SLF001
+                detail_lookup=service.get_match_details_if_cached,
                 extract_player=service._extract_player_from_match_details,  # noqa: SLF001
                 player_id=player_id,
                 resolve_hero_name=service.resolve_hero_name,
@@ -1195,7 +1195,7 @@ if load_matchups:
             ),
             "global": matchup_utils.build_matchup_rows(
                 matches=all_matchup_matches,
-                detail_lookup=service._get_match_details_cached,  # noqa: SLF001
+                detail_lookup=service.get_match_details_if_cached,
                 extract_player=service._extract_player_from_match_details,  # noqa: SLF001
                 player_id=player_id,
                 resolve_hero_name=service.resolve_hero_name,
@@ -1301,7 +1301,7 @@ if isinstance(matchup_rows, dict):
             else:
                 st.info("No global opponent matchup rows for current filter.")
 else:
-    st.info("Matchups need player match details. Use the hero action bar above to build selected-hero and global With/Against tables from current cached matches.")
+    st.info("Matchups use cached match details only. Use the hero action bar above to build selected-hero and global With/Against tables from already cached matches.")
 
 if load_item_winrates:
     try:

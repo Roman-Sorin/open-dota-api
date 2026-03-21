@@ -36,6 +36,7 @@ Turbo-only dashboard for your account:
   - In Matchups, only `WR` is color-coded; `Won` and `Lost` stay neutral
   - Matchup winrates remain numeric under the hood so both built-in sorting and user-click sorting treat `100.00` correctly
   - Changing `Min matchup matches` only filters the already built matchup snapshot; it does not require pressing `Refresh Matchups` again
+  - `Refresh Matchups` is cache-only for match details and does not call OpenDota for missing details
 - Experimental Hero Trends stays at the bottom and currently shows daily trends for the selected hero
 - Hero detail, item stats, and recent matches stay cached per hero/filter in the current session when you switch between heroes
 - Detail-section caches are scoped to the current dashboard snapshot so old hero/recent/item rows are not reused after the overview changes
