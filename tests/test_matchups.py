@@ -1,7 +1,14 @@
 from models.dtos import MatchSummary
 from services.analytics_service import DotaAnalyticsService
 from tests.test_hero_damage_enrichment import _FakeCache
-from webapp.matchups import MatchupRow, build_matchup_dataframe, build_matchup_rows, build_matchup_styler, sort_matchup_dataframe
+from webapp.matchups import (
+    MatchupRow,
+    build_matchup_dataframe,
+    build_matchup_rows,
+    build_matchup_styler,
+    combine_matchup_dataframes,
+    sort_matchup_dataframe,
+)
 
 
 class _MatchupClient:
@@ -99,3 +106,20 @@ def test_build_matchup_styler_colors_only_winrate() -> None:
     assert (0, won_col_index) not in ctx
     assert (0, lost_col_index) not in ctx
     assert (0, wr_col_index) in ctx
+
+
+def test_combine_matchup_dataframes_merges_with_and_against() -> None:
+    with_df = build_matchup_dataframe(
+        [MatchupRow(hero_id=1, hero="Axe", hero_image="axe.png", matches=4, wins=3, losses=1, winrate=75.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0)],
+        min_matches=1,
+    )
+    against_df = build_matchup_dataframe(
+        [MatchupRow(hero_id=2, hero="Bane", hero_image="bane.png", matches=4, wins=1, losses=3, winrate=25.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0)],
+        min_matches=1,
+    )
+
+    combined = combine_matchup_dataframes(with_df, against_df)
+
+    assert list(combined["Type"]) == ["With", "Against"]
+    assert list(combined["Hero"]) == ["Axe", "Bane"]
+    assert "WR Value" in combined.columns
