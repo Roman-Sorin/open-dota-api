@@ -34,10 +34,11 @@ from webapp.hero_overview import (
 )
 from webapp.hero_trends import build_daily_trend_points
 from webapp import matchups as matchup_utils
+from webapp.overview_health import overview_looks_stale
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
-OVERVIEW_SCHEMA_VERSION = 11
+OVERVIEW_SCHEMA_VERSION = 12
 
 st.markdown(
     """
@@ -554,30 +555,6 @@ def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnaly
     return service.build_turbo_hero_overview_rows(matches)
 
 
-def _overview_looks_stale(overview: object) -> bool:
-    if not isinstance(overview, list) or not overview:
-        return False
-
-    has_avg_damage_key = any(isinstance(row, dict) and "avg_damage" in row for row in overview)
-    has_avg_net_worth_key = any(isinstance(row, dict) and "avg_net_worth" in row for row in overview)
-    if not has_avg_damage_key or not has_avg_net_worth_key:
-        return True
-
-    positive_damage_rows = 0
-    multi_match_rows = 0
-    for row in overview:
-        if not isinstance(row, dict):
-            continue
-        matches = int(row.get("matches") or 0)
-        avg_damage = float(row.get("avg_damage") or 0.0)
-        if matches > 1:
-            multi_match_rows += 1
-        if avg_damage > 0:
-            positive_damage_rows += 1
-
-    return multi_match_rows > 0 and positive_damage_rows == 0
-
-
 st.title("Turbo Buff")
 st.caption("Turbo-only Dota 2 personal analytics based on OpenDota")
 app_version = get_app_version()
@@ -832,7 +809,7 @@ if "overview" in st.session_state and st.session_state.get("overview_schema_vers
     st.session_state.pop("patch_filtered_matches", None)
     _clear_detail_sections()
 
-if "overview" in st.session_state and _overview_looks_stale(st.session_state.get("overview")):
+if "overview" in st.session_state and overview_looks_stale(st.session_state.get("overview")):
     st.session_state.pop("overview", None)
     st.session_state.pop("patch_filtered_matches", None)
     _clear_detail_sections()
