@@ -16,3 +16,4 @@
 - Exception: in the four `Matchups` tables, apply semantic colors only to `WR`; keep `Won` and `Lost` neutral there.
 - Any metric that users may sort by in the UI must stay numeric in the underlying dataframe/state. Never store sortable percentages as strings like `100%`; keep them numeric and apply formatting only in the rendering layer.
 - Matchup tables must use one fixed column order everywhere: `Hero Icon`, `Hero`, `WR`, `Matches`, `Won`, `Lost`.
+- Any implemented change must be recorded in the relevant project `MD` files in the same task so the next agent can reconstruct prior decisions, behavior changes, cache rules, UI rules, and known constraints from repository docs alone.
