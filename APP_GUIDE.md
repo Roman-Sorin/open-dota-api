@@ -30,7 +30,7 @@ The project includes two interfaces:
 - Selected-hero refresh actions are grouped into one shared action bar above the detail sections, including `Refresh Matchups`
 - `Refresh Hero Details`, `Refresh Matchups`, `Refresh Item Winrates`, and `Refresh Recent Matches` are cache-only section rebuilds and do not issue hidden OpenDota detail fetches
 - Per-hero detailed stats (avg K/D/A, KDA, avg duration, avg net worth, avg damage, max kills, max hero damage, Radiant/Dire WR)
-- Matchups section now uses the same two-table layout everywhere: `Allies` and `Opponents`
+- Matchups section now uses the same two-table layout everywhere: `Teammates` and `Opponents`
   - Both `Selected Hero` and `All Heroes` use `Hero Icon / Hero / WR / Matches / Won / Lost`
   - Matchup tables intentionally omit `Avg K/D/A` and `KDA`
   - In Matchups, only `WR` uses semantic color; `Won` and `Lost` stay neutral

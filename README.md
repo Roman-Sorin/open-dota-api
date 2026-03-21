@@ -32,7 +32,7 @@ Turbo-only dashboard for your account:
 - During dashboard refresh, missing match details for the current snapshot are hydrated once and then reused by all sections
 - Detailed hero section in Turbo includes avg duration, avg damage, avg net worth, max kills, and max hero damage
 - Selected-hero section refreshes are grouped into one action bar above the sections (`Hero Details`, `Matchups`, `Item Winrates`, `Recent Matches`)
-- Matchups section now uses the same two-table layout everywhere: `Allies` and `Opponents`
+- Matchups section now uses the same two-table layout everywhere: `Teammates` and `Opponents`
   - Both `Selected Hero` and `All Heroes` show the same column order: `Hero Icon / Hero / WR / Matches / Won / Lost`
   - In Matchups, only `WR` is color-coded; `Won` and `Lost` stay neutral
   - Matchup winrates remain numeric under the hood so both built-in sorting and user-click sorting treat `100.00` correctly

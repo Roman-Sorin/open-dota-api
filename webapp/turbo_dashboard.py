@@ -1262,7 +1262,7 @@ if isinstance(matchup_rows, dict):
         selected_with_col, selected_against_col = st.columns(2)
         with selected_with_col:
             if not selected_with.empty:
-                st.caption("Hero Allies")
+                st.caption("Hero Teammates")
                 st.dataframe(
                     matchup_utils.build_matchup_styler(
                         matchup_utils.sort_matchup_summary_dataframe(selected_with, best_first=True)
@@ -1272,7 +1272,7 @@ if isinstance(matchup_rows, dict):
                     column_config=matchup_column_config,
                 )
             else:
-                st.info("No selected-hero team matchup rows for current filter.")
+                st.info("No selected-hero teammate rows for current filter.")
         with selected_against_col:
             if not selected_against.empty:
                 st.caption("Hero Opponents")
@@ -1297,7 +1297,7 @@ if isinstance(matchup_rows, dict):
         global_with_col, global_against_col = st.columns(2)
         with global_with_col:
             if not global_with_summary.empty:
-                st.caption("Player Allies")
+                st.caption("Player Teammates")
                 st.dataframe(
                     matchup_utils.build_matchup_styler(
                         matchup_utils.sort_matchup_summary_dataframe(global_with_summary, best_first=True)
@@ -1307,7 +1307,7 @@ if isinstance(matchup_rows, dict):
                     column_config=matchup_column_config,
                 )
             else:
-                st.info("No global team matchup rows for current filter.")
+                st.info("No global teammate rows for current filter.")
         with global_against_col:
             if not global_matchup_summary.empty:
                 st.caption("Player Opponents")
