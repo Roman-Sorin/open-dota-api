@@ -22,7 +22,7 @@ Turbo-only dashboard for your account:
 - Hero overview aggregation now also comes from one shared service-side stats source, so values like `Rad WR` and `Dire WR` stay identical between overview and detailed hero stats
 - When Turbo match rows miss `hero_damage` or `net_worth`, the app enriches overview/detail stats from match details stored locally
 - Cached Hero Overview now also enriches missing `hero_damage` and `net_worth` from stored match details, so heroes do not stay stuck at zero when the local summary rows were incomplete
-- Top dashboard metrics include Turbo matches, wins, losses, and winrate
+- Top dashboard metrics include Turbo matches, wins, losses, and winrate; Turbo wins are green and Turbo losses are red
 - Dashboard loading is manual by section:
   - cached overview data can auto-open from local SQLite storage when available
   - `Refresh Turbo Dashboard` is the only action allowed to talk to OpenDota for match sync/detail hydration

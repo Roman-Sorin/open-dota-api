@@ -1012,8 +1012,8 @@ overall_wr = (total_wins / total_matches * 100.0) if total_matches else 0.0
 
 top_cards = [
     ("Turbo Matches", f"{total_matches}"),
-    ("Turbo Wins", f"{total_wins}"),
-    ("Turbo Losses", f"{total_losses}"),
+    ("Turbo Wins", colored_metric_html(total_wins, "#23a55a")),
+    ("Turbo Losses", colored_metric_html(total_losses, "#d9534f")),
     ("Turbo Winrate", colored_winrate_html(overall_wr)),
 ]
 top_html = "".join(
