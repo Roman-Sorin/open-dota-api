@@ -620,6 +620,25 @@ def _get_current_matchup_snapshot(request_key: object) -> object | None:
     return None
 
 
+def _set_current_section_snapshot(section_name: str, request_key: object, rows: object) -> None:
+    st.session_state[f"current_{section_name}_request_key"] = request_key
+    st.session_state[f"current_{section_name}_rows"] = rows
+
+
+def _get_current_section_snapshot(section_name: str, request_key: object) -> object | None:
+    if st.session_state.get(f"current_{section_name}_request_key") == request_key:
+        return st.session_state.get(f"current_{section_name}_rows")
+    return None
+
+
+def _mark_section_visible(section_name: str, request_key: object) -> None:
+    st.session_state[f"current_{section_name}_visible_request_key"] = request_key
+
+
+def _is_section_visible(section_name: str, request_key: object) -> bool:
+    return st.session_state.get(f"current_{section_name}_visible_request_key") == request_key
+
+
 def _utcnow_iso() -> str:
     return datetime.utcnow().isoformat()
 
@@ -635,7 +654,7 @@ def _coalesce_dashboard_cache_timestamp(sync_state: dict[str, object] | None) ->
         return None
     timestamps = [
         str(sync_state.get("last_incremental_sync_at") or ""),
-        str(sync_state.get("latest_match_update_at") or ""),
+        str(sync_state.get("last_full_sync_at") or ""),
     ]
     normalized = [value for value in timestamps if value]
     return max(normalized) if normalized else None
@@ -761,16 +780,17 @@ def _get_turbo_overview_snapshot_safe(
     player_id: int,
     days: int | None,
     start_date: date | None,
-    patch_names: list[str],
+    patch_names: list[str] | None = None,
     force_sync: bool,
     hydrate_details: bool,
 ):
+    normalized_patch_names = patch_names or []
     if hasattr(service, "get_turbo_overview_snapshot"):
         return service.get_turbo_overview_snapshot(
             player_id=player_id,
             days=days,
             start_date=start_date,
-            patch_names=patch_names,
+            patch_names=normalized_patch_names,
             force_sync=force_sync,
             hydrate_details=hydrate_details,
         )
@@ -781,7 +801,7 @@ def _get_turbo_overview_snapshot_safe(
         game_mode_name="Turbo",
         days=days,
         start_date=start_date,
-        patch_names=patch_names,
+        patch_names=normalized_patch_names,
     )
     if force_sync:
         if hasattr(service, "refresh_cached_matches"):
@@ -1279,6 +1299,7 @@ matchup_request_key = _matchup_cache_key(
 )
 if load_all_sections or load_matchups:
     try:
+        _mark_section_visible("matchup", matchup_request_key)
         if active_patches and not supports_patch_overview:
             all_matchup_matches = st.session_state.get("patch_filtered_matches") or []
         else:
@@ -1326,6 +1347,44 @@ if matchup_rows is None:
     matchup_rows = _get_current_matchup_snapshot(matchup_request_key)
     if matchup_rows is not None:
         _cache_set("matchup_rows_by_key", matchup_request_key, matchup_rows)
+if matchup_rows is None and _is_section_visible("matchup", matchup_request_key):
+    try:
+        if active_patches and not supports_patch_overview:
+            all_matchup_matches = st.session_state.get("patch_filtered_matches") or []
+        else:
+            all_matchup_matches = service.get_cached_matches(
+                QueryFilters(
+                    player_id=player_id,
+                    game_mode=23,
+                    game_mode_name="Turbo",
+                    days=days,
+                    start_date=active_start_date,
+                    patch_names=active_patches,
+                )
+            )
+        selected_matchup_matches = [m for m in all_matchup_matches if int(m.hero_id or 0) == selected_hero_id]
+        matchup_rows = {
+            "selected": matchup_utils.build_matchup_rows(
+                matches=selected_matchup_matches,
+                detail_lookup=service.get_match_details_if_cached,
+                extract_player=service._extract_player_from_match_details,  # noqa: SLF001
+                player_id=player_id,
+                resolve_hero_name=service.resolve_hero_name,
+                resolve_hero_image=service.resolve_hero_image,
+            ),
+            "global": matchup_utils.build_matchup_rows(
+                matches=all_matchup_matches,
+                detail_lookup=service.get_match_details_if_cached,
+                extract_player=service._extract_player_from_match_details,  # noqa: SLF001
+                player_id=player_id,
+                resolve_hero_name=service.resolve_hero_name,
+                resolve_hero_image=service.resolve_hero_image,
+            ),
+        }
+        _cache_set("matchup_rows_by_key", matchup_request_key, matchup_rows)
+        _set_active_matchup_snapshot(matchup_request_key, matchup_rows)
+    except Exception:
+        matchup_rows = None
 if isinstance(matchup_rows, dict):
     min_matchup_matches = st.slider(
         "Min matchup matches",
@@ -1428,6 +1487,7 @@ else:
 
 if load_all_sections or load_item_winrates:
     try:
+        _mark_section_visible("item", current_item_request_key)
         matches = _load_selected_hero_matches(
             service,
             player_id,
@@ -1450,11 +1510,42 @@ if load_all_sections or load_item_winrates:
         )
         _cache_set("item_rows_by_key", current_item_request_key, item_wr_rows)
         _cache_set("item_loaded_at_by_key", current_item_request_key, _utcnow_iso())
+        _set_current_section_snapshot("item", current_item_request_key, item_wr_rows)
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
 st.markdown("### Item Winrates (when item appears in final slots)")
 item_wr_rows = _cache_get("item_rows_by_key", current_item_request_key)
+if item_wr_rows is None:
+    item_wr_rows = _get_current_section_snapshot("item", current_item_request_key)
+    if item_wr_rows is not None:
+        _cache_set("item_rows_by_key", current_item_request_key, item_wr_rows)
+if item_wr_rows is None and _is_section_visible("item", current_item_request_key):
+    try:
+        matches = _load_selected_hero_matches(
+            service,
+            player_id,
+            selected_hero_id,
+            selected_hero_name,
+            days,
+            active_patches,
+            active_start_date,
+            current_hero_snapshot_key,
+        )
+        item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50, allow_detail_fetch=False)
+        item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
+        item_wr_rows.sort(
+            key=lambda row: (
+                -round(float(row.get("item_winrate", 0.0))),
+                -int(row.get("matches_with_item", 0)),
+                -int(row.get("wins_with_item", 0)),
+                str(row.get("item", "")),
+            )
+        )
+        _cache_set("item_rows_by_key", current_item_request_key, item_wr_rows)
+        _set_current_section_snapshot("item", current_item_request_key, item_wr_rows)
+    except Exception:
+        item_wr_rows = None
 item_loaded_at = _cache_get("item_loaded_at_by_key", current_item_request_key)
 item_section_stale = _is_section_stale(
     str(item_loaded_at) if item_loaded_at is not None else None,
@@ -1499,6 +1590,7 @@ if recent_matches_key not in st.session_state:
 
 if load_all_sections or load_recent_matches:
     try:
+        _mark_section_visible("recent", current_hero_snapshot_key)
         matches = _load_selected_hero_matches(
             service,
             player_id,
@@ -1519,11 +1611,40 @@ if load_all_sections or load_recent_matches:
         _cache_set("recent_rows_by_key", current_hero_snapshot_key, recent_rows)
         _cache_set("recent_loaded_at_by_key", current_hero_snapshot_key, _utcnow_iso())
         _cache_set("recent_limit_loaded_by_key", current_hero_snapshot_key, visible_recent_matches)
+        _set_current_section_snapshot("recent", current_hero_snapshot_key, recent_rows)
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
 st.markdown("### Hero Matches - Recent Matches for Hero")
 recent_match_rows = _cache_get("recent_rows_by_key", current_hero_snapshot_key)
+if recent_match_rows is None:
+    recent_match_rows = _get_current_section_snapshot("recent", current_hero_snapshot_key)
+    if recent_match_rows is not None:
+        _cache_set("recent_rows_by_key", current_hero_snapshot_key, recent_match_rows)
+if recent_match_rows is None and _is_section_visible("recent", current_hero_snapshot_key):
+    try:
+        matches = _load_selected_hero_matches(
+            service,
+            player_id,
+            selected_hero_id,
+            selected_hero_name,
+            days,
+            active_patches,
+            active_start_date,
+            current_hero_snapshot_key,
+        )
+        visible_recent_matches = int(st.session_state[recent_matches_key])
+        recent_match_rows = service.build_recent_hero_matches(
+            player_id=player_id,
+            matches=matches,
+            limit=min(visible_recent_matches, len(matches)),
+            allow_detail_fetch=False,
+        )
+        _cache_set("recent_rows_by_key", current_hero_snapshot_key, recent_match_rows)
+        _cache_set("recent_limit_loaded_by_key", current_hero_snapshot_key, visible_recent_matches)
+        _set_current_section_snapshot("recent", current_hero_snapshot_key, recent_match_rows)
+    except Exception:
+        recent_match_rows = None
 recent_loaded_at = _cache_get("recent_loaded_at_by_key", current_hero_snapshot_key)
 recent_matches_loaded = isinstance(recent_match_rows, list)
 visible_recent_matches = int(st.session_state[recent_matches_key])
@@ -1544,6 +1665,7 @@ if recent_matches_loaded and loaded_recent_matches != visible_recent_matches:
         )
         _cache_set("recent_rows_by_key", current_hero_snapshot_key, recent_match_rows)
         _cache_set("recent_limit_loaded_by_key", current_hero_snapshot_key, visible_recent_matches)
+        _set_current_section_snapshot("recent", current_hero_snapshot_key, recent_match_rows)
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
         recent_matches_loaded = False
