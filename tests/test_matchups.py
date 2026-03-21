@@ -1,7 +1,7 @@
 from models.dtos import MatchSummary
 from services.analytics_service import DotaAnalyticsService
 from tests.test_hero_damage_enrichment import _FakeCache
-from webapp.matchups import MatchupRow, build_matchup_dataframe, build_matchup_rows, sort_matchup_dataframe
+from webapp.matchups import MatchupRow, build_matchup_dataframe, build_matchup_rows, build_matchup_styler, sort_matchup_dataframe
 
 
 class _MatchupClient:
@@ -74,3 +74,20 @@ def test_sort_matchup_dataframe_uses_numeric_winrate_not_percent_string() -> Non
     assert "KDA" not in df.columns
     assert list(worst["Hero"])[:2] == ["Lion", "Nyx Assassin"]
     assert list(best["Hero"])[:2] == ["Nature's Prophet", "Sniper"]
+
+
+def test_build_matchup_styler_colors_win_loss_and_winrate() -> None:
+    df = build_matchup_dataframe(
+        [
+            MatchupRow(hero_id=1, hero="Axe", hero_image="axe.png", matches=4, wins=3, losses=1, winrate=75.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0),
+            MatchupRow(hero_id=2, hero="Bane", hero_image="bane.png", matches=4, wins=2, losses=2, winrate=50.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0),
+            MatchupRow(hero_id=3, hero="Lion", hero_image="lion.png", matches=4, wins=1, losses=3, winrate=25.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0),
+        ],
+        min_matches=1,
+    )
+
+    html = build_matchup_styler(df).to_html()
+
+    assert "#23a55a" in html
+    assert "#d9534f" in html
+    assert "#d4a017" in html

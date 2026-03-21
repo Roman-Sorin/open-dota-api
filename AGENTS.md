@@ -11,3 +11,5 @@
 - `Hero Overview` and `Detailed Turbo Stats` must stay synchronized on metric coverage, metric order, and value formatting. If a metric is added, removed, reordered, or reformatted in one, apply the same change in the other unless the task explicitly requires divergence.
 - For `Hero Overview` specifically, keep column headers abbreviated. For `Detailed Turbo Stats`, use full metric labels where space allows.
 - Visual meaning must stay synchronized too: if a metric is color-coded in `Hero Overview` (for example win/loss or winrate semantics), apply the same semantic color treatment in `Detailed Turbo Stats`.
+- In every app table or stat block, winrates must always use the same semantic colors: `<50%` red, `=50%` yellow, `>50%` green.
+- In every app table or stat block, won-match counts must be green and lost-match counts must be red.

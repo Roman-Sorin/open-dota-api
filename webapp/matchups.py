@@ -130,3 +130,39 @@ def sort_matchup_dataframe(df: pd.DataFrame, *, best_first: bool) -> pd.DataFram
         ascending=[not best_first, False, True],
     ).head(8)
     return sorted_df.drop(columns=["WR Value"])
+
+
+def build_matchup_styler(df: pd.DataFrame) -> pd.io.formats.style.Styler:
+    styler = df.style
+    if df.empty:
+        return styler
+
+    return (
+        styler.map(
+            lambda _: "color: #23a55a; font-weight: 700;",
+            subset=["Won"],
+        )
+        .map(
+            lambda _: "color: #d9534f; font-weight: 700;",
+            subset=["Lost"],
+        )
+        .map(
+            _style_matchup_winrate_cell,
+            subset=["WR"],
+        )
+    )
+
+
+def _style_matchup_winrate_cell(value: object) -> str:
+    text = str(value).strip().replace("%", "")
+    try:
+        numeric_value = float(text)
+    except ValueError:
+        return ""
+    if numeric_value > 50.0:
+        color = "#23a55a"
+    elif numeric_value < 50.0:
+        color = "#d9534f"
+    else:
+        color = "#d4a017"
+    return f"color: {color}; font-weight: 700;"

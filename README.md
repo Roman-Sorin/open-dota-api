@@ -32,6 +32,7 @@ Turbo-only dashboard for your account:
 - Matchups section shows best/worst `With / Against` heroes for the selected hero and globally for the current filter
   - Matchup best/worst tables sort by numeric winrate, so `100%` correctly stays above `67%` and `33%`
   - Matchup tables show only hero, matches, wins, losses, and WR
+  - Matchup `Won`, `Lost`, and `WR` columns use the same red/yellow/green semantics as the rest of the app
 - Experimental Hero Trends stays at the bottom and currently shows daily trends for the selected hero
 - Hero detail, item stats, and recent matches stay cached per hero/filter in the current session when you switch between heroes
 - Detail-section caches are scoped to the current dashboard snapshot so old hero/recent/item rows are not reused after the overview changes
