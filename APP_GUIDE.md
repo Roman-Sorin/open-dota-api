@@ -27,12 +27,14 @@ The project includes two interfaces:
 - `Refresh Turbo Dashboard` fetches/syncs the hero overview from OpenDota when you want newer matches
 - `Refresh Turbo Dashboard` performs an incremental new-match check; it does not re-download already cached match summaries/details
 - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild the selected hero sections from the currently loaded dashboard snapshot
+- Selected-hero refresh actions are grouped into one shared action bar above the detail sections, including `Refresh Matchups`
 - Per-hero detailed stats (avg K/D/A, KDA, avg duration, avg net worth, avg damage, max kills, max hero damage, Radiant/Dire WR)
 - Matchups section now uses the same two-table layout everywhere: `Allies` and `Opponents`
   - Both `Selected Hero` and `All Heroes` use `Hero Icon / Hero / WR / Matches / Won / Lost`
   - Matchup tables intentionally omit `Avg K/D/A` and `KDA`
   - In Matchups, only `WR` uses semantic color; `Won` and `Lost` stay neutral
   - Matchup `WR` stays numeric in the dataframe; percent formatting is applied only at render time so sorting remains correct
+  - Adjusting `Min matchup matches` filters the cached matchup rows and does not require a second `Refresh Matchups`
 - Experimental Hero Trends stays at the bottom and currently shows daily trend charts for the selected hero
 - When you switch away from a hero and return, already loaded hero details/item stats/recent matches are restored from session cache for that hero/filter combination
 - Detail-section caches are tied to the current dashboard snapshot, so a newer overview will not silently reuse old hero/item/recent rows
