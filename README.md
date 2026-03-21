@@ -28,13 +28,11 @@ Turbo-only dashboard for your account:
   - `Refresh Turbo Dashboard` syncs overview data from OpenDota when you want newer matches
   - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild from the currently loaded dashboard snapshot for the selected hero
 - Section refreshes no longer pull newer matches than the currently loaded overview; only `Refresh Turbo Dashboard` advances the dataset
+- `Refresh Turbo Dashboard` now forces an incremental sync check for new matches only; already cached summaries and match details are reused instead of being re-fetched
 - Detailed hero section in Turbo includes avg duration, avg damage, avg net worth, max kills, and max hero damage
-- Matchups section shows best/worst `With / Against` heroes for the selected hero and globally for the current filter
-  - Matchup best/worst tables sort by numeric winrate, so `100%` correctly stays above `67%` and `33%`
-  - Matchup tables show only hero, matches, wins, losses, and WR
+- Matchups section now uses the same two-table layout everywhere: `Allies` and `Opponents`
+  - Both `Selected Hero` and `All Heroes` show the same column order: `Hero Icon / Hero / WR / Matches / Won / Lost`
   - In Matchups, only `WR` is color-coded; `Won` and `Lost` stay neutral
-  - Selected-hero Matchups also include a full hero-specific summary table in the same `Hero / WR / Won / Lost / Matches` format
-  - `All Heroes` Matchups expose both player-level ally and opponent tables in the same `Hero / WR / Won / Lost / Matches` format
   - Matchup winrates remain numeric under the hood so both built-in sorting and user-click sorting treat `100.00` correctly
 - Experimental Hero Trends stays at the bottom and currently shows daily trends for the selected hero
 - Hero detail, item stats, and recent matches stay cached per hero/filter in the current session when you switch between heroes

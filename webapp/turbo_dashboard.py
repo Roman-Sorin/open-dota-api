@@ -920,7 +920,7 @@ if load:
                 start_date=active_start_date,
             )
             all_turbo_matches = run_with_rate_limit_retry(
-                lambda: service.fetch_matches(base_filters),
+                lambda: service.fetch_matches(base_filters, force_sync=True),
                 operation_label="patch-filtered matches",
             )
             selected_set = set(active_patches)
@@ -942,7 +942,7 @@ if load:
             if active_patches:
                 overview_kwargs["patch_names"] = active_patches
             overview = run_with_rate_limit_retry(
-                lambda: service.get_turbo_hero_overview(**overview_kwargs),
+                lambda: service.get_turbo_hero_overview(**overview_kwargs, force_sync=True),
                 operation_label="hero overview",
             )
 
@@ -1221,7 +1221,6 @@ matchup_rows = _cache_get("matchup_rows_by_key", matchup_request_key)
 if isinstance(matchup_rows, dict):
     min_matchup_matches = st.slider("Min matchup matches", min_value=1, max_value=20, value=3, step=1)
     selected_tab, global_tab = st.tabs([f"{selected_hero_name}", "All Heroes"])
-    selected_against = pd.DataFrame()
     matchup_column_config = {
         "Icon": st.column_config.ImageColumn("Hero", width="small"),
         "WR": st.column_config.NumberColumn("WR", format="%.2f%%"),
@@ -1231,52 +1230,46 @@ if isinstance(matchup_rows, dict):
     }
 
     with selected_tab:
-        best_with, worst_against = st.columns(2)
-        with best_with:
-            st.caption("Best/Worst With")
-            selected_with = matchup_utils.build_matchup_dataframe(matchup_rows["selected"]["with"], min_matchup_matches)
+        selected_with = matchup_utils.build_matchup_summary_dataframe(
+            matchup_utils.build_matchup_dataframe(matchup_rows["selected"]["with"], min_matchup_matches),
+        )
+        selected_against = matchup_utils.build_matchup_summary_dataframe(
+            matchup_utils.build_matchup_dataframe(matchup_rows["selected"]["against"], min_matchup_matches),
+        )
+        selected_with_col, selected_against_col = st.columns(2)
+        with selected_with_col:
             if not selected_with.empty:
-                st.caption("Best With")
-                best = matchup_utils.sort_matchup_dataframe(selected_with, best_first=True)
-                worst = matchup_utils.sort_matchup_dataframe(selected_with, best_first=False)
-                st.dataframe(matchup_utils.build_matchup_styler(best), use_container_width=True, hide_index=True, column_config=matchup_column_config)
-                st.caption("Worst With")
-                st.dataframe(matchup_utils.build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config=matchup_column_config)
+                st.caption("Hero Allies")
+                st.dataframe(
+                    matchup_utils.build_matchup_styler(
+                        matchup_utils.sort_matchup_summary_dataframe(selected_with, best_first=True)
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config=matchup_column_config,
+                )
             else:
                 st.info("No selected-hero team matchup rows for current filter.")
-        with worst_against:
-            st.caption("Best/Worst Against")
-            selected_against = matchup_utils.build_matchup_dataframe(matchup_rows["selected"]["against"], min_matchup_matches)
+        with selected_against_col:
             if not selected_against.empty:
-                st.caption("Best Against")
-                best = matchup_utils.sort_matchup_dataframe(selected_against, best_first=True)
-                worst = matchup_utils.sort_matchup_dataframe(selected_against, best_first=False)
-                st.dataframe(matchup_utils.build_matchup_styler(best), use_container_width=True, hide_index=True, column_config=matchup_column_config)
-                st.caption("Worst Against")
-                st.dataframe(matchup_utils.build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config=matchup_column_config)
+                st.caption("Hero Opponents")
+                st.dataframe(
+                    matchup_utils.build_matchup_styler(
+                        matchup_utils.sort_matchup_summary_dataframe(selected_against, best_first=True)
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config=matchup_column_config,
+                )
             else:
                 st.info("No selected-hero opponent matchup rows for current filter.")
 
-        selected_matchup_summary = matchup_utils.build_matchup_summary_dataframe(
-            selected_against,
-        )
-        if not selected_matchup_summary.empty:
-            st.caption("Hero Matchups")
-            st.dataframe(
-                matchup_utils.build_matchup_styler(
-                    matchup_utils.sort_matchup_summary_dataframe(selected_matchup_summary, best_first=True)
-                ),
-                use_container_width=True,
-                hide_index=True,
-                column_config=matchup_column_config,
-            )
-
     with global_tab:
-        global_with = matchup_utils.build_matchup_dataframe(matchup_rows["global"]["with"], min_matchup_matches)
-        global_against = matchup_utils.build_matchup_dataframe(matchup_rows["global"]["against"], min_matchup_matches)
-        global_with_summary = matchup_utils.build_matchup_summary_dataframe(global_with)
+        global_with_summary = matchup_utils.build_matchup_summary_dataframe(
+            matchup_utils.build_matchup_dataframe(matchup_rows["global"]["with"], min_matchup_matches),
+        )
         global_matchup_summary = matchup_utils.build_matchup_summary_dataframe(
-            global_against,
+            matchup_utils.build_matchup_dataframe(matchup_rows["global"]["against"], min_matchup_matches),
         )
         global_with_col, global_against_col = st.columns(2)
         with global_with_col:
@@ -1294,7 +1287,7 @@ if isinstance(matchup_rows, dict):
                 st.info("No global team matchup rows for current filter.")
         with global_against_col:
             if not global_matchup_summary.empty:
-                st.caption("Player Matchups")
+                st.caption("Player Opponents")
                 st.dataframe(
                     matchup_utils.build_matchup_styler(
                         matchup_utils.sort_matchup_summary_dataframe(global_matchup_summary, best_first=True)

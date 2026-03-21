@@ -117,11 +117,11 @@ def test_build_matchup_summary_dataframe_keeps_requested_columns_and_order() -> 
 
     summary = build_matchup_summary_dataframe(df)
 
-    assert list(summary.columns) == ["Icon", "Hero", "WR", "Won", "Lost", "Matches"]
+    assert list(summary.columns) == ["Icon", "Hero", "WR", "Matches", "Won", "Lost"]
     assert summary.iloc[0]["WR"] == 25.0
+    assert summary.iloc[0]["Matches"] == 4
     assert summary.iloc[0]["Won"] == 1
     assert summary.iloc[0]["Lost"] == 3
-    assert summary.iloc[0]["Matches"] == 4
 
 
 def test_build_matchup_dataframe_keeps_winrate_numeric_for_ui_sorting() -> None:
@@ -134,6 +134,7 @@ def test_build_matchup_dataframe_keeps_winrate_numeric_for_ui_sorting() -> None:
         min_matches=1,
     )
 
+    assert list(df.columns) == ["Icon", "Hero", "WR", "Matches", "Won", "Lost"]
     assert df["WR"].tolist() == [100.0, 20.0, 0.0]
 
 

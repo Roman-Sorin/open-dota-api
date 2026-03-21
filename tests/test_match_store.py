@@ -303,3 +303,94 @@ def test_cached_sync_state_exposes_latest_match_update_timestamp() -> None:
     assert state is not None
     assert state["known_match_count"] == 1
     assert state["latest_match_update_at"]
+
+
+def test_force_sync_checks_only_new_matches_even_when_incremental_interval_has_not_elapsed() -> None:
+    class _IncrementalClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.pages = [
+                [
+                    {
+                        "match_id": 2,
+                        "start_time": 1738541800,
+                        "player_slot": 0,
+                        "radiant_win": True,
+                        "game_mode": 23,
+                        "kills": 6,
+                        "deaths": 2,
+                        "assists": 10,
+                        "duration": 1800,
+                        "hero_id": 1,
+                    },
+                    {
+                        "match_id": 1,
+                        "start_time": 1738540800,
+                        "player_slot": 0,
+                        "radiant_win": True,
+                        "game_mode": 23,
+                        "kills": 5,
+                        "deaths": 2,
+                        "assists": 9,
+                        "duration": 1800,
+                        "hero_id": 1,
+                    },
+                ],
+                [
+                    {
+                        "match_id": 3,
+                        "start_time": 1738542800,
+                        "player_slot": 0,
+                        "radiant_win": False,
+                        "game_mode": 23,
+                        "kills": 4,
+                        "deaths": 5,
+                        "assists": 11,
+                        "duration": 1800,
+                        "hero_id": 1,
+                    },
+                    {
+                        "match_id": 2,
+                        "start_time": 1738541800,
+                        "player_slot": 0,
+                        "radiant_win": True,
+                        "game_mode": 23,
+                        "kills": 6,
+                        "deaths": 2,
+                        "assists": 10,
+                        "duration": 1800,
+                        "hero_id": 1,
+                    },
+                    {
+                        "match_id": 1,
+                        "start_time": 1738540800,
+                        "player_slot": 0,
+                        "radiant_win": True,
+                        "game_mode": 23,
+                        "kills": 5,
+                        "deaths": 2,
+                        "assists": 9,
+                        "duration": 1800,
+                        "hero_id": 1,
+                    },
+                ],
+            ]
+
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return self.pages.pop(0) if self.pages else []
+
+    client = _IncrementalClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    filters = QueryFilters(player_id=123, game_mode=23, game_mode_name="Turbo")
+
+    first = service.fetch_matches(filters, force_sync=True)
+    second = service.fetch_matches(filters)
+    third = service.fetch_matches(filters, force_sync=True)
+
+    assert [match.match_id for match in first] == [2, 1]
+    assert [match.match_id for match in second] == [2, 1]
+    assert [match.match_id for match in third] == [3, 2, 1]
+    assert client.calls == 2
+    assert store.count_player_matches(123, game_mode=23) == 3

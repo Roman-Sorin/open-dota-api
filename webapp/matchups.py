@@ -111,9 +111,9 @@ def build_matchup_dataframe(rows: list[MatchupRow], min_matches: int) -> pd.Data
                 "Icon": row.hero_image,
                 "Hero": row.hero,
                 "WR": float(row.winrate),
+                "Matches": row.matches,
                 "Won": row.wins,
                 "Lost": row.losses,
-                "Matches": row.matches,
             }
             for row in filtered_rows
         ]
@@ -135,10 +135,10 @@ def build_matchup_summary_dataframe(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
     if df.empty:
-        return pd.DataFrame(columns=["Icon", "Hero", "WR", "Won", "Lost", "Matches"])
+        return pd.DataFrame(columns=["Icon", "Hero", "WR", "Matches", "Won", "Lost"])
 
     summary = df.copy()
-    column_order = ["Icon", "Hero", "WR", "Won", "Lost", "Matches"]
+    column_order = ["Icon", "Hero", "WR", "Matches", "Won", "Lost"]
     return summary[column_order]
 
 

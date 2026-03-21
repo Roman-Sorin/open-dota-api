@@ -294,7 +294,7 @@ class DotaAnalyticsService:
         )
         return match if match.match_id > 0 else None
 
-    def _sync_player_matches(self, filters: QueryFilters) -> None:
+    def _sync_player_matches(self, filters: QueryFilters, *, force: bool = False) -> None:
         if self.match_store is None:
             return
 
@@ -322,7 +322,7 @@ class DotaAnalyticsService:
                 significant=significant,
             )
 
-        if state and state.get("last_incremental_sync_at"):
+        if not force and state and state.get("last_incremental_sync_at"):
             try:
                 last_sync = datetime.fromisoformat(str(state["last_incremental_sync_at"]))
                 if datetime.now(tz=timezone.utc) - last_sync < min_sync_interval:
@@ -447,13 +447,13 @@ class DotaAnalyticsService:
             return None
         return rows
 
-    def fetch_matches(self, filters: QueryFilters, limit: int | None = None) -> list[MatchSummary]:
+    def fetch_matches(self, filters: QueryFilters, limit: int | None = None, *, force_sync: bool = False) -> list[MatchSummary]:
         significant = 0 if filters.game_mode == 23 else None
         selected_patches = set(filters.patch_names or [])
         min_start = self._min_start_time(filters)
 
         if self.match_store is not None:
-            self._sync_player_matches(filters)
+            self._sync_player_matches(filters, force=force_sync)
             stored_rows = self.match_store.query_player_matches(
                 filters.player_id,
                 hero_id=filters.hero_id,
@@ -1071,6 +1071,7 @@ class DotaAnalyticsService:
         days: int | None = 60,
         start_date=None,
         patch_names: list[str] | None = None,
+        force_sync: bool = False,
     ) -> list[dict[str, Any]]:
         filters = QueryFilters(
             player_id=player_id,
@@ -1080,7 +1081,7 @@ class DotaAnalyticsService:
             start_date=start_date,
             patch_names=patch_names,
         )
-        matches = self.fetch_matches(filters)
+        matches = self.fetch_matches(filters, force_sync=force_sync) if force_sync else self.fetch_matches(filters)
         if not matches:
             return []
         self.enrich_hero_damage(player_id, matches, max_fallback_detail_calls=max(120, len(matches)))
