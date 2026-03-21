@@ -145,7 +145,7 @@ def combine_matchup_dataframes(with_df: pd.DataFrame, against_df: pd.DataFrame) 
     return combined[[column for column in column_order if column in combined.columns]]
 
 
-def build_matchup_styler(df: pd.DataFrame) -> pd.io.formats.style.Styler:
+def build_matchup_styler(df: pd.DataFrame):
     styler = df.style
     if df.empty:
         return styler

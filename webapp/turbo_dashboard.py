@@ -33,13 +33,7 @@ from webapp.hero_overview import (
     build_hero_overview_row,
 )
 from webapp.hero_trends import build_daily_trend_points
-from webapp.matchups import (
-    build_matchup_dataframe,
-    build_matchup_rows,
-    build_matchup_styler,
-    combine_matchup_dataframes,
-    sort_matchup_dataframe,
-)
+from webapp import matchups as matchup_utils
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
@@ -683,6 +677,23 @@ def _matchup_cache_key(
     )
 
 
+def _combine_matchup_dataframes(with_df: pd.DataFrame, against_df: pd.DataFrame) -> pd.DataFrame:
+    combine_fn = getattr(matchup_utils, "combine_matchup_dataframes", None)
+    if callable(combine_fn):
+        return combine_fn(with_df, against_df)
+
+    frames: list[pd.DataFrame] = []
+    if not with_df.empty:
+        frames.append(with_df.assign(Type="With"))
+    if not against_df.empty:
+        frames.append(against_df.assign(Type="Against"))
+    if not frames:
+        return pd.DataFrame(columns=["Type", "Icon", "Hero", "Matches", "Won", "Lost", "WR"])
+    combined = pd.concat(frames, ignore_index=True)
+    column_order = ["Type", "Icon", "Hero", "Matches", "Won", "Lost", "WR", "WR Value"]
+    return combined[[column for column in column_order if column in combined.columns]]
+
+
 def _store_dashboard_state(
     *,
     player_raw_value: str,
@@ -1201,7 +1212,7 @@ if load_matchups:
             )
         selected_matchup_matches = [m for m in all_matchup_matches if int(m.hero_id or 0) == selected_hero_id]
         matchup_rows = {
-            "selected": build_matchup_rows(
+            "selected": matchup_utils.build_matchup_rows(
                 matches=selected_matchup_matches,
                 detail_lookup=service._get_match_details_cached,  # noqa: SLF001
                 extract_player=service._extract_player_from_match_details,  # noqa: SLF001
@@ -1209,7 +1220,7 @@ if load_matchups:
                 resolve_hero_name=service.resolve_hero_name,
                 resolve_hero_image=service.resolve_hero_image,
             ),
-            "global": build_matchup_rows(
+            "global": matchup_utils.build_matchup_rows(
                 matches=all_matchup_matches,
                 detail_lookup=service._get_match_details_cached,  # noqa: SLF001
                 extract_player=service._extract_player_from_match_details,  # noqa: SLF001
@@ -1232,64 +1243,64 @@ if isinstance(matchup_rows, dict):
         best_with, worst_against = st.columns(2)
         with best_with:
             st.caption("Best/Worst With")
-            selected_with = build_matchup_dataframe(matchup_rows["selected"]["with"], min_matchup_matches)
+            selected_with = matchup_utils.build_matchup_dataframe(matchup_rows["selected"]["with"], min_matchup_matches)
             if not selected_with.empty:
                 st.caption("Best With")
-                best = sort_matchup_dataframe(selected_with, best_first=True)
-                worst = sort_matchup_dataframe(selected_with, best_first=False)
-                st.dataframe(build_matchup_styler(best), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                best = matchup_utils.sort_matchup_dataframe(selected_with, best_first=True)
+                worst = matchup_utils.sort_matchup_dataframe(selected_with, best_first=False)
+                st.dataframe(matchup_utils.build_matchup_styler(best), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
                 st.caption("Worst With")
-                st.dataframe(build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                st.dataframe(matchup_utils.build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
             else:
                 st.info("No selected-hero team matchup rows for current filter.")
         with worst_against:
             st.caption("Best/Worst Against")
-            selected_against = build_matchup_dataframe(matchup_rows["selected"]["against"], min_matchup_matches)
+            selected_against = matchup_utils.build_matchup_dataframe(matchup_rows["selected"]["against"], min_matchup_matches)
             if not selected_against.empty:
                 st.caption("Best Against")
-                best = sort_matchup_dataframe(selected_against, best_first=True)
-                worst = sort_matchup_dataframe(selected_against, best_first=False)
-                st.dataframe(build_matchup_styler(best), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                best = matchup_utils.sort_matchup_dataframe(selected_against, best_first=True)
+                worst = matchup_utils.sort_matchup_dataframe(selected_against, best_first=False)
+                st.dataframe(matchup_utils.build_matchup_styler(best), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
                 st.caption("Worst Against")
-                st.dataframe(build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                st.dataframe(matchup_utils.build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
             else:
                 st.info("No selected-hero opponent matchup rows for current filter.")
 
     with global_tab:
         global_with_col, global_against_col = st.columns(2)
-        global_with = build_matchup_dataframe(matchup_rows["global"]["with"], min_matchup_matches)
-        global_against = build_matchup_dataframe(matchup_rows["global"]["against"], min_matchup_matches)
+        global_with = matchup_utils.build_matchup_dataframe(matchup_rows["global"]["with"], min_matchup_matches)
+        global_against = matchup_utils.build_matchup_dataframe(matchup_rows["global"]["against"], min_matchup_matches)
         with global_with_col:
             st.caption("Global Best/Worst With")
             if not global_with.empty:
                 st.caption("Global Best With")
-                best = sort_matchup_dataframe(global_with, best_first=True)
-                worst = sort_matchup_dataframe(global_with, best_first=False)
-                st.dataframe(build_matchup_styler(best), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                best = matchup_utils.sort_matchup_dataframe(global_with, best_first=True)
+                worst = matchup_utils.sort_matchup_dataframe(global_with, best_first=False)
+                st.dataframe(matchup_utils.build_matchup_styler(best), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
                 st.caption("Global Worst With")
-                st.dataframe(build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                st.dataframe(matchup_utils.build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
             else:
                 st.info("No global team matchup rows for current filter.")
         with global_against_col:
             st.caption("Global Best/Worst Against")
             if not global_against.empty:
                 st.caption("Global Best Against")
-                best = sort_matchup_dataframe(global_against, best_first=True)
-                worst = sort_matchup_dataframe(global_against, best_first=False)
-                st.dataframe(build_matchup_styler(best), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                best = matchup_utils.sort_matchup_dataframe(global_against, best_first=True)
+                worst = matchup_utils.sort_matchup_dataframe(global_against, best_first=False)
+                st.dataframe(matchup_utils.build_matchup_styler(best), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
                 st.caption("Global Worst Against")
-                st.dataframe(build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                st.dataframe(matchup_utils.build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
             else:
                 st.info("No global opponent matchup rows for current filter.")
 
         st.caption("Global Combined")
-        global_combined = combine_matchup_dataframes(global_with, global_against)
+        global_combined = _combine_matchup_dataframes(global_with, global_against)
         if not global_combined.empty:
             combined_best, combined_worst = st.columns(2)
             with combined_best:
                 st.caption("Global Best Combined")
                 st.dataframe(
-                    build_matchup_styler(sort_matchup_dataframe(global_combined, best_first=True)),
+                    matchup_utils.build_matchup_styler(matchup_utils.sort_matchup_dataframe(global_combined, best_first=True)),
                     use_container_width=True,
                     hide_index=True,
                     column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")},
@@ -1297,7 +1308,7 @@ if isinstance(matchup_rows, dict):
             with combined_worst:
                 st.caption("Global Worst Combined")
                 st.dataframe(
-                    build_matchup_styler(sort_matchup_dataframe(global_combined, best_first=False)),
+                    matchup_utils.build_matchup_styler(matchup_utils.sort_matchup_dataframe(global_combined, best_first=False)),
                     use_container_width=True,
                     hide_index=True,
                     column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")},
@@ -1552,3 +1563,4 @@ with st.expander("Experimental: Hero Trends", expanded=False):
             st.info("No matches available for hero trends with current filter.")
     else:
         st.info("Hero trends use the selected hero match dataset. Click `Refresh Hero Details` first.")
+
