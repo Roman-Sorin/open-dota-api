@@ -32,6 +32,7 @@ The project includes two interfaces:
   - Matchup tables intentionally omit `Avg K/D/A` and `KDA`
   - In Matchups, only `WR` uses semantic color; `Won` and `Lost` stay neutral
   - Selected-hero Matchups also expose full matchup tables with `Disadvantage`, dynamic `<Hero> Win Rate`, and `Matches Played`
+  - `All Heroes` Matchups also expose one player-level opponent table with `Disadvantage`, `Your Win Rate`, and `Matches Played`
 - Experimental Hero Trends stays at the bottom and currently shows daily trend charts for the selected hero
 - When you switch away from a hero and return, already loaded hero details/item stats/recent matches are restored from session cache for that hero/filter combination
 - Detail-section caches are tied to the current dashboard snapshot, so a newer overview will not silently reuse old hero/item/recent rows

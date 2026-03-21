@@ -109,6 +109,23 @@ def test_build_matchup_styler_colors_only_winrate() -> None:
     assert (0, wr_col_index) in ctx
 
 
+def test_build_matchup_styler_colors_dynamic_win_rate_column() -> None:
+    df = build_matchup_summary_dataframe(
+        build_matchup_dataframe(
+            [MatchupRow(hero_id=1, hero="Axe", hero_image="axe.png", matches=4, wins=3, losses=1, winrate=75.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0)],
+            min_matches=1,
+        ),
+        baseline_wr=50.0,
+        wr_label="Your Win Rate",
+    )
+
+    styler = build_matchup_styler(df)
+    ctx = styler._compute().ctx
+    wr_col_index = df.columns.get_loc("Your Win Rate")
+
+    assert (0, wr_col_index) in ctx
+
+
 def test_build_matchup_summary_dataframe_formats_disadvantage_and_dynamic_wr_label() -> None:
     df = build_matchup_dataframe(
         [MatchupRow(hero_id=2, hero="Bane", hero_image="bane.png", matches=4, wins=1, losses=3, winrate=25.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0)],

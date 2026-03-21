@@ -166,9 +166,13 @@ def build_matchup_styler(df: pd.DataFrame):
     if df.empty:
         return styler
 
+    winrate_columns = [column for column in df.columns if column == "WR" or str(column).endswith("Win Rate")]
+    if not winrate_columns:
+        return styler
+
     return styler.map(
         _style_matchup_winrate_cell,
-        subset=["WR"],
+        subset=winrate_columns,
     )
 
 
