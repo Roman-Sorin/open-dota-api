@@ -33,6 +33,7 @@ The project includes two interfaces:
   - In Matchups, only `WR` uses semantic color; `Won` and `Lost` stay neutral
   - Selected-hero Matchups also expose a full hero-specific summary table in the same `Hero / WR / Won / Lost / Matches` format
   - `All Heroes` Matchups expose both player-level ally and opponent tables in the same `Hero / WR / Won / Lost / Matches` format
+  - Matchup `WR` stays numeric in the dataframe; percent formatting is applied only at render time so sorting remains correct
 - Experimental Hero Trends stays at the bottom and currently shows daily trend charts for the selected hero
 - When you switch away from a hero and return, already loaded hero details/item stats/recent matches are restored from session cache for that hero/filter combination
 - Detail-section caches are tied to the current dashboard snapshot, so a newer overview will not silently reuse old hero/item/recent rows

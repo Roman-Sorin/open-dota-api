@@ -110,11 +110,10 @@ def build_matchup_dataframe(rows: list[MatchupRow], min_matches: int) -> pd.Data
             {
                 "Icon": row.hero_image,
                 "Hero": row.hero,
-                "Matches": row.matches,
+                "WR": float(row.winrate),
                 "Won": row.wins,
                 "Lost": row.losses,
-                "WR Value": float(row.winrate),
-                "WR": f"{round(row.winrate)}%",
+                "Matches": row.matches,
             }
             for row in filtered_rows
         ]
@@ -126,10 +125,10 @@ def sort_matchup_dataframe(df: pd.DataFrame, *, best_first: bool) -> pd.DataFram
         return df
 
     sorted_df = df.sort_values(
-        by=["WR Value", "Matches", "Hero"],
+        by=["WR", "Matches", "Hero"],
         ascending=[not best_first, False, True],
     ).head(8)
-    return sorted_df.drop(columns=["WR Value"])
+    return sorted_df
 
 
 def build_matchup_summary_dataframe(
@@ -139,7 +138,7 @@ def build_matchup_summary_dataframe(
         return pd.DataFrame(columns=["Icon", "Hero", "WR", "Won", "Lost", "Matches"])
 
     summary = df.copy()
-    column_order = ["Icon", "Hero", "WR", "Won", "Lost", "Matches", "WR Value"]
+    column_order = ["Icon", "Hero", "WR", "Won", "Lost", "Matches"]
     return summary[column_order]
 
 
@@ -148,10 +147,10 @@ def sort_matchup_summary_dataframe(summary_df: pd.DataFrame, *, best_first: bool
         return summary_df
 
     sorted_df = summary_df.sort_values(
-        by=["WR Value", "Matches", "Hero"],
+        by=["WR", "Matches", "Hero"],
         ascending=[not best_first, False, True],
     )
-    return sorted_df.drop(columns=["WR Value"])
+    return sorted_df
 
 
 def build_matchup_styler(df: pd.DataFrame):
@@ -170,10 +169,9 @@ def build_matchup_styler(df: pd.DataFrame):
 
 
 def _style_matchup_winrate_cell(value: object) -> str:
-    text = str(value).strip().replace("%", "")
     try:
-        numeric_value = float(text)
-    except ValueError:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
         return ""
     if numeric_value > 50.0:
         color = "#23a55a"

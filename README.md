@@ -35,6 +35,7 @@ Turbo-only dashboard for your account:
   - In Matchups, only `WR` is color-coded; `Won` and `Lost` stay neutral
   - Selected-hero Matchups also include a full hero-specific summary table in the same `Hero / WR / Won / Lost / Matches` format
   - `All Heroes` Matchups expose both player-level ally and opponent tables in the same `Hero / WR / Won / Lost / Matches` format
+  - Matchup winrates remain numeric under the hood so both built-in sorting and user-click sorting treat `100.00` correctly
 - Experimental Hero Trends stays at the bottom and currently shows daily trends for the selected hero
 - Hero detail, item stats, and recent matches stay cached per hero/filter in the current session when you switch between heroes
 - Detail-section caches are scoped to the current dashboard snapshot so old hero/recent/item rows are not reused after the overview changes

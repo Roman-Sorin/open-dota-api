@@ -109,21 +109,6 @@ def test_build_matchup_styler_colors_only_winrate() -> None:
     assert (0, wr_col_index) in ctx
 
 
-def test_build_matchup_styler_colors_dynamic_win_rate_column() -> None:
-    df = build_matchup_summary_dataframe(
-        build_matchup_dataframe(
-            [MatchupRow(hero_id=1, hero="Axe", hero_image="axe.png", matches=4, wins=3, losses=1, winrate=75.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0)],
-            min_matches=1,
-        ),
-    )
-
-    styler = build_matchup_styler(df)
-    ctx = styler._compute().ctx
-    wr_col_index = df.columns.get_loc("WR")
-
-    assert (0, wr_col_index) in ctx
-
-
 def test_build_matchup_summary_dataframe_keeps_requested_columns_and_order() -> None:
     df = build_matchup_dataframe(
         [MatchupRow(hero_id=2, hero="Bane", hero_image="bane.png", matches=4, wins=1, losses=3, winrate=25.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0)],
@@ -132,11 +117,24 @@ def test_build_matchup_summary_dataframe_keeps_requested_columns_and_order() -> 
 
     summary = build_matchup_summary_dataframe(df)
 
-    assert list(summary.columns) == ["Icon", "Hero", "WR", "Won", "Lost", "Matches", "WR Value"]
-    assert summary.iloc[0]["WR"] == "25%"
+    assert list(summary.columns) == ["Icon", "Hero", "WR", "Won", "Lost", "Matches"]
+    assert summary.iloc[0]["WR"] == 25.0
     assert summary.iloc[0]["Won"] == 1
     assert summary.iloc[0]["Lost"] == 3
     assert summary.iloc[0]["Matches"] == 4
+
+
+def test_build_matchup_dataframe_keeps_winrate_numeric_for_ui_sorting() -> None:
+    df = build_matchup_dataframe(
+        [
+            MatchupRow(hero_id=1, hero="Tiny", hero_image="tiny.png", matches=6, wins=6, losses=0, winrate=100.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0),
+            MatchupRow(hero_id=2, hero="Oracle", hero_image="oracle.png", matches=5, wins=1, losses=4, winrate=20.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0),
+            MatchupRow(hero_id=3, hero="Pugna", hero_image="pugna.png", matches=4, wins=0, losses=4, winrate=0.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0),
+        ],
+        min_matches=1,
+    )
+
+    assert df["WR"].tolist() == [100.0, 20.0, 0.0]
 
 
 def test_sort_matchup_summary_dataframe_orders_full_matchup_list() -> None:

@@ -1222,6 +1222,13 @@ if isinstance(matchup_rows, dict):
     min_matchup_matches = st.slider("Min matchup matches", min_value=1, max_value=20, value=3, step=1)
     selected_tab, global_tab = st.tabs([f"{selected_hero_name}", "All Heroes"])
     selected_against = pd.DataFrame()
+    matchup_column_config = {
+        "Icon": st.column_config.ImageColumn("Hero", width="small"),
+        "WR": st.column_config.NumberColumn("WR", format="%.2f%%"),
+        "Won": st.column_config.NumberColumn("Won", format="%d"),
+        "Lost": st.column_config.NumberColumn("Lost", format="%d"),
+        "Matches": st.column_config.NumberColumn("Matches", format="%d"),
+    }
 
     with selected_tab:
         best_with, worst_against = st.columns(2)
@@ -1232,9 +1239,9 @@ if isinstance(matchup_rows, dict):
                 st.caption("Best With")
                 best = matchup_utils.sort_matchup_dataframe(selected_with, best_first=True)
                 worst = matchup_utils.sort_matchup_dataframe(selected_with, best_first=False)
-                st.dataframe(matchup_utils.build_matchup_styler(best), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                st.dataframe(matchup_utils.build_matchup_styler(best), use_container_width=True, hide_index=True, column_config=matchup_column_config)
                 st.caption("Worst With")
-                st.dataframe(matchup_utils.build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                st.dataframe(matchup_utils.build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config=matchup_column_config)
             else:
                 st.info("No selected-hero team matchup rows for current filter.")
         with worst_against:
@@ -1244,9 +1251,9 @@ if isinstance(matchup_rows, dict):
                 st.caption("Best Against")
                 best = matchup_utils.sort_matchup_dataframe(selected_against, best_first=True)
                 worst = matchup_utils.sort_matchup_dataframe(selected_against, best_first=False)
-                st.dataframe(matchup_utils.build_matchup_styler(best), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                st.dataframe(matchup_utils.build_matchup_styler(best), use_container_width=True, hide_index=True, column_config=matchup_column_config)
                 st.caption("Worst Against")
-                st.dataframe(matchup_utils.build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")})
+                st.dataframe(matchup_utils.build_matchup_styler(worst), use_container_width=True, hide_index=True, column_config=matchup_column_config)
             else:
                 st.info("No selected-hero opponent matchup rows for current filter.")
 
@@ -1261,7 +1268,7 @@ if isinstance(matchup_rows, dict):
                 ),
                 use_container_width=True,
                 hide_index=True,
-                column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")},
+                column_config=matchup_column_config,
             )
 
     with global_tab:
@@ -1281,7 +1288,7 @@ if isinstance(matchup_rows, dict):
                     ),
                     use_container_width=True,
                     hide_index=True,
-                    column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")},
+                    column_config=matchup_column_config,
                 )
             else:
                 st.info("No global team matchup rows for current filter.")
@@ -1294,7 +1301,7 @@ if isinstance(matchup_rows, dict):
                     ),
                     use_container_width=True,
                     hide_index=True,
-                    column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")},
+                    column_config=matchup_column_config,
                 )
             else:
                 st.info("No global opponent matchup rows for current filter.")

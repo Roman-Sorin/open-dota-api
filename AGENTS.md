@@ -14,3 +14,4 @@
 - In every app table or stat block, winrates must always use the same semantic colors: `<50%` red, `=50%` yellow, `>50%` green.
 - In every app table or stat block, won-match counts must be green and lost-match counts must be red.
 - Exception: in the four `Matchups` tables, apply semantic colors only to `WR`; keep `Won` and `Lost` neutral there.
+- Any metric that users may sort by in the UI must stay numeric in the underlying dataframe/state. Never store sortable percentages as strings like `100%`; keep them numeric and apply formatting only in the rendering layer.
