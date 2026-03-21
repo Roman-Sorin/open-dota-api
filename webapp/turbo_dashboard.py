@@ -1252,51 +1252,52 @@ if isinstance(matchup_rows, dict):
 
         selected_matchup_summary = matchup_utils.build_matchup_summary_dataframe(
             selected_against,
-            baseline_wr=float(selected_hero_row["winrate"]),
-            wr_label=f"{selected_hero_name} Win Rate",
         )
         if not selected_matchup_summary.empty:
-            matchup_best_col, matchup_worst_col = st.columns(2)
-            with matchup_best_col:
-                st.caption("Matchups")
-                st.dataframe(
-                    matchup_utils.build_matchup_styler(
-                        matchup_utils.sort_matchup_summary_dataframe(selected_matchup_summary, best_first=True)
-                    ),
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")},
-                )
-            with matchup_worst_col:
-                st.caption("Matchups")
-                st.dataframe(
-                    matchup_utils.build_matchup_styler(
-                        matchup_utils.sort_matchup_summary_dataframe(selected_matchup_summary, best_first=False)
-                    ),
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")},
-                )
-
-    with global_tab:
-        global_against = matchup_utils.build_matchup_dataframe(matchup_rows["global"]["against"], min_matchup_matches)
-        global_matchup_summary = matchup_utils.build_matchup_summary_dataframe(
-            global_against,
-            baseline_wr=float(overall_wr),
-            wr_label="Your Win Rate",
-        )
-        if not global_matchup_summary.empty:
-            st.caption("Player Matchups")
+            st.caption("Hero Matchups")
             st.dataframe(
                 matchup_utils.build_matchup_styler(
-                    matchup_utils.sort_matchup_summary_dataframe(global_matchup_summary, best_first=True)
+                    matchup_utils.sort_matchup_summary_dataframe(selected_matchup_summary, best_first=True)
                 ),
                 use_container_width=True,
                 hide_index=True,
                 column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")},
             )
-        else:
-            st.info("No global opponent matchup rows for current filter.")
+
+    with global_tab:
+        global_with = matchup_utils.build_matchup_dataframe(matchup_rows["global"]["with"], min_matchup_matches)
+        global_against = matchup_utils.build_matchup_dataframe(matchup_rows["global"]["against"], min_matchup_matches)
+        global_with_summary = matchup_utils.build_matchup_summary_dataframe(global_with)
+        global_matchup_summary = matchup_utils.build_matchup_summary_dataframe(
+            global_against,
+        )
+        global_with_col, global_against_col = st.columns(2)
+        with global_with_col:
+            if not global_with_summary.empty:
+                st.caption("Player Allies")
+                st.dataframe(
+                    matchup_utils.build_matchup_styler(
+                        matchup_utils.sort_matchup_summary_dataframe(global_with_summary, best_first=True)
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")},
+                )
+            else:
+                st.info("No global team matchup rows for current filter.")
+        with global_against_col:
+            if not global_matchup_summary.empty:
+                st.caption("Player Matchups")
+                st.dataframe(
+                    matchup_utils.build_matchup_styler(
+                        matchup_utils.sort_matchup_summary_dataframe(global_matchup_summary, best_first=True)
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={"Icon": st.column_config.ImageColumn("Hero", width="small")},
+                )
+            else:
+                st.info("No global opponent matchup rows for current filter.")
 else:
     st.info("Matchups need player match details. Click `Refresh Matchups` to build selected-hero and global With/Against tables from current cached matches.")
 

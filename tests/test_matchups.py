@@ -115,29 +115,28 @@ def test_build_matchup_styler_colors_dynamic_win_rate_column() -> None:
             [MatchupRow(hero_id=1, hero="Axe", hero_image="axe.png", matches=4, wins=3, losses=1, winrate=75.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0)],
             min_matches=1,
         ),
-        baseline_wr=50.0,
-        wr_label="Your Win Rate",
     )
 
     styler = build_matchup_styler(df)
     ctx = styler._compute().ctx
-    wr_col_index = df.columns.get_loc("Your Win Rate")
+    wr_col_index = df.columns.get_loc("WR")
 
     assert (0, wr_col_index) in ctx
 
 
-def test_build_matchup_summary_dataframe_formats_disadvantage_and_dynamic_wr_label() -> None:
+def test_build_matchup_summary_dataframe_keeps_requested_columns_and_order() -> None:
     df = build_matchup_dataframe(
         [MatchupRow(hero_id=2, hero="Bane", hero_image="bane.png", matches=4, wins=1, losses=3, winrate=25.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0)],
         min_matches=1,
     )
 
-    summary = build_matchup_summary_dataframe(df, baseline_wr=40.0, wr_label="Anti-Mage Win Rate")
+    summary = build_matchup_summary_dataframe(df)
 
-    assert list(summary.columns) == ["Icon", "Hero", "Disadvantage", "Anti-Mage Win Rate", "Matches Played", "Disadvantage Value", "WR Value"]
-    assert summary.iloc[0]["Disadvantage"] == "+15.00%"
-    assert summary.iloc[0]["Anti-Mage Win Rate"] == "25.00%"
-    assert summary.iloc[0]["Matches Played"] == 4
+    assert list(summary.columns) == ["Icon", "Hero", "WR", "Won", "Lost", "Matches", "WR Value"]
+    assert summary.iloc[0]["WR"] == "25%"
+    assert summary.iloc[0]["Won"] == 1
+    assert summary.iloc[0]["Lost"] == 3
+    assert summary.iloc[0]["Matches"] == 4
 
 
 def test_sort_matchup_summary_dataframe_orders_full_matchup_list() -> None:
@@ -150,7 +149,7 @@ def test_sort_matchup_summary_dataframe_orders_full_matchup_list() -> None:
         min_matches=1,
     )
 
-    summary = build_matchup_summary_dataframe(df, baseline_wr=50.0, wr_label="Anti-Mage Win Rate")
+    summary = build_matchup_summary_dataframe(df)
 
     assert list(sort_matchup_summary_dataframe(summary, best_first=True)["Hero"]) == ["Axe", "Bane", "Lion"]
     assert list(sort_matchup_summary_dataframe(summary, best_first=False)["Hero"]) == ["Lion", "Bane", "Axe"]

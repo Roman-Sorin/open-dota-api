@@ -134,19 +134,12 @@ def sort_matchup_dataframe(df: pd.DataFrame, *, best_first: bool) -> pd.DataFram
 
 def build_matchup_summary_dataframe(
     df: pd.DataFrame,
-    *,
-    baseline_wr: float,
-    wr_label: str,
 ) -> pd.DataFrame:
     if df.empty:
-        return pd.DataFrame(columns=["Icon", "Hero", "Disadvantage", wr_label, "Matches Played"])
+        return pd.DataFrame(columns=["Icon", "Hero", "WR", "Won", "Lost", "Matches"])
 
     summary = df.copy()
-    summary["Disadvantage Value"] = baseline_wr - summary["WR Value"].astype(float)
-    summary["Disadvantage"] = summary["Disadvantage Value"].map(lambda value: f"{value:+.2f}%")
-    summary[wr_label] = summary["WR Value"].map(lambda value: f"{value:.2f}%")
-    summary["Matches Played"] = summary["Matches"]
-    column_order = ["Icon", "Hero", "Disadvantage", wr_label, "Matches Played", "Disadvantage Value", "WR Value"]
+    column_order = ["Icon", "Hero", "WR", "Won", "Lost", "Matches", "WR Value"]
     return summary[column_order]
 
 
@@ -155,10 +148,10 @@ def sort_matchup_summary_dataframe(summary_df: pd.DataFrame, *, best_first: bool
         return summary_df
 
     sorted_df = summary_df.sort_values(
-        by=["WR Value", "Matches Played", "Hero"],
+        by=["WR Value", "Matches", "Hero"],
         ascending=[not best_first, False, True],
     )
-    return sorted_df.drop(columns=["Disadvantage Value", "WR Value"])
+    return sorted_df.drop(columns=["WR Value"])
 
 
 def build_matchup_styler(df: pd.DataFrame):
