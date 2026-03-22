@@ -11,10 +11,15 @@ class _FakeClient:
             "manta": {"id": 1, "dname": "Manta Style", "img": "/apps/dota2/images/items/manta.png"},
             "nullifier": {"id": 2, "dname": "Nullifier", "img": "/apps/dota2/images/items/nullifier.png"},
             "bkb": {"id": 3, "dname": "Black King Bar", "img": "/apps/dota2/images/items/black_king_bar.png"},
+            "abyssal_blade": {"id": 4, "dname": "Abyssal Blade", "img": "/apps/dota2/images/items/abyssal_blade.png"},
+            "basher": {"id": 5, "dname": "Skull Basher", "img": "/apps/dota2/images/items/basher.png"},
         }
 
     def get_constants_patch(self) -> list[dict]:
         return [{"name": "7.40", "date": "2025-01-01T00:00:00Z"}]
+
+    def get_match_details(self, match_id: int) -> dict:
+        return {"players": []}
 
 
 class _FakeCache:
@@ -65,6 +70,7 @@ def test_item_winrates_sorted_by_winrate_then_matches() -> None:
     assert [row["item"] for row in rows] == ["Manta Style", "Black King Bar", "Nullifier"]
     assert rows[0]["item_winrate"] == 100.0
     assert rows[0]["matches_with_item"] == 2
+    assert rows[0]["wins_with_item"] == 2
     assert "avg_kills_with_item" not in rows[0]
     assert "avg_deaths_with_item" not in rows[0]
     assert "avg_assists_with_item" not in rows[0]
@@ -82,3 +88,57 @@ def test_item_winrates_cache_only_does_not_fetch_missing_match_details() -> None
     rows = service.get_item_winrates(player_id=123, matches=matches, top_n=20, allow_detail_fetch=False)
 
     assert rows == []
+
+
+def test_item_winrate_snapshot_uses_cached_purchase_logs_not_just_final_slots() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        _match(match_id, True, [0, 0, 0, 0, 0, 0])
+        for match_id in range(1, 65)
+    ]
+    detailed_ids = list(range(1, 13))
+    for match_id in detailed_ids:
+        service._match_details_memory_cache[match_id] = {
+            "players": [
+                {
+                    "account_id": 123,
+                    "player_slot": 0,
+                    "item_0": 4 if match_id <= 5 else 1,
+                    "item_1": 1,
+                    "item_2": 0,
+                    "item_3": 0,
+                    "item_4": 0,
+                    "item_5": 0,
+                    "purchase_log": [
+                        {"key": "abyssal_blade", "time": 1200},
+                        {"key": "manta", "time": 800},
+                    ],
+                }
+            ]
+        }
+
+    snapshot = service.get_item_winrate_snapshot(player_id=123, matches=matches, top_n=20, allow_detail_fetch=False)
+
+    abyssal = next(row for row in snapshot.rows if row["item"] == "Abyssal Blade")
+    manta = next(row for row in snapshot.rows if row["item"] == "Manta Style")
+    assert snapshot.total_matches == 64
+    assert snapshot.detail_backed_matches == 12
+    assert snapshot.missing_matches == 52
+    assert snapshot.is_complete is False
+    assert abyssal["matches_with_item"] == 12
+    assert manta["matches_with_item"] == 12
+
+
+def test_item_winrate_snapshot_marks_summary_only_matches_as_partial() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        _match(1, True, [1]),
+        _match(2, False, [0, 0, 0, 0, 0, 0]),
+    ]
+
+    snapshot = service.get_item_winrate_snapshot(player_id=123, matches=matches, top_n=20, allow_detail_fetch=False)
+
+    assert snapshot.summary_only_matches == 1
+    assert snapshot.missing_matches == 1
+    assert snapshot.is_complete is False
+    assert "incomplete for 1 match(es)" in snapshot.note

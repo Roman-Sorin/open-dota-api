@@ -51,7 +51,9 @@ Turbo-only dashboard for your account:
 - Section caches are invalidated only by real dashboard sync timestamps; local enrichment writes do not count as a new snapshot and must not close already built sections
 - Section actions are refresh actions now; if dashboard data is newer than a section cache, the UI shows a stale hint instead of silently hiding that fact
 - Hero Overview snapshots with suspicious per-hero zero `NW`/`Dmg`/`Max Dmg` rows are auto-invalidated and rebuilt instead of being rendered as valid data
-- Item winrates (when item appears in final slots), with match count shown
+- Item winrates count a match when the item appears in cached `purchase_log`; if that is unavailable, the app falls back to cached final inventory / summary final slots
+- Item winrates now show a coverage warning when cached match details are missing, instead of silently presenting partial counts as complete analytics
+- Item winrates table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red
 - Item winrates no longer show Avg K/D/A or derived KDA columns
 - Recent hero matches shown as a compact one-row-per-match table under the item table
 - Recent hero matches show only final slots, and item timings are shown only when the final item completion time is available

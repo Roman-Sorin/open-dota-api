@@ -80,6 +80,21 @@ class TurboOverviewSnapshot:
     is_valid: bool
 
 
+@dataclass(slots=True)
+class ItemWinrateSnapshot:
+    rows: list[dict[str, Any]]
+    total_matches: int
+    detail_backed_matches: int
+    summary_only_matches: int
+    missing_matches: int
+    rate_limited: bool
+    note: str
+
+    @property
+    def is_complete(self) -> bool:
+        return self.missing_matches == 0 and not self.rate_limited
+
+
 class DotaAnalyticsService:
     def __init__(self, client: OpenDotaClient, cache: JsonFileCache, match_store: SQLiteMatchStore | None = None) -> None:
         self.client = client
@@ -777,6 +792,19 @@ class DotaAnalyticsService:
     def _player_row_item_ids(player_row: dict) -> list[int]:
         return [int(player_row.get(f"item_{i}") or 0) for i in range(6)]
 
+    def _player_row_purchase_item_ids(self, player_row: dict) -> set[int]:
+        purchase_log = player_row.get("purchase_log") if isinstance(player_row, dict) else None
+        if not isinstance(purchase_log, list):
+            return set()
+
+        purchased: set[int] = set()
+        for event in purchase_log:
+            key = str(event.get("key") or "")
+            item_id = self.references.item_ids_by_key.get(key)
+            if item_id and item_id > 0:
+                purchased.add(item_id)
+        return purchased
+
     def _has_match_details_cached(self, match_id: int) -> bool:
         if match_id in self._match_details_memory_cache:
             return True
@@ -1269,42 +1297,73 @@ class DotaAnalyticsService:
             )
         return self.build_turbo_hero_overview_rows(matches)
 
-    def get_item_winrates(
+    def get_item_winrate_snapshot(
         self,
         player_id: int,
         matches: list[MatchSummary],
         top_n: int = 20,
         *,
         allow_detail_fetch: bool = True,
-    ) -> list[dict[str, Any]]:
+    ) -> ItemWinrateSnapshot:
         total = len(matches)
         if total == 0:
-            return []
+            return ItemWinrateSnapshot(
+                rows=[],
+                total_matches=0,
+                detail_backed_matches=0,
+                summary_only_matches=0,
+                missing_matches=0,
+                rate_limited=False,
+                note="No matches available for item stats.",
+            )
 
         appear_counter: Counter[int] = Counter()
         win_counter: Counter[int] = Counter()
 
         fallback_detail_calls = 0
         max_fallback_detail_calls = 35
+        detail_backed_matches = 0
+        summary_only_matches = 0
+        missing_matches = 0
+        rate_limited = False
         for match in matches:
-            item_ids = self._summary_item_ids(match)
-            if not any(item_ids) and fallback_detail_calls < max_fallback_detail_calls:
+            summary_items = {item_id for item_id in self._summary_item_ids(match) if item_id > 0}
+            unique_items = set(summary_items)
+            detail_backed_this_match = False
+
+            details_cached = self._has_match_details_cached(match.match_id)
+            can_check_details = details_cached or (allow_detail_fetch and fallback_detail_calls < max_fallback_detail_calls)
+            if can_check_details:
                 try:
                     details = self._get_match_details(match.match_id, allow_fetch=allow_detail_fetch)
                 except OpenDotaRateLimitError:
-                    break
-                if not isinstance(details, dict):
-                    continue
-                fallback_detail_calls += 1
-                player_row = self._extract_player_from_match_details(
-                    details,
-                    player_id=player_id,
-                    player_slot=match.player_slot,
-                )
-                if player_row:
-                    item_ids = self._player_row_item_ids(player_row)
+                    rate_limited = True
+                    details = None
+                if isinstance(details, dict):
+                    if not details_cached:
+                        fallback_detail_calls += 1
+                    player_row = self._extract_player_from_match_details(
+                        details,
+                        player_id=player_id,
+                        player_slot=match.player_slot,
+                    )
+                    if player_row:
+                        detail_items = set(self._player_row_item_ids(player_row))
+                        detail_items.discard(0)
+                        detail_items.update(self._player_row_purchase_item_ids(player_row))
+                        if detail_items:
+                            unique_items.update(detail_items)
+                            detail_backed_this_match = True
 
-            unique_items = {item_id for item_id in item_ids if item_id > 0}
+            if not unique_items:
+                missing_matches += 1
+                continue
+
+            if detail_backed_this_match:
+                detail_backed_matches += 1
+            elif summary_items:
+                summary_only_matches += 1
+
             for item_id in unique_items:
                 appear_counter[item_id] += 1
                 if match.did_win:
@@ -1335,7 +1394,46 @@ class DotaAnalyticsService:
                 x["item"],
             )
         )
-        return rows[:top_n]
+        notes: list[str] = []
+        if detail_backed_matches > 0:
+            notes.append(
+                f"Cached match details contributed purchase/final-item coverage for {detail_backed_matches} match(es)."
+            )
+        if summary_only_matches > 0:
+            notes.append(
+                f"{summary_only_matches} match(es) rely on summary final slots only, so sold/replaced items may be missed there."
+            )
+        if missing_matches > 0:
+            notes.append(
+                f"Item stats are incomplete for {missing_matches} match(es) because neither cached details nor summary item slots are available. Run `Refresh Turbo Dashboard` to hydrate missing match details."
+            )
+        if rate_limited:
+            notes.append("OpenDota rate limit was hit while hydrating item details; item coverage may be partial.")
+
+        return ItemWinrateSnapshot(
+            rows=rows[:top_n],
+            total_matches=total,
+            detail_backed_matches=detail_backed_matches,
+            summary_only_matches=summary_only_matches,
+            missing_matches=missing_matches,
+            rate_limited=rate_limited,
+            note=" ".join(notes).strip(),
+        )
+
+    def get_item_winrates(
+        self,
+        player_id: int,
+        matches: list[MatchSummary],
+        top_n: int = 20,
+        *,
+        allow_detail_fetch: bool = True,
+    ) -> list[dict[str, Any]]:
+        return self.get_item_winrate_snapshot(
+            player_id=player_id,
+            matches=matches,
+            top_n=top_n,
+            allow_detail_fetch=allow_detail_fetch,
+        ).rows
 
     def resolve_hero_image(self, hero_id: int | None) -> str:
         if hero_id is None:

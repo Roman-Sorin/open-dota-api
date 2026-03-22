@@ -51,6 +51,9 @@ The project includes two interfaces:
 - Overview snapshots with suspicious per-hero zero `NW`/`Dmg`/`Max Dmg` rows are treated as stale and rebuilt automatically
 - Most frequent final items
 - Item winrate table (wins with item / matches with item), includes per-item match count
+- Item winrates count cached purchased items first; when cached `purchase_log` is missing, the app falls back to cached final inventory / summary final slots for that match
+- Item winrates show an explicit coverage warning when some matches still lack cached item detail data, instead of silently undercounting them as if the snapshot were complete
+- Item winrate table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red
 - Item winrate table no longer shows Avg K/D/A or derived KDA columns
 - Item winrate table is sorted by highest item winrate first (ties by larger sample)
 - Dashboard filter `Min matches per item` defaults to `3`

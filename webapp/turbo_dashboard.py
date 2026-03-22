@@ -38,7 +38,7 @@ from webapp.overview_health import overview_looks_stale
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
-OVERVIEW_SCHEMA_VERSION = 12
+OVERVIEW_SCHEMA_VERSION = 13
 
 st.markdown(
     """
@@ -1498,8 +1498,8 @@ if load_all_sections or load_item_winrates:
             active_start_date,
             current_hero_snapshot_key,
         )
-        item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50, allow_detail_fetch=False)
-        item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
+        item_snapshot = service.get_item_winrate_snapshot(player_id, matches, top_n=50, allow_detail_fetch=False)
+        item_wr_rows = [row for row in item_snapshot.rows if int(row["matches_with_item"]) >= min_item_matches]
         item_wr_rows.sort(
             key=lambda row: (
                 -round(float(row.get("item_winrate", 0.0))),
@@ -1508,19 +1508,29 @@ if load_all_sections or load_item_winrates:
                 str(row.get("item", "")),
             )
         )
-        _cache_set("item_rows_by_key", current_item_request_key, item_wr_rows)
+        item_snapshot_payload = {
+            "rows": item_wr_rows,
+            "note": item_snapshot.note,
+            "missing_matches": int(item_snapshot.missing_matches),
+            "summary_only_matches": int(item_snapshot.summary_only_matches),
+            "detail_backed_matches": int(item_snapshot.detail_backed_matches),
+            "is_complete": bool(item_snapshot.is_complete),
+            "total_matches": int(item_snapshot.total_matches),
+        }
+        _cache_set("item_rows_by_key", current_item_request_key, item_snapshot_payload)
         _cache_set("item_loaded_at_by_key", current_item_request_key, _utcnow_iso())
-        _set_current_section_snapshot("item", current_item_request_key, item_wr_rows)
+        _set_current_section_snapshot("item", current_item_request_key, item_snapshot_payload)
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
-st.markdown("### Item Winrates (when item appears in final slots)")
-item_wr_rows = _cache_get("item_rows_by_key", current_item_request_key)
-if item_wr_rows is None:
-    item_wr_rows = _get_current_section_snapshot("item", current_item_request_key)
-    if item_wr_rows is not None:
-        _cache_set("item_rows_by_key", current_item_request_key, item_wr_rows)
-if item_wr_rows is None and _is_section_visible("item", current_item_request_key):
+st.markdown("### Item Winrates")
+st.caption("Counts use cached purchase logs when available and fall back to final inventory/final slots otherwise.")
+item_snapshot_payload = _cache_get("item_rows_by_key", current_item_request_key)
+if item_snapshot_payload is None:
+    item_snapshot_payload = _get_current_section_snapshot("item", current_item_request_key)
+    if item_snapshot_payload is not None:
+        _cache_set("item_rows_by_key", current_item_request_key, item_snapshot_payload)
+if item_snapshot_payload is None and _is_section_visible("item", current_item_request_key):
     try:
         matches = _load_selected_hero_matches(
             service,
@@ -1532,8 +1542,8 @@ if item_wr_rows is None and _is_section_visible("item", current_item_request_key
             active_start_date,
             current_hero_snapshot_key,
         )
-        item_wr_rows = service.get_item_winrates(player_id, matches, top_n=50, allow_detail_fetch=False)
-        item_wr_rows = [row for row in item_wr_rows if int(row["matches_with_item"]) >= min_item_matches]
+        item_snapshot = service.get_item_winrate_snapshot(player_id, matches, top_n=50, allow_detail_fetch=False)
+        item_wr_rows = [row for row in item_snapshot.rows if int(row["matches_with_item"]) >= min_item_matches]
         item_wr_rows.sort(
             key=lambda row: (
                 -round(float(row.get("item_winrate", 0.0))),
@@ -1542,18 +1552,35 @@ if item_wr_rows is None and _is_section_visible("item", current_item_request_key
                 str(row.get("item", "")),
             )
         )
-        _cache_set("item_rows_by_key", current_item_request_key, item_wr_rows)
-        _set_current_section_snapshot("item", current_item_request_key, item_wr_rows)
+        item_snapshot_payload = {
+            "rows": item_wr_rows,
+            "note": item_snapshot.note,
+            "missing_matches": int(item_snapshot.missing_matches),
+            "summary_only_matches": int(item_snapshot.summary_only_matches),
+            "detail_backed_matches": int(item_snapshot.detail_backed_matches),
+            "is_complete": bool(item_snapshot.is_complete),
+            "total_matches": int(item_snapshot.total_matches),
+        }
+        _cache_set("item_rows_by_key", current_item_request_key, item_snapshot_payload)
+        _set_current_section_snapshot("item", current_item_request_key, item_snapshot_payload)
     except Exception:
-        item_wr_rows = None
+        item_snapshot_payload = None
 item_loaded_at = _cache_get("item_loaded_at_by_key", current_item_request_key)
 item_section_stale = _is_section_stale(
     str(item_loaded_at) if item_loaded_at is not None else None,
     str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
 )
-if isinstance(item_wr_rows, list):
+if isinstance(item_snapshot_payload, dict):
+    item_wr_rows = item_snapshot_payload.get("rows") if isinstance(item_snapshot_payload.get("rows"), list) else []
+    item_note = str(item_snapshot_payload.get("note") or "")
+    item_is_complete = bool(item_snapshot_payload.get("is_complete"))
     if item_section_stale:
         st.caption("Item stats were loaded before the latest dashboard refresh. Use the hero action bar above to rebuild this section from the current dashboard snapshot.")
+    if item_note:
+        if item_is_complete:
+            st.caption(item_note)
+        else:
+            st.warning(item_note)
     if item_wr_rows:
         item_winrate_table = pd.DataFrame(
             [
@@ -1562,6 +1589,8 @@ if isinstance(item_wr_rows, list):
                     "Item": row["item"],
                     "Item Winrate": round(float(row["item_winrate"])),
                     "Matches": int(row.get("matches_with_item", 0)),
+                    "Won": int(row.get("wins_with_item", 0)),
+                    "Lost": int(row.get("matches_with_item", 0)) - int(row.get("wins_with_item", 0)),
                 }
                 for row in item_wr_rows
             ]
@@ -1569,6 +1598,12 @@ if isinstance(item_wr_rows, list):
         item_winrate_styler = item_winrate_table.style.applymap(
             _style_winrate_cell,
             subset=["Item Winrate"],
+        ).applymap(
+            lambda _: "color: #23a55a; font-weight: 700;",
+            subset=["Won"],
+        ).applymap(
+            lambda _: "color: #d9534f; font-weight: 700;",
+            subset=["Lost"],
         )
         st.dataframe(
             item_winrate_styler,
