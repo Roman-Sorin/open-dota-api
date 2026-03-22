@@ -824,6 +824,49 @@ def _get_turbo_overview_snapshot_safe(
             self.is_valid = not overview_looks_stale(rows)
     return _FallbackSnapshot(service.build_turbo_hero_overview_rows(matches) if matches else [])
 
+
+def _get_item_winrate_snapshot_safe(
+    service: DotaAnalyticsService,
+    *,
+    player_id: int,
+    matches: list[MatchSummary],
+    top_n: int,
+    allow_detail_fetch: bool,
+) -> dict[str, object]:
+    snapshot_getter = getattr(service, "get_item_winrate_snapshot", None)
+    if callable(snapshot_getter):
+        snapshot = snapshot_getter(
+            player_id=player_id,
+            matches=matches,
+            top_n=top_n,
+            allow_detail_fetch=allow_detail_fetch,
+        )
+        return {
+            "rows": list(snapshot.rows),
+            "note": str(snapshot.note or ""),
+            "missing_matches": int(snapshot.missing_matches),
+            "summary_only_matches": int(snapshot.summary_only_matches),
+            "detail_backed_matches": int(snapshot.detail_backed_matches),
+            "is_complete": bool(snapshot.is_complete),
+            "total_matches": int(snapshot.total_matches),
+        }
+
+    rows = service.get_item_winrates(
+        player_id=player_id,
+        matches=matches,
+        top_n=top_n,
+        allow_detail_fetch=allow_detail_fetch,
+    )
+    return {
+        "rows": list(rows),
+        "note": "",
+        "missing_matches": 0,
+        "summary_only_matches": 0,
+        "detail_backed_matches": 0,
+        "is_complete": True,
+        "total_matches": len(matches),
+    }
+
 with st.sidebar:
     st.header("Filters")
     st.caption(f"Version: `{app_version}`")
@@ -1498,8 +1541,14 @@ if load_all_sections or load_item_winrates:
             active_start_date,
             current_hero_snapshot_key,
         )
-        item_snapshot = service.get_item_winrate_snapshot(player_id, matches, top_n=50, allow_detail_fetch=False)
-        item_wr_rows = [row for row in item_snapshot.rows if int(row["matches_with_item"]) >= min_item_matches]
+        item_snapshot_payload = _get_item_winrate_snapshot_safe(
+            service,
+            player_id=player_id,
+            matches=matches,
+            top_n=50,
+            allow_detail_fetch=False,
+        )
+        item_wr_rows = [row for row in item_snapshot_payload["rows"] if int(row["matches_with_item"]) >= min_item_matches]
         item_wr_rows.sort(
             key=lambda row: (
                 -round(float(row.get("item_winrate", 0.0))),
@@ -1508,15 +1557,7 @@ if load_all_sections or load_item_winrates:
                 str(row.get("item", "")),
             )
         )
-        item_snapshot_payload = {
-            "rows": item_wr_rows,
-            "note": item_snapshot.note,
-            "missing_matches": int(item_snapshot.missing_matches),
-            "summary_only_matches": int(item_snapshot.summary_only_matches),
-            "detail_backed_matches": int(item_snapshot.detail_backed_matches),
-            "is_complete": bool(item_snapshot.is_complete),
-            "total_matches": int(item_snapshot.total_matches),
-        }
+        item_snapshot_payload["rows"] = item_wr_rows
         _cache_set("item_rows_by_key", current_item_request_key, item_snapshot_payload)
         _cache_set("item_loaded_at_by_key", current_item_request_key, _utcnow_iso())
         _set_current_section_snapshot("item", current_item_request_key, item_snapshot_payload)
@@ -1542,8 +1583,14 @@ if item_snapshot_payload is None and _is_section_visible("item", current_item_re
             active_start_date,
             current_hero_snapshot_key,
         )
-        item_snapshot = service.get_item_winrate_snapshot(player_id, matches, top_n=50, allow_detail_fetch=False)
-        item_wr_rows = [row for row in item_snapshot.rows if int(row["matches_with_item"]) >= min_item_matches]
+        item_snapshot_payload = _get_item_winrate_snapshot_safe(
+            service,
+            player_id=player_id,
+            matches=matches,
+            top_n=50,
+            allow_detail_fetch=False,
+        )
+        item_wr_rows = [row for row in item_snapshot_payload["rows"] if int(row["matches_with_item"]) >= min_item_matches]
         item_wr_rows.sort(
             key=lambda row: (
                 -round(float(row.get("item_winrate", 0.0))),
@@ -1552,15 +1599,7 @@ if item_snapshot_payload is None and _is_section_visible("item", current_item_re
                 str(row.get("item", "")),
             )
         )
-        item_snapshot_payload = {
-            "rows": item_wr_rows,
-            "note": item_snapshot.note,
-            "missing_matches": int(item_snapshot.missing_matches),
-            "summary_only_matches": int(item_snapshot.summary_only_matches),
-            "detail_backed_matches": int(item_snapshot.detail_backed_matches),
-            "is_complete": bool(item_snapshot.is_complete),
-            "total_matches": int(item_snapshot.total_matches),
-        }
+        item_snapshot_payload["rows"] = item_wr_rows
         _cache_set("item_rows_by_key", current_item_request_key, item_snapshot_payload)
         _set_current_section_snapshot("item", current_item_request_key, item_snapshot_payload)
     except Exception:

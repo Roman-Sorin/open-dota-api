@@ -54,6 +54,7 @@ The project includes two interfaces:
 - Item winrates count cached purchased items first; when cached `purchase_log` is missing, the app falls back to cached final inventory / summary final slots for that match
 - Item winrates show an explicit coverage warning when some matches still lack cached item detail data, instead of silently undercounting them as if the snapshot were complete
 - Item winrate table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red
+- Item winrates section has a safe legacy fallback path so mixed deploy/runtime restarts do not crash the section if the process still holds an older service object
 - Item winrate table no longer shows Avg K/D/A or derived KDA columns
 - Item winrate table is sorted by highest item winrate first (ties by larger sample)
 - Dashboard filter `Min matches per item` defaults to `3`
