@@ -39,6 +39,7 @@ from webapp.overview_health import overview_looks_stale
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
 OVERVIEW_SCHEMA_VERSION = 13
+DEFAULT_FILTER_BASELINE_DATE = date(2026, 3, 24)
 
 st.markdown(
     """
@@ -319,7 +320,7 @@ def get_app_version() -> str:
 
 
 def get_default_days_period() -> int:
-    start_date = date(2026, 1, 21)
+    start_date = DEFAULT_FILTER_BASELINE_DATE
     today = datetime.now().date()
     days = max((today - start_date).days, 7)
     return min(days, 365)
@@ -883,7 +884,7 @@ with st.sidebar:
     )
 
     days = st.session_state.get("days", get_default_days_period())
-    start_date_value = st.session_state.get("start_date", date(2026, 1, 21))
+    start_date_value = st.session_state.get("start_date", DEFAULT_FILTER_BASELINE_DATE)
     selected_patches = st.session_state.get("selected_patches", [])
     if time_filter_mode == "Days":
         days = st.slider("Period (days)", min_value=7, max_value=365, value=days, step=1)

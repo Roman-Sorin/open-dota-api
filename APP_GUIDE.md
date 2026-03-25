@@ -22,7 +22,7 @@ The project includes two interfaces:
 - Hero Overview is now built from a validated snapshot that tracks match-detail coverage; incomplete zero-value snapshots are rejected instead of being rendered as valid analytics
 - Dashboard summary cards: Turbo matches, wins, losses, winrate; Turbo wins are green and Turbo losses are red
 - Time filter modes: `Days`, `Patches`, `Start Date`
-- Default baseline/start date is `2026-01-21`
+- Default baseline/start date is `2026-03-24`
 - Dashboard sections load manually and independently to reduce one-shot API work on page open
 - If matching dashboard data already exists in local SQLite storage, the app restores Hero Overview automatically on page load for the current filters
 - `Refresh Turbo Dashboard` fetches/syncs the hero overview from OpenDota when you want newer matches
