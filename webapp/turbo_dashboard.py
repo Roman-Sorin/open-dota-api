@@ -322,7 +322,7 @@ def get_app_version() -> str:
 def get_default_days_period() -> int:
     start_date = DEFAULT_FILTER_BASELINE_DATE
     today = datetime.now().date()
-    days = max((today - start_date).days, 7)
+    days = max((today - start_date).days, 1)
     return min(days, 365)
 
 
@@ -887,7 +887,7 @@ with st.sidebar:
     start_date_value = st.session_state.get("start_date", DEFAULT_FILTER_BASELINE_DATE)
     selected_patches = st.session_state.get("selected_patches", [])
     if time_filter_mode == "Days":
-        days = st.slider("Period (days)", min_value=7, max_value=365, value=days, step=1)
+        days = st.slider("Period (days)", min_value=1, max_value=365, value=days, step=1)
     elif time_filter_mode == "Patches":
         if not patch_options:
             st.warning("Patch list is temporarily unavailable (OpenDota constants).")
