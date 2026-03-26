@@ -414,3 +414,9 @@ CLI remains available as a secondary interface.
   - also select any available `7.41x` letter patches such as `7.41b` / `7.41c`
 - Added a pure helper in `webapp/filter_defaults.py` so the default selection rule is unit-tested without importing the full Streamlit page.
 - Added regression tests in `tests/test_filter_defaults.py` for both the `7.41` family selection and the fallback when no `7.41` option exists.
+
+## 2026-03-26 default hero preset update
+
+- Changed the default selected hero in the overview hero dropdown from `Wraith King` to `Spectre`.
+- Added a pure helper in `webapp/hero_defaults.py` so default-hero selection stays testable without importing the Streamlit page.
+- Added regression tests in `tests/test_hero_defaults.py` for Spectre preference and first-option fallback behavior.

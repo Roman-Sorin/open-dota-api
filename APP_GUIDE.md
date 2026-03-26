@@ -25,6 +25,7 @@ The project includes two interfaces:
 - Default time filter mode is `Patches`, preselected to patch family `7.41` (`7.41` plus any available `7.41x` letter patches)
 - Default baseline/start date is `2026-03-24`
 - Dashboard sections load manually and independently to reduce one-shot API work on page open
+- Default selected hero in the hero dropdown is `Spectre` when present in the loaded overview; otherwise the first available hero is used
 - If matching dashboard data already exists in local SQLite storage, the app restores Hero Overview automatically on page load for the current filters
 - `Refresh Turbo Dashboard` fetches/syncs the hero overview from OpenDota when you want newer matches
 - `Refresh Turbo Dashboard` is the only UI action that may talk to OpenDota; it performs an incremental new-match check and hydrates missing match details for the current snapshot exactly once

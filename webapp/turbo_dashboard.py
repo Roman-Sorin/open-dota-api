@@ -25,6 +25,7 @@ from utils.helpers import format_duration, parse_player_id
 from utils.match_store import SQLiteMatchStore
 from webapp.dashboard_state import build_hero_snapshot_request_key
 from webapp.filter_defaults import default_patch_selection
+from webapp.hero_defaults import default_hero_id
 from webapp.hero_overview import (
     HERO_DETAIL_METRIC_ORDER,
     HERO_LOSSES_COLUMN,
@@ -1194,14 +1195,11 @@ def _hero_option_label(hero_id: int) -> str:
     )
 
 
-default_hero_id = next(
-    (hero_id for hero_id in hero_ids if service.resolve_hero_name(hero_id) == "Wraith King"),
-    hero_ids[0],
-)
+default_selected_hero_id = default_hero_id(hero_ids, service.resolve_hero_name)
 selected_hero_id = st.selectbox(
     "Select Hero",
     options=hero_ids,
-    index=hero_ids.index(default_hero_id),
+    index=hero_ids.index(default_selected_hero_id),
     format_func=_hero_option_label,
 )
 selected_hero_row = hero_rows_by_id[selected_hero_id]
