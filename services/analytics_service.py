@@ -12,6 +12,7 @@ from parsers.input_parser import HeroParser
 from utils.cache import JsonFileCache
 from utils.exceptions import OpenDotaNotFoundError, OpenDotaRateLimitError
 from utils.helpers import calculate_kda_ratio, format_duration, unix_to_dt, winrate_percent
+from utils.match_filters import is_excluded_match_id
 from utils.match_store import SQLiteMatchStore
 from utils.overview_validation import overview_looks_stale
 
@@ -294,6 +295,9 @@ class DotaAnalyticsService:
         selected_patches: set[str] | None = None,
         min_start: int | None = None,
     ) -> MatchSummary | None:
+        match_id = int(row.get("match_id") or 0)
+        if match_id <= 0 or is_excluded_match_id(match_id):
+            return None
         start_time = int(row.get("start_time") or 0)
         if min_start is not None and start_time < min_start:
             return None
@@ -306,7 +310,7 @@ class DotaAnalyticsService:
         lane_efficiency_pct = row.get("lane_efficiency_pct")
         net_worth = int(row.get("net_worth") or 0)
         match = MatchSummary(
-            match_id=int(row.get("match_id") or 0),
+            match_id=match_id,
             start_time=start_time,
             player_slot=int(row.get("player_slot") or 0),
             radiant_win=bool(row.get("radiant_win")),
@@ -328,7 +332,7 @@ class DotaAnalyticsService:
             item_4=int(row.get("item_4") or 0),
             item_5=int(row.get("item_5") or 0),
         )
-        return match if match.match_id > 0 else None
+        return match
 
     def _sync_player_matches(self, filters: QueryFilters, *, force: bool = False) -> list[int]:
         if self.match_store is None:

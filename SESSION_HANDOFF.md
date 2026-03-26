@@ -420,3 +420,12 @@ CLI remains available as a secondary interface.
 - Changed the default selected hero in the overview hero dropdown from `Wraith King` to `Spectre`.
 - Added a pure helper in `webapp/hero_defaults.py` so default-hero selection stays testable without importing the Streamlit page.
 - Added regression tests in `tests/test_hero_defaults.py` for Spectre preference and first-option fallback behavior.
+
+## 2026-03-26 reported bad-match exclusion
+
+- Excluded reported match `8743652071` centrally via `utils/match_filters.py`.
+- The shared exclusion path is enforced inside `DotaAnalyticsService._parse_match_summary_row(...)`, so it applies to:
+  - SQLite-backed cached reads
+  - direct OpenDota fetches
+  - overview/detail/item/matchup/recent-match sections that consume normalized match summaries
+- Added regression coverage in `tests/test_match_filters.py` for both direct-client and SQLite-backed match paths using the exact reported match id.
