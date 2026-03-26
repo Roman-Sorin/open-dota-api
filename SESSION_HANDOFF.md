@@ -405,3 +405,12 @@ CLI remains available as a secondary interface.
 - Top button label changed from `Load Turbo Dashboard` to `Refresh Turbo Dashboard`.
 - When overview is restored from cache only, the UI now shows a caption explaining that it is local cached data and that `Refresh Turbo Dashboard` will sync newer matches.
 - Added regression coverage proving cached hero overview can be built from SQLite without any API calls.
+
+## 2026-03-26 default patch filter preset update
+
+- Changed the first-load dashboard default from `Days` mode to `Patches` mode.
+- Default patch selection now targets patch family `7.41`:
+  - select `7.41`
+  - also select any available `7.41x` letter patches such as `7.41b` / `7.41c`
+- Added a pure helper in `webapp/filter_defaults.py` so the default selection rule is unit-tested without importing the full Streamlit page.
+- Added regression tests in `tests/test_filter_defaults.py` for both the `7.41` family selection and the fallback when no `7.41` option exists.

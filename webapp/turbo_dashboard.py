@@ -24,6 +24,7 @@ from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateL
 from utils.helpers import format_duration, parse_player_id
 from utils.match_store import SQLiteMatchStore
 from webapp.dashboard_state import build_hero_snapshot_request_key
+from webapp.filter_defaults import default_patch_selection
 from webapp.hero_overview import (
     HERO_DETAIL_METRIC_ORDER,
     HERO_LOSSES_COLUMN,
@@ -876,7 +877,7 @@ with st.sidebar:
         value=st.session_state.get("player_raw", "1233793238"),
     )
     time_mode_options = ["Days", "Patches", "Start Date"]
-    default_mode = st.session_state.get("time_filter_mode", "Days")
+    default_mode = st.session_state.get("time_filter_mode", "Patches")
     time_filter_mode = st.radio(
         "Time filter mode",
         options=time_mode_options,
@@ -885,7 +886,7 @@ with st.sidebar:
 
     days = st.session_state.get("days", get_default_days_period())
     start_date_value = st.session_state.get("start_date", DEFAULT_FILTER_BASELINE_DATE)
-    selected_patches = st.session_state.get("selected_patches", [])
+    selected_patches = st.session_state.get("selected_patches", default_patch_selection(patch_options))
     if time_filter_mode == "Days":
         days = st.slider("Period (days)", min_value=1, max_value=365, value=days, step=1)
     elif time_filter_mode == "Patches":
@@ -894,11 +895,11 @@ with st.sidebar:
             selected_patches = []
         else:
             if "patches_widget_selection" not in st.session_state:
-                st.session_state["patches_widget_selection"] = selected_patches or patch_options[:1]
+                st.session_state["patches_widget_selection"] = selected_patches or default_patch_selection(patch_options)
             # Keep widget value valid when options list changes.
             st.session_state["patches_widget_selection"] = [
                 p for p in st.session_state["patches_widget_selection"] if p in patch_options
-            ] or patch_options[:1]
+            ] or default_patch_selection(patch_options)
             selected_patches = st.multiselect(
                 "Patches (multi-select)",
                 options=patch_options,
