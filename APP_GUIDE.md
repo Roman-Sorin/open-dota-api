@@ -20,7 +20,7 @@ The project includes two interfaces:
 - Hero overview avg damage/net worth use match-detail fallback when player match rows don't include `hero_damage` or `net_worth`
 - Cached Hero Overview also reuses stored match details to backfill missing hero economy/damage fields before rendering overview rows
 - Hero Overview is now built from a validated snapshot that tracks match-detail coverage; incomplete zero-value snapshots are rejected instead of being rendered as valid analytics
-- Reported bad match `8743652071` is excluded centrally from all statistics and selected-hero sections
+- Reported bad matches `8743652071` and `8745970611` are excluded centrally from all statistics and selected-hero sections
 - Dashboard summary cards: Turbo matches, wins, losses, winrate; Turbo wins are green and Turbo losses are red
 - Time filter modes: `Days`, `Patches`, `Start Date`
 - Default time filter mode is `Patches`, preselected to patch family `7.41` (`7.41` plus any available `7.41x` letter patches)

@@ -24,7 +24,7 @@ Turbo-only dashboard for your account:
 - When Turbo match rows miss `hero_damage` or `net_worth`, the app enriches overview/detail stats from match details stored locally
 - Cached Hero Overview now also enriches missing `hero_damage` and `net_worth` from stored match details, so heroes do not stay stuck at zero when the local summary rows were incomplete
 - Hero Overview is now built from a validated snapshot that tracks match-detail coverage; incomplete zero-value snapshots are rejected instead of being rendered as valid analytics
-- Reported bad match `8743652071` is excluded centrally from all dashboard statistics and hero sections
+- Reported bad matches `8743652071` and `8745970611` are excluded centrally from all dashboard statistics and hero sections
 - Top dashboard metrics include Turbo matches, wins, losses, and winrate; Turbo wins are green and Turbo losses are red
 - Default selected hero is `Spectre` when that hero exists in the current overview snapshot; otherwise the first available hero is used
 - Dashboard loading is manual by section:

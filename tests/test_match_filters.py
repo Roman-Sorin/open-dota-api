@@ -39,6 +39,7 @@ class _FakeCache:
 
 def test_is_excluded_match_id_tracks_reported_match() -> None:
     assert is_excluded_match_id(8743652071) is True
+    assert is_excluded_match_id(8745970611) is True
 
 
 def test_fetch_matches_excludes_reported_match_from_direct_client_results() -> None:
@@ -57,6 +58,20 @@ def test_fetch_matches_excludes_reported_match_from_direct_client_results() -> N
                 "hero_id": 67,
                 "hero_damage": 17300,
                 "net_worth": 32700,
+            },
+            {
+                "match_id": 8745970611,
+                "start_time": 1774596800,
+                "player_slot": 0,
+                "radiant_win": False,
+                "game_mode": 23,
+                "kills": 4,
+                "deaths": 12,
+                "assists": 6,
+                "duration": 1105,
+                "hero_id": 67,
+                "hero_damage": 14500,
+                "net_worth": 21900,
             },
             {
                 "match_id": 8743652999,
@@ -105,6 +120,20 @@ def test_get_cached_matches_excludes_reported_match_from_sqlite_store() -> None:
                 "hero_id": 67,
                 "hero_damage": 17300,
                 "net_worth": 32700,
+            },
+            {
+                "match_id": 8745970611,
+                "start_time": 1774596800,
+                "player_slot": 0,
+                "radiant_win": False,
+                "game_mode": 23,
+                "kills": 4,
+                "deaths": 12,
+                "assists": 6,
+                "duration": 1105,
+                "hero_id": 67,
+                "hero_damage": 14500,
+                "net_worth": 21900,
             },
             {
                 "match_id": 8743652999,

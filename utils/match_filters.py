@@ -3,6 +3,7 @@ from __future__ import annotations
 
 EXCLUDED_MATCH_IDS = {
     8743652071,
+    8745970611,
 }
 
 

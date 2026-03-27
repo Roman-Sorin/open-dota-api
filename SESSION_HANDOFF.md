@@ -429,3 +429,11 @@ CLI remains available as a secondary interface.
   - direct OpenDota fetches
   - overview/detail/item/matchup/recent-match sections that consume normalized match summaries
 - Added regression coverage in `tests/test_match_filters.py` for both direct-client and SQLite-backed match paths using the exact reported match id.
+
+## 2026-03-27 reported bad-match exclusion follow-up
+
+- Added reported match `8745970611` to the same centralized exclusion set in `utils/match_filters.py`.
+- Expanded `tests/test_match_filters.py` so both centralized fetch paths still exclude both reported ids:
+  - direct OpenDota-style client results
+  - SQLite-backed cached match reads
+- Updated user-facing docs (`README.md`, `APP_GUIDE.md`) so the known excluded-match list stays current.
