@@ -421,6 +421,11 @@ CLI remains available as a secondary interface.
 - Added a pure helper in `webapp/hero_defaults.py` so default-hero selection stays testable without importing the Streamlit page.
 - Added regression tests in `tests/test_hero_defaults.py` for Spectre preference and first-option fallback behavior.
 
+## 2026-03-30 default hero preset revert
+
+- Changed the default selected hero in the overview hero dropdown from `Spectre` back to `Wraith King`.
+- Updated `tests/test_hero_defaults.py` so the pure helper regression coverage now prefers `Wraith King` and still falls back to the first available hero when `Wraith King` is absent.
+
 ## 2026-03-26 reported bad-match exclusion
 
 - Excluded reported match `8743652071` centrally via `utils/match_filters.py`.
