@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 
-DEFAULT_HERO_NAME = "Wraith King"
+DEFAULT_HERO_NAME = "Spectre"
 
 
 def default_hero_id(hero_ids: list[int], resolve_hero_name: Callable[[int], str]) -> int:

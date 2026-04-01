@@ -26,7 +26,7 @@ Turbo-only dashboard for your account:
 - Hero Overview is now built from a validated snapshot that tracks match-detail coverage; incomplete zero-value snapshots are rejected instead of being rendered as valid analytics
 - Reported bad matches `8743652071` and `8745970611` are excluded centrally from all dashboard statistics and hero sections
 - Top dashboard metrics include Turbo matches, wins, losses, and winrate; Turbo wins are green and Turbo losses are red
-- Default selected hero is `Wraith King` when that hero exists in the current overview snapshot; otherwise the first available hero is used
+- Default selected hero is `Spectre` when that hero exists in the current overview snapshot; otherwise the first available hero is used
 - Dashboard loading is manual by section:
   - cached overview data can auto-open from local SQLite storage when available
   - `Refresh Turbo Dashboard` is the only action allowed to talk to OpenDota for match sync/detail hydration

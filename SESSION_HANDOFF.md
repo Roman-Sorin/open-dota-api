@@ -426,6 +426,11 @@ CLI remains available as a secondary interface.
 - Changed the default selected hero in the overview hero dropdown from `Spectre` back to `Wraith King`.
 - Updated `tests/test_hero_defaults.py` so the pure helper regression coverage now prefers `Wraith King` and still falls back to the first available hero when `Wraith King` is absent.
 
+## 2026-04-01 default hero preset update
+
+- Changed the default selected hero in the overview hero dropdown from `Wraith King` to `Spectre`.
+- Updated `tests/test_hero_defaults.py` so the pure helper regression coverage now prefers `Spectre` and still falls back to the first available hero when `Spectre` is absent.
+
 ## 2026-03-26 reported bad-match exclusion
 
 - Excluded reported match `8743652071` centrally via `utils/match_filters.py`.
