@@ -81,6 +81,102 @@ CLI remains available as a secondary interface.
 - From now on, every code/config/deploy change must be recorded in this file (`SESSION_HANDOFF.md`) in the same session.
 - Purpose: allow any next agent session to recover project state by reading this file first.
 
+## 2026-04-02 research handoff: global hero item stats source feasibility
+
+- User request under investigation:
+  - replace personal `Item Winrates` with global hero item stats
+  - target shape: `Item / WR / Matches`
+  - strict requirement: `Turbo-only`
+  - ideally tied to app filter semantics: `Days / Start Date / Patches`
+- No app code was changed yet.
+- Current status remains research-only.
+
+### OpenDota findings
+
+- Public OpenDota is not viable for this strict feature.
+- `heroes/{hero_id}/itemPopularity` is not sufficient for the desired table.
+- Public `explorer` can aggregate hero item stats in general, but current public data does not contain Turbo rows.
+- Verified with SQL against public explorer:
+  - `game_mode = 23` (`Turbo`) returned zero rows.
+- Conclusion:
+  - OpenDota public API cannot currently provide global `Turbo-only` hero item stats.
+
+### STRATZ findings
+
+- Important integration requirement discovered:
+  - STRATZ GraphQL requests must include header `User-Agent: STRATZ_API`.
+- Previous apparent token/API failure was caused by missing required `User-Agent`, not by an invalid token.
+- With `Authorization: Bearer ...` plus `User-Agent: STRATZ_API`, STRATZ GraphQL works.
+- Confirmed schema path:
+  - root query type is `DotaQuery`
+  - hero stats query is `heroStats`
+  - item stats field is `heroStats.itemFullPurchase`
+- Confirmed `heroStats.itemFullPurchase` returns the needed raw fields:
+  - `itemId`
+  - `matchCount`
+  - `winCount`
+  - `time`
+  - `instance`
+- This is enough to build:
+  - item name/icon via constants lookup
+  - `WR = winCount / matchCount`
+  - `Matches = matchCount`
+- Critical limitation confirmed from live schema introspection:
+  - `heroStats.itemFullPurchase` args are only:
+    - `heroId`
+    - `week`
+    - `bracketBasicIds`
+    - `positionIds`
+    - `minTime`
+    - `maxTime`
+    - `matchLimit`
+  - it does **not** support:
+    - `gameModeIds`
+    - `gameVersionId` / patch filter
+    - direct date range / start date filter
+    - `lobbyTypeIds`
+- STRATZ does expose `gameModeIds` on other hero winrate/trend fields such as:
+  - `heroStats.winDay`
+  - `heroStats.winWeek`
+  - `heroStats.winMonth`
+  - `heroStats.winGameVersion`
+- But those are hero-level win stats, not item-level purchase stats.
+- Conclusion:
+  - STRATZ can support a weaker feature: global hero item stats in general.
+  - STRATZ cannot currently satisfy the strict feature as requested:
+    - `Turbo-only`
+    - tied to app `Days / Start Date / Patches`
+
+### Dotabuff findings
+
+- Dotabuff hero item pages were fetched successfully through Cloudflare-capable clients during research.
+- Hero item pages already expose the target table shape visually:
+  - item
+  - matches
+  - win rate
+- However, Turbo filtering for hero item pages is not yet proven.
+- Testing with likely query params such as:
+  - `mode=turbo`
+  - `game_mode=23`
+  - related variants
+  did not produce a confirmed Turbo-specific result on hero item pages.
+- Conclusion:
+  - Dotabuff remains an unproven candidate for strict `Turbo-only` hero item stats.
+
+### Current source decision
+
+- Strict feature requirement (`global hero item stats` + `Turbo-only` + app time/patch filters) is still unresolved.
+- Current source status:
+  - `OpenDota`: not viable
+  - `STRATZ`: partial only, not strict requirement
+  - `Dotabuff`: still unconfirmed
+
+### Recommended next step
+
+- Continue source research instead of modifying the app.
+- If product requirements are relaxed, STRATZ can be used later for a fallback feature:
+  - global hero item stats without guaranteed Turbo/date/patch filtering.
+
 ## Current deployment status
 
 - Stable Streamlit Community Cloud app is live:
