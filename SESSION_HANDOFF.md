@@ -228,6 +228,22 @@ CLI remains available as a secondary interface.
   - runtime with only `applymap`
 - Updated `README.md` and `APP_GUIDE.md` to document the styling compatibility rule.
 
+## 2026-04-03 deployment hardening: pinned dependencies
+
+- Replaced loose `>=` dependency ranges in `requirements.txt` with exact pins for the currently working environment.
+- Purpose:
+  - keep Streamlit Cloud restarts on the same dependency set
+  - prevent unplanned pandas/Streamlit API drift from breaking a previously working deploy
+- Current pinned versions:
+  - `typer==0.24.1`
+  - `requests==2.32.5`
+  - `rich==14.3.3`
+  - `python-dotenv==1.2.2`
+  - `streamlit==1.55.0`
+  - `pandas==2.3.3`
+  - `pytest==9.0.2`
+- Updated `README.md`, `APP_GUIDE.md`, and `DEPLOY.md` to document the exact-pin policy.
+
 ## 2026-03-08 latest dashboard simplification
 
 - Rounded all displayed numeric values to whole numbers in dashboard UI:

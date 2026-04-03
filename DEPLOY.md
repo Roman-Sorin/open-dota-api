@@ -63,3 +63,9 @@ After deploy, you get a stable public HTTPS URL accessible from phone.
 
 Current deployed app:
 - https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/
+
+## Dependency stability
+
+- `requirements.txt` is pinned to exact versions.
+- Keep it pinned for Streamlit Cloud. Loose `>=` ranges let cloud restarts resolve different package versions than the last working deploy.
+- When upgrading dependencies, update the pins intentionally, push, and verify the deployed `Build` hash.

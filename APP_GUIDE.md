@@ -84,6 +84,7 @@ The project includes two interfaces:
 
 - Python 3.12+
 - Internet access
+- Dependencies are pinned exactly in [requirements.txt](/C:/development/projects/open-dota-api/requirements.txt) so deployed Streamlit environments do not drift across restarts
 
 ## Setup
 

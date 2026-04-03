@@ -148,6 +148,12 @@ tests/
 - `purchase_log` is often incomplete, so purchased-item analytics may cover only part of matches.
 - Without API key, rate limits can be hit.
 
+## Dependency policy
+
+- Runtime and test dependencies in [requirements.txt](/C:/development/projects/open-dota-api/requirements.txt) are pinned to exact versions.
+- Purpose: keep Streamlit Cloud restarts and local rebuilds on the same package set, instead of silently upgrading to newer pandas/Streamlit combinations.
+- Upgrade dependencies intentionally, verify the app, then commit the new pins in the same change.
+
 ## Tests
 
 ```bash
