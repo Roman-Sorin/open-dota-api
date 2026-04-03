@@ -211,6 +211,23 @@ CLI remains available as a secondary interface.
   - `https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/`
 - Added stable URL references to `README.md` and `DEPLOY.md`.
 
+## 2026-04-03 production hotfix: pandas Styler compatibility
+
+- Fixed a deployed dashboard crash in `Hero Overview` for patch-filter snapshots.
+- Root cause:
+  - the cloud/runtime environment hit a pandas `Styler` API mismatch at `hero_table_styler.applymap(...)`
+  - traceback location was `webapp/turbo_dashboard.py`
+- Added `webapp/styling.py` with one compatibility helper:
+  - prefers `Styler.map(...)`
+  - falls back to `Styler.applymap(...)`
+- Routed both dashboard styled tables through that helper:
+  - `Hero Overview`
+  - `Item Winrates`
+- Added regression coverage in `tests/test_styling.py` for both code paths:
+  - runtime with `map`
+  - runtime with only `applymap`
+- Updated `README.md` and `APP_GUIDE.md` to document the styling compatibility rule.
+
 ## 2026-03-08 latest dashboard simplification
 
 - Rounded all displayed numeric values to whole numbers in dashboard UI:

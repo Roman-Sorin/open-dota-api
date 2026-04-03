@@ -16,6 +16,7 @@ The project includes two interfaces:
 - Hero Overview column labels stay short and English-only: `All`, `Won`, `Lost`, `WR`, `Dur`, `NW`, `Dmg`
 - Hero Overview and Detailed Turbo Stats use one shared metric-definition list in UI code, so hero fields stay synchronized between both sections
 - Hero Overview rows are also built from the same service-side stats aggregation used by Detailed Turbo Stats, so `Radiant WR` / `Dire WR` and other hero metrics stay consistent
+- Dashboard table styling uses a pandas-compatibility helper (`Styler.map` with `applymap` fallback) so cloud/runtime package drift does not break Hero Overview or Item Winrates rendering
 - All winrate values in the UI use the same colors: below `50%` red, exactly `50%` yellow, above `50%` green
 - Hero overview avg damage/net worth use match-detail fallback when player match rows don't include `hero_damage` or `net_worth`
 - Cached Hero Overview also reuses stored match details to backfill missing hero economy/damage fields before rendering overview rows

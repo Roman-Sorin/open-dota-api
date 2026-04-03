@@ -37,6 +37,7 @@ from webapp.hero_overview import (
 from webapp.hero_trends import build_daily_trend_points
 from webapp import matchups as matchup_utils
 from webapp.overview_health import overview_looks_stale
+from webapp.styling import apply_cell_style
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
@@ -1166,13 +1167,18 @@ hero_ids = list(hero_rows_by_id.keys())
 hero_table_df = pd.DataFrame(hero_table, columns=HERO_OVERVIEW_COLUMN_ORDER)
 hero_table_styler = hero_table_df.style
 if not hero_table_df.empty:
-    hero_table_styler = hero_table_styler.applymap(
+    hero_table_styler = apply_cell_style(
+        hero_table_styler,
         lambda _: "color: #23a55a; font-weight: 700;",
         subset=[HERO_WINS_COLUMN],
-    ).applymap(
+    )
+    hero_table_styler = apply_cell_style(
+        hero_table_styler,
         lambda _: "color: #d9534f; font-weight: 700;",
         subset=[HERO_LOSSES_COLUMN],
-    ).applymap(
+    )
+    hero_table_styler = apply_cell_style(
+        hero_table_styler,
         _style_winrate_cell,
         subset=["WR", "Rad WR", "Dire WR"],
     )
@@ -1634,13 +1640,18 @@ if isinstance(item_snapshot_payload, dict):
                 for row in item_wr_rows
             ]
         )
-        item_winrate_styler = item_winrate_table.style.applymap(
+        item_winrate_styler = apply_cell_style(
+            item_winrate_table.style,
             _style_winrate_cell,
             subset=["Item Winrate"],
-        ).applymap(
+        )
+        item_winrate_styler = apply_cell_style(
+            item_winrate_styler,
             lambda _: "color: #23a55a; font-weight: 700;",
             subset=["Won"],
-        ).applymap(
+        )
+        item_winrate_styler = apply_cell_style(
+            item_winrate_styler,
             lambda _: "color: #d9534f; font-weight: 700;",
             subset=["Lost"],
         )
