@@ -566,6 +566,7 @@ CLI remains available as a secondary interface.
 - Added centralized detail-hydration targeting in `services/analytics_service.py` so main dashboard refreshes re-fetch both truly missing details and legacy cached rows missing the selected-player `purchase_log`.
 - Added regression coverage in `tests/test_match_store.py` for the reported Spectre-style timing case (`Phylactery 8m`, `Orchid 12m`, `Manta 15m`, `Aegis 17m`, `Skadi 20m`) plus a cache-path `load_match_snapshot(..., hydrate_details=True)` test proving stale stored details are repaired from cache-backed snapshots too.
 - Updated `APP_GUIDE.md` to document that a main dashboard refresh can repair legacy cached item timings without hidden section-level detail fetches.
+- Follow-up UI fix in `webapp/turbo_dashboard.py`: centralized recent-section snapshot writes and made `Refresh Turbo Dashboard` rebuild an already-visible `Recent Matches` section from cached data in the same rerun, so repaired timings are not hidden behind stale section session state.
 
 ## 2026-03-26 reported bad-match exclusion
 

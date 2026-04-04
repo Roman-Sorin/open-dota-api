@@ -635,6 +635,19 @@ def _get_current_section_snapshot(section_name: str, request_key: object) -> obj
     return None
 
 
+def _store_recent_section_snapshot(
+    request_key: object,
+    rows: object,
+    *,
+    visible_recent_matches: int,
+    loaded_at_value: str | None = None,
+) -> None:
+    _cache_set("recent_rows_by_key", request_key, rows)
+    _cache_set("recent_loaded_at_by_key", request_key, loaded_at_value or _utcnow_iso())
+    _cache_set("recent_limit_loaded_by_key", request_key, visible_recent_matches)
+    _set_current_section_snapshot("recent", request_key, rows)
+
+
 def _mark_section_visible(section_name: str, request_key: object) -> None:
     st.session_state[f"current_{section_name}_visible_request_key"] = request_key
 
@@ -1693,10 +1706,11 @@ if load_all_sections or load_recent_matches:
             limit=min(visible_recent_matches, len(matches)),
             allow_detail_fetch=False,
         )
-        _cache_set("recent_rows_by_key", current_hero_snapshot_key, recent_rows)
-        _cache_set("recent_loaded_at_by_key", current_hero_snapshot_key, _utcnow_iso())
-        _cache_set("recent_limit_loaded_by_key", current_hero_snapshot_key, visible_recent_matches)
-        _set_current_section_snapshot("recent", current_hero_snapshot_key, recent_rows)
+        _store_recent_section_snapshot(
+            current_hero_snapshot_key,
+            recent_rows,
+            visible_recent_matches=visible_recent_matches,
+        )
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
@@ -1706,7 +1720,7 @@ if recent_match_rows is None:
     recent_match_rows = _get_current_section_snapshot("recent", current_hero_snapshot_key)
     if recent_match_rows is not None:
         _cache_set("recent_rows_by_key", current_hero_snapshot_key, recent_match_rows)
-if recent_match_rows is None and _is_section_visible("recent", current_hero_snapshot_key):
+if (recent_match_rows is None or (load and _is_section_visible("recent", current_hero_snapshot_key))) and _is_section_visible("recent", current_hero_snapshot_key):
     try:
         matches = _load_selected_hero_matches(
             service,
@@ -1725,9 +1739,11 @@ if recent_match_rows is None and _is_section_visible("recent", current_hero_snap
             limit=min(visible_recent_matches, len(matches)),
             allow_detail_fetch=False,
         )
-        _cache_set("recent_rows_by_key", current_hero_snapshot_key, recent_match_rows)
-        _cache_set("recent_limit_loaded_by_key", current_hero_snapshot_key, visible_recent_matches)
-        _set_current_section_snapshot("recent", current_hero_snapshot_key, recent_match_rows)
+        _store_recent_section_snapshot(
+            current_hero_snapshot_key,
+            recent_match_rows,
+            visible_recent_matches=visible_recent_matches,
+        )
     except Exception:
         recent_match_rows = None
 recent_loaded_at = _cache_get("recent_loaded_at_by_key", current_hero_snapshot_key)
@@ -1748,9 +1764,11 @@ if recent_matches_loaded and loaded_recent_matches != visible_recent_matches:
             limit=min(visible_recent_matches, len(matches)),
             allow_detail_fetch=False,
         )
-        _cache_set("recent_rows_by_key", current_hero_snapshot_key, recent_match_rows)
-        _cache_set("recent_limit_loaded_by_key", current_hero_snapshot_key, visible_recent_matches)
-        _set_current_section_snapshot("recent", current_hero_snapshot_key, recent_match_rows)
+        _store_recent_section_snapshot(
+            current_hero_snapshot_key,
+            recent_match_rows,
+            visible_recent_matches=visible_recent_matches,
+        )
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
         recent_matches_loaded = False
