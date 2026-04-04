@@ -919,7 +919,7 @@ with st.sidebar:
         "Min matches per hero",
         min_value=1,
         max_value=50,
-        value=st.session_state.get("min_hero_matches", 1),
+        value=st.session_state.get("min_hero_matches", 2),
         step=1,
     )
     min_item_matches = st.slider(

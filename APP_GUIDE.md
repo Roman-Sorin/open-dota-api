@@ -61,6 +61,7 @@ The project includes two interfaces:
 - Item winrates section has a safe legacy fallback path so mixed deploy/runtime restarts do not crash the section if the process still holds an older service object
 - Item winrate table no longer shows Avg K/D/A or derived KDA columns
 - Item winrate table is sorted by highest item winrate first (ties by larger sample)
+- Dashboard filter `Min matches per hero` defaults to `2`
 - Dashboard filter `Min matches per item` defaults to `2`
 - Recent hero matches are displayed as a compact table below the item table
 - Recent hero matches show final item slots only; timings are attached only to those final items when available from match details
