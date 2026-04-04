@@ -560,6 +560,13 @@ CLI remains available as a secondary interface.
 - Changed the default selected hero in the overview hero dropdown from `Wraith King` to `Spectre`.
 - Updated `tests/test_hero_defaults.py` so the pure helper regression coverage now prefers `Spectre` and still falls back to the first available hero when `Spectre` is absent.
 
+## 2026-04-04 recent-match item timing legacy-cache fix
+
+- Root cause: some cached `match_details` rows existed but were legacy/incomplete for the selected player because they lacked `purchase_log`; recent matches and item coverage then treated those rows as complete and rendered `-` timings indefinitely.
+- Added centralized detail-hydration targeting in `services/analytics_service.py` so main dashboard refreshes re-fetch both truly missing details and legacy cached rows missing the selected-player `purchase_log`.
+- Added regression coverage in `tests/test_match_store.py` for the reported Spectre-style timing case (`Phylactery 8m`, `Orchid 12m`, `Manta 15m`, `Aegis 17m`, `Skadi 20m`) plus a cache-path `load_match_snapshot(..., hydrate_details=True)` test proving stale stored details are repaired from cache-backed snapshots too.
+- Updated `APP_GUIDE.md` to document that a main dashboard refresh can repair legacy cached item timings without hidden section-level detail fetches.
+
 ## 2026-03-26 reported bad-match exclusion
 
 - Excluded reported match `8743652071` centrally via `utils/match_filters.py`.

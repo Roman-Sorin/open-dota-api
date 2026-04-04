@@ -57,6 +57,7 @@ The project includes two interfaces:
 - Item winrate table (wins with item / matches with item), includes per-item match count
 - Item winrates count cached purchased items first; when cached `purchase_log` is missing, the app falls back to cached final inventory / summary final slots for that match
 - Item winrates show an explicit coverage warning when some matches still lack cached item detail data, instead of silently undercounting them as if the snapshot were complete
+- Main dashboard refresh rehydrates legacy cached match-detail rows that are missing the selected-player `purchase_log`, so item timings and purchased-item coverage can recover without manual cache deletion
 - Item winrate table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red
 - Item winrates section has a safe legacy fallback path so mixed deploy/runtime restarts do not crash the section if the process still holds an older service object
 - Item winrate table no longer shows Avg K/D/A or derived KDA columns
@@ -65,6 +66,7 @@ The project includes two interfaces:
 - Dashboard filter `Min matches per item` defaults to `2`
 - Recent hero matches are displayed as a compact table below the item table
 - Recent hero matches show final item slots only; timings are attached only to those final items when available from match details
+- Recent hero matches repair legacy cached item timings on the next main dashboard refresh when an older stored detail row is missing `purchase_log`
 - When final-item timings are available, recent-match items are ordered by earliest completion time
 - Recent hero matches include `Net Worth` and player `Hero Damage`
 - Recent hero matches show both `K/D/A` and per-match `KDA` rounded to one decimal

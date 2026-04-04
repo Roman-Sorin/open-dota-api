@@ -533,3 +533,195 @@ def test_turbo_overview_snapshot_reports_incomplete_detail_coverage_for_zero_row
     assert snapshot.overview[0]["avg_net_worth"] == 0.0
     assert snapshot.overview[0]["avg_damage"] == 0.0
     assert snapshot.overview[0]["max_hero_damage"] == 0
+
+
+def test_refresh_cached_matches_rehydrates_legacy_details_without_purchase_log_for_recent_item_timings() -> None:
+    class _LegacyDetailRefreshClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.detail_calls = 0
+
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 725001,
+                    "start_time": 1771552800,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 3,
+                    "deaths": 1,
+                    "assists": 14,
+                    "duration": 1276,
+                    "hero_id": 1,
+                    "item_0": 2001,
+                    "item_1": 2002,
+                    "item_2": 2003,
+                    "item_3": 2004,
+                    "item_4": 2005,
+                    "item_5": 0,
+                }
+            ]
+
+        def get_match_details(self, match_id: int) -> dict:
+            self.detail_calls += 1
+            return {
+                "match_id": match_id,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0,
+                        "level": 25,
+                        "hero_variant": 0,
+                        "net_worth": 25500,
+                        "hero_damage": 17200,
+                        "item_0": 2001,
+                        "item_1": 2002,
+                        "item_2": 2003,
+                        "item_3": 2004,
+                        "item_4": 2005,
+                        "item_5": 0,
+                        "purchase_log": [
+                            {"key": "phylactery", "time": 480},
+                            {"key": "orchid", "time": 720},
+                            {"key": "manta", "time": 900},
+                            {"key": "aegis", "time": 1020},
+                            {"key": "skadi", "time": 1200},
+                        ],
+                    }
+                ],
+            }
+
+    client = _LegacyDetailRefreshClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    service.references.item_ids_by_key.update(
+        {
+            "phylactery": 2001,
+            "orchid": 2002,
+            "manta": 2003,
+            "aegis": 2004,
+            "skadi": 2005,
+        }
+    )
+    service.references.item_names_by_id.update(
+        {
+            2001: "Phylactery",
+            2002: "Orchid Malevolence",
+            2003: "Manta Style",
+            2004: "Aegis of the Immortal",
+            2005: "Eye of Skadi",
+        }
+    )
+
+    store.upsert_match_detail(
+        725001,
+        {
+            "match_id": 725001,
+            "players": [
+                {
+                    "account_id": 123,
+                    "player_slot": 0,
+                    "level": 25,
+                    "hero_variant": 0,
+                    "net_worth": 25500,
+                    "hero_damage": 17200,
+                    "item_0": 2001,
+                    "item_1": 2002,
+                    "item_2": 2003,
+                    "item_3": 2004,
+                    "item_4": 2005,
+                    "item_5": 0,
+                }
+            ],
+        },
+    )
+
+    filters = QueryFilters(player_id=123, game_mode=23, game_mode_name="Turbo")
+    matches = service.refresh_cached_matches(filters, hydrate_details=True)
+    recent = service.build_recent_hero_matches(123, matches, limit=5, allow_detail_fetch=False)
+
+    assert client.detail_calls == 1
+    assert [item.item_name for item in recent[0].items] == [
+        "Phylactery",
+        "Orchid Malevolence",
+        "Manta Style",
+        "Aegis of the Immortal",
+        "Eye of Skadi",
+    ]
+    assert [item.purchase_time_min for item in recent[0].items] == [8, 12, 15, 17, 20]
+
+
+def test_load_match_snapshot_rehydrates_cached_details_missing_purchase_log() -> None:
+    class _SnapshotHydrationClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.detail_calls = 0
+
+        def get_match_details(self, match_id: int) -> dict:
+            self.detail_calls += 1
+            return {
+                "match_id": match_id,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0,
+                        "item_0": 1,
+                        "purchase_log": [{"key": "blink", "time": 600}],
+                    }
+                ],
+            }
+
+    client = _SnapshotHydrationClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    service.references.item_ids_by_key["blink"] = 1
+    service.references.item_names_by_id[1] = "Blink Dagger"
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 99,
+                "start_time": 1771552800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 8,
+                "deaths": 6,
+                "assists": 8,
+                "duration": 1380,
+                "hero_id": 1,
+                "item_0": 1,
+                "item_1": 0,
+                "item_2": 0,
+                "item_3": 0,
+                "item_4": 0,
+                "item_5": 0,
+            }
+        ],
+    )
+    store.upsert_match_detail(
+        99,
+        {
+            "match_id": 99,
+            "players": [
+                {
+                    "account_id": 123,
+                    "player_slot": 0,
+                    "item_0": 1,
+                }
+            ],
+        },
+    )
+
+    filters = QueryFilters(player_id=123, game_mode=23, game_mode_name="Turbo")
+    matches, status = service.load_match_snapshot(filters, force_sync=False, hydrate_details=True)
+    recent = service.build_recent_hero_matches(123, matches, limit=5, allow_detail_fetch=False)
+
+    assert status.requested == 1
+    assert status.completed == 1
+    assert status.remaining == 0
+    assert client.detail_calls == 1
+    assert [item.purchase_time_min for item in recent[0].items] == [10]

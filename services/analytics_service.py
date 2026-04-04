@@ -819,6 +819,27 @@ class DotaAnalyticsService:
         cache_key = f"match_details_{match_id}"
         return isinstance(self.cache.get(cache_key), dict)
 
+    @staticmethod
+    def _player_row_has_purchase_log_field(player_row: dict | None) -> bool:
+        return isinstance(player_row, dict) and "purchase_log" in player_row
+
+    def _cached_match_detail_has_purchase_log_for_player(
+        self,
+        match_id: int,
+        *,
+        player_id: int,
+        player_slot: int | None,
+    ) -> bool:
+        details = self.get_match_details_if_cached(match_id)
+        if not isinstance(details, dict):
+            return False
+        player_row = self._extract_player_from_match_details(
+            details,
+            player_id=player_id,
+            player_slot=player_slot,
+        )
+        return self._player_row_has_purchase_log_field(player_row)
+
     def _get_match_details_cached(self, match_id: int) -> dict[str, Any]:
         details = self._get_match_details(match_id, allow_fetch=True)
         if details is None:
@@ -828,8 +849,8 @@ class DotaAnalyticsService:
     def get_match_details_if_cached(self, match_id: int) -> dict[str, Any] | None:
         return self._get_match_details(match_id, allow_fetch=False)
 
-    def get_or_fetch_match_details(self, match_id: int) -> dict[str, Any]:
-        details = self._get_match_details(match_id, allow_fetch=True)
+    def get_or_fetch_match_details(self, match_id: int, *, force_refresh: bool = False) -> dict[str, Any]:
+        details = self._fetch_match_details(match_id) if force_refresh else self._get_match_details(match_id, allow_fetch=True)
         if details is None:
             raise OpenDotaNotFoundError(f"Match details for {match_id} were not found")
         return details
@@ -848,16 +869,51 @@ class DotaAnalyticsService:
                     break
         return missing_ids
 
+    def get_match_ids_requiring_detail_hydration(
+        self,
+        matches: list[MatchSummary],
+        *,
+        player_id: int | None = None,
+        require_purchase_log: bool = False,
+        limit: int | None = None,
+    ) -> list[int]:
+        missing_ids: list[int] = []
+        seen_ids: set[int] = set()
+        for match in matches:
+            match_id = int(match.match_id)
+            if match_id <= 0 or match_id in seen_ids:
+                continue
+            seen_ids.add(match_id)
+
+            needs_hydration = not self._has_match_details_cached(match_id)
+            if (
+                not needs_hydration
+                and require_purchase_log
+                and player_id is not None
+                and not self._cached_match_detail_has_purchase_log_for_player(
+                    match_id,
+                    player_id=player_id,
+                    player_slot=match.player_slot,
+                )
+            ):
+                needs_hydration = True
+
+            if needs_hydration:
+                missing_ids.append(match_id)
+                if limit is not None and len(missing_ids) >= limit:
+                    break
+        return missing_ids
+
     def hydrate_match_details_for_match_ids(self, match_ids: list[int]) -> MatchDetailHydrationStatus:
         requested_ids = [int(match_id) for match_id in match_ids if int(match_id) > 0]
         requested = len(requested_ids)
         completed = 0
         rate_limited = False
         for match_id in requested_ids:
-            if match_id <= 0 or self._has_match_details_cached(match_id):
+            if match_id <= 0:
                 continue
             try:
-                self.get_or_fetch_match_details(match_id)
+                self.get_or_fetch_match_details(match_id, force_refresh=True)
                 completed += 1
             except OpenDotaRateLimitError:
                 rate_limited = True
@@ -880,7 +936,13 @@ class DotaAnalyticsService:
         self._sync_player_matches(filters, force=True)
         matches = self.get_cached_matches(filters)
         if hydrate_details:
-            self.hydrate_match_details_for_match_ids(self.get_missing_detail_match_ids(matches))
+            self.hydrate_match_details_for_match_ids(
+                self.get_match_ids_requiring_detail_hydration(
+                    matches,
+                    player_id=filters.player_id,
+                    require_purchase_log=True,
+                )
+            )
         return self.get_cached_matches(filters)
 
     def load_match_snapshot(
@@ -895,7 +957,11 @@ class DotaAnalyticsService:
         else:
             matches = self.get_cached_matches(filters) if self.match_store is not None else self.fetch_matches(filters)
 
-        missing_before = self.get_missing_detail_match_ids(matches)
+        missing_before = self.get_match_ids_requiring_detail_hydration(
+            matches,
+            player_id=filters.player_id,
+            require_purchase_log=hydrate_details,
+        )
         if hydrate_details and missing_before:
             hydration_status = self.hydrate_match_details_for_match_ids(missing_before)
             matches = self.get_cached_matches(filters) if self.match_store is not None else self.fetch_matches(filters)
@@ -1474,8 +1540,21 @@ class DotaAnalyticsService:
             return None
 
         details = self.client.get_match_details(match_id)
+        self._store_match_details(match_id, details)
+        return details
+
+    def _store_match_details(self, match_id: int, details: dict[str, Any]) -> None:
+        cache_key = f"match_details_{match_id}"
         self._match_details_memory_cache[match_id] = details
         if self.match_store is not None:
             self.match_store.upsert_match_detail(match_id, details)
         self.cache.set(cache_key, details)
+
+    def _fetch_match_details(self, match_id: int) -> dict[str, Any]:
+        custom_detail_loader = self.__dict__.get("_get_match_details_cached")
+        if callable(custom_detail_loader):
+            details = custom_detail_loader(match_id)
+        else:
+            details = self.client.get_match_details(match_id)
+        self._store_match_details(match_id, details)
         return details
