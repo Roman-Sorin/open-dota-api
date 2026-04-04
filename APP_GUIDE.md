@@ -68,6 +68,7 @@ The project includes two interfaces:
 - Recent hero matches show final item slots only; timings are attached only to those final items when available from match details
 - Recent hero matches repair legacy cached item timings on the next main dashboard refresh when an older stored detail row is missing `purchase_log`
 - If `Recent Matches` is already visible, `Refresh Turbo Dashboard` rebuilds that section from cached data in the same rerun so repaired item timings appear immediately
+- `Repair Missing Item Timings via OpenDota Parse` explicitly requests OpenDota replay parses for the visible recent hero matches that still have no timing data, waits briefly, then rebuilds the section from the refreshed cached details
 - When final-item timings are available, recent-match items are ordered by earliest completion time
 - Recent hero matches include `Net Worth` and player `Hero Damage`
 - Recent hero matches show both `K/D/A` and per-match `KDA` rounded to one decimal

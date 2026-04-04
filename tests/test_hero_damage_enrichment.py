@@ -611,6 +611,63 @@ def test_recent_hero_matches_use_final_slots_with_matching_final_item_timings() 
     assert [item.purchase_time_min for item in rows[0].items] == [3, 5, 9, 12, 17, 23]
 
 
+def test_recent_hero_matches_use_aegis_objective_time_when_purchase_log_lacks_aegis() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=102,
+            start_time=0,
+            player_slot=128,
+            radiant_win=False,
+            kills=3,
+            deaths=1,
+            assists=14,
+            duration=1276,
+            hero_id=1,
+            item_0=117,
+            item_1=160,
+            item_2=151,
+            item_3=108,
+            item_4=1,
+            item_5=0,
+        )
+    ]
+
+    service.references.item_names_by_id[117] = "Aegis of the Immortal"
+    service.references.item_images_by_id[117] = "aegis.png"
+
+    service._get_match_details_cached = lambda _: {  # type: ignore[method-assign]
+        "players": [
+            {
+                "account_id": 123,
+                "player_slot": 128,
+                "level": 25,
+                "hero_variant": 0,
+                "item_0": 117,
+                "item_1": 160,
+                "item_2": 151,
+                "item_3": 108,
+                "item_4": 1,
+                "item_5": 0,
+                "purchase_log": [
+                    {"key": "orchid", "time": 720},
+                    {"key": "blink", "time": 900},
+                    {"key": "skadi", "time": 1200},
+                    {"key": "heart", "time": 1320},
+                ],
+            }
+        ],
+        "objectives": [
+            {"time": 1020, "type": "CHAT_MESSAGE_AEGIS", "player_slot": 128},
+        ],
+    }
+
+    rows = service.build_recent_hero_matches(player_id=123, matches=matches, limit=10)
+
+    assert [item.item_id for item in rows[0].items] == [151, 1, 117, 160, 108]
+    assert [item.purchase_time_min for item in rows[0].items] == [12, 15, 17, 20, 22]
+
+
 def test_turbo_hero_overview_matches_reported_muerta_example() -> None:
     service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
     matches = [

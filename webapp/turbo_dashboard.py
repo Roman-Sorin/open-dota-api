@@ -1715,6 +1715,49 @@ if load_all_sections or load_recent_matches:
         show_error(exc)
 
 st.markdown("### Hero Matches - Recent Matches for Hero")
+repair_recent_item_timings = st.button("Repair Missing Item Timings via OpenDota Parse")
+if repair_recent_item_timings:
+    try:
+        matches = _load_selected_hero_matches(
+            service,
+            player_id,
+            selected_hero_id,
+            selected_hero_name,
+            days,
+            active_patches,
+            active_start_date,
+            current_hero_snapshot_key,
+        )
+        visible_recent_matches = int(st.session_state[recent_matches_key])
+        repair_status = service.repair_recent_match_item_timings(
+            player_id=player_id,
+            matches=matches,
+            limit=min(visible_recent_matches, len(matches)),
+        )
+        recent_match_rows = service.build_recent_hero_matches(
+            player_id=player_id,
+            matches=matches,
+            limit=min(visible_recent_matches, len(matches)),
+            allow_detail_fetch=False,
+        )
+        _mark_section_visible("recent", current_hero_snapshot_key)
+        _store_recent_section_snapshot(
+            current_hero_snapshot_key,
+            recent_match_rows,
+            visible_recent_matches=visible_recent_matches,
+        )
+        if repair_status.completed > 0:
+            st.success(
+                f"Repaired item timings for {repair_status.completed} recent match(es)."
+            )
+        elif repair_status.pending > 0:
+            st.warning(
+                f"Submitted {repair_status.submitted} OpenDota parse request(s); {repair_status.pending} match(es) are still pending parse."
+            )
+        else:
+            st.info("Visible recent matches already had all item timings available, or OpenDota has no parseable replay timing data yet.")
+    except Exception as exc:  # noqa: BLE001
+        show_error(exc)
 recent_match_rows = _cache_get("recent_rows_by_key", current_hero_snapshot_key)
 if recent_match_rows is None:
     recent_match_rows = _get_current_section_snapshot("recent", current_hero_snapshot_key)

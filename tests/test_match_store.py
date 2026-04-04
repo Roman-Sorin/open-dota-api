@@ -725,3 +725,115 @@ def test_load_match_snapshot_rehydrates_cached_details_missing_purchase_log() ->
     assert status.remaining == 0
     assert client.detail_calls == 1
     assert [item.purchase_time_min for item in recent[0].items] == [10]
+
+
+def test_repair_recent_match_item_timings_requests_parse_and_rebuilds_recent_rows() -> None:
+    class _ParseRepairClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.parse_requested: set[int] = set()
+
+        def get_match_details(self, match_id: int) -> dict:
+            if match_id in self.parse_requested:
+                return {
+                    "match_id": match_id,
+                    "version": 22,
+                    "players": [
+                        {
+                            "account_id": 123,
+                            "player_slot": 0,
+                            "level": 25,
+                            "item_0": 2001,
+                            "item_1": 2002,
+                            "item_2": 2003,
+                            "item_3": 2004,
+                            "item_4": 2005,
+                            "purchase_log": [
+                                {"key": "phylactery", "time": 480},
+                                {"key": "orchid", "time": 720},
+                                {"key": "manta", "time": 900},
+                                {"key": "aegis", "time": 1020},
+                                {"key": "skadi", "time": 1200},
+                            ],
+                        }
+                    ],
+                }
+            return {
+                "match_id": match_id,
+                "version": None,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0,
+                        "level": 25,
+                        "item_0": 2001,
+                        "item_1": 2002,
+                        "item_2": 2003,
+                        "item_3": 2004,
+                        "item_4": 2005,
+                    }
+                ],
+            }
+
+        def request_match_parse(self, match_id: int) -> int | None:
+            self.parse_requested.add(match_id)
+            return 1
+
+    client = _ParseRepairClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    service.references.item_ids_by_key.update(
+        {
+            "phylactery": 2001,
+            "orchid": 2002,
+            "manta": 2003,
+            "aegis": 2004,
+            "skadi": 2005,
+        }
+    )
+    service.references.item_names_by_id.update(
+        {
+            2001: "Phylactery",
+            2002: "Orchid Malevolence",
+            2003: "Manta Style",
+            2004: "Aegis of the Immortal",
+            2005: "Eye of Skadi",
+        }
+    )
+    matches = [
+        service._parse_match_summary_row(  # noqa: SLF001
+            {
+                "match_id": 8757792129,
+                "start_time": 1775326012,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 3,
+                "deaths": 1,
+                "assists": 14,
+                "duration": 1276,
+                "hero_id": 67,
+                "item_0": 2001,
+                "item_1": 2002,
+                "item_2": 2003,
+                "item_3": 2004,
+                "item_4": 2005,
+                "item_5": 0,
+            }
+        )
+    ]
+
+    status = service.repair_recent_match_item_timings(
+        player_id=123,
+        matches=matches,
+        limit=1,
+        poll_timeout_seconds=1,
+        poll_interval_seconds=1,
+    )
+    recent = service.build_recent_hero_matches(123, matches, limit=1, allow_detail_fetch=False)
+
+    assert status.requested == 1
+    assert status.submitted == 1
+    assert status.completed == 1
+    assert status.pending == 0
+    assert [item.purchase_time_min for item in recent[0].items] == [8, 12, 15, 17, 20]

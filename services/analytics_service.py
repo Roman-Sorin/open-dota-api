@@ -4,6 +4,7 @@ from bisect import bisect_right
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
+import time as time_module
 from typing import Any
 
 from clients.opendota_client import OpenDotaClient
@@ -71,6 +72,15 @@ class MatchDetailHydrationStatus:
     @property
     def is_complete(self) -> bool:
         return self.remaining == 0 and not self.rate_limited
+
+
+@dataclass(slots=True)
+class RecentItemTimingRepairStatus:
+    requested: int
+    submitted: int
+    completed: int
+    pending: int
+    already_available: int
 
 
 @dataclass(slots=True)
@@ -820,8 +830,12 @@ class DotaAnalyticsService:
         return isinstance(self.cache.get(cache_key), dict)
 
     @staticmethod
-    def _player_row_has_purchase_log_field(player_row: dict | None) -> bool:
-        return isinstance(player_row, dict) and "purchase_log" in player_row
+    def _player_row_has_timing_data(player_row: dict | None) -> bool:
+        if not isinstance(player_row, dict):
+            return False
+        if isinstance(player_row.get("purchase_log"), list):
+            return True
+        return isinstance(player_row.get("first_purchase_time"), dict)
 
     def _cached_match_detail_has_purchase_log_for_player(
         self,
@@ -838,7 +852,7 @@ class DotaAnalyticsService:
             player_id=player_id,
             player_slot=player_slot,
         )
-        return self._player_row_has_purchase_log_field(player_row)
+        return self._player_row_has_timing_data(player_row)
 
     def _get_match_details_cached(self, match_id: int) -> dict[str, Any]:
         details = self._get_match_details(match_id, allow_fetch=True)
@@ -1214,7 +1228,14 @@ class DotaAnalyticsService:
 
         return rows
 
-    def _build_recent_match_items(self, player_row: dict | None, final_item_ids: list[int]) -> list[RecentMatchItem]:
+    def _build_recent_match_items(
+        self,
+        player_row: dict | None,
+        final_item_ids: list[int],
+        *,
+        details: dict | None = None,
+        player_slot: int | None = None,
+    ) -> list[RecentMatchItem]:
         purchase_times_by_item: dict[int, list[int]] = {}
         purchase_log = player_row.get("purchase_log") if isinstance(player_row, dict) else None
         if isinstance(purchase_log, list):
@@ -1226,6 +1247,33 @@ class DotaAnalyticsService:
                 if not item_id:
                     continue
                 purchase_times_by_item.setdefault(item_id, []).append(max(int(event.get("time") or 0) // 60, 0))
+        first_purchase_time = player_row.get("first_purchase_time") if isinstance(player_row, dict) else None
+        if isinstance(first_purchase_time, dict):
+            for key, value in first_purchase_time.items():
+                item_id = self.references.item_ids_by_key.get(str(key))
+                if not item_id:
+                    continue
+                if item_id in purchase_times_by_item:
+                    continue
+                try:
+                    purchase_times_by_item[item_id] = [max(int(value) // 60, 0)]
+                except (TypeError, ValueError):
+                    continue
+        if 117 in final_item_ids and 117 not in purchase_times_by_item and isinstance(details, dict):
+            objectives = details.get("objectives")
+            if isinstance(objectives, list):
+                for event in objectives:
+                    if not isinstance(event, dict):
+                        continue
+                    if str(event.get("type") or "") != "CHAT_MESSAGE_AEGIS":
+                        continue
+                    if player_slot is not None and int(event.get("player_slot") or -1) != int(player_slot):
+                        continue
+                    try:
+                        purchase_times_by_item[117] = [max(int(event.get("time") or 0) // 60, 0)]
+                    except (TypeError, ValueError):
+                        pass
+                    break
 
         items: list[RecentMatchItem] = []
         for original_index, item_id in enumerate(final_item_ids):
@@ -1292,11 +1340,79 @@ class DotaAnalyticsService:
                     kda_ratio=calculate_kda_ratio(float(match.kills), float(match.deaths), float(match.assists)),
                     net_worth=int(player_row.get("net_worth") or 0) if isinstance(player_row, dict) else None,
                     hero_damage=int(player_row.get("hero_damage") or 0) if isinstance(player_row, dict) else None,
-                    items=self._build_recent_match_items(player_row, item_ids),
+                    items=self._build_recent_match_items(
+                        player_row,
+                        item_ids,
+                        details=details if isinstance(details, dict) else None,
+                        player_slot=match.player_slot,
+                    ),
                 )
             )
 
         return rows
+
+    def repair_recent_match_item_timings(
+        self,
+        player_id: int,
+        matches: list[MatchSummary],
+        *,
+        limit: int = 10,
+        poll_timeout_seconds: int = 75,
+        poll_interval_seconds: int = 5,
+    ) -> RecentItemTimingRepairStatus:
+        target_matches = matches[:limit]
+        if not target_matches:
+            return RecentItemTimingRepairStatus(requested=0, submitted=0, completed=0, pending=0, already_available=0)
+
+        requested_ids: list[int] = []
+        already_available = 0
+        for match in target_matches:
+            details = self.get_match_details_if_cached(match.match_id)
+            if not isinstance(details, dict):
+                details = self.get_or_fetch_match_details(match.match_id)
+            player_row = self._extract_player_from_match_details(
+                details,
+                player_id=player_id,
+                player_slot=match.player_slot,
+            )
+            if self._player_row_has_timing_data(player_row):
+                already_available += 1
+                continue
+            if details.get("version") is None:
+                requested_ids.append(int(match.match_id))
+
+        submitted = 0
+        pending_ids: set[int] = set()
+        for match_id in requested_ids:
+            self.client.request_match_parse(match_id)
+            submitted += 1
+            pending_ids.add(match_id)
+
+        deadline = time_module.monotonic() + max(poll_timeout_seconds, 0)
+        completed = 0
+        while pending_ids and time_module.monotonic() < deadline:
+            time_module.sleep(max(poll_interval_seconds, 1))
+            for match in target_matches:
+                match_id = int(match.match_id)
+                if match_id not in pending_ids:
+                    continue
+                details = self.get_or_fetch_match_details(match_id, force_refresh=True)
+                player_row = self._extract_player_from_match_details(
+                    details,
+                    player_id=player_id,
+                    player_slot=match.player_slot,
+                )
+                if self._player_row_has_timing_data(player_row):
+                    pending_ids.remove(match_id)
+                    completed += 1
+
+        return RecentItemTimingRepairStatus(
+            requested=len(requested_ids),
+            submitted=submitted,
+            completed=completed,
+            pending=len(pending_ids),
+            already_available=already_available,
+        )
 
     def resolve_hero_name(self, hero_id: int | None) -> str:
         if hero_id is None:

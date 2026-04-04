@@ -112,3 +112,14 @@ class OpenDotaClient:
     def get_match_details(self, match_id: int) -> dict[str, Any]:
         result = self._request("GET", f"matches/{match_id}")
         return result if isinstance(result, dict) else {}
+
+    def request_match_parse(self, match_id: int) -> int | None:
+        result = self._request("POST", f"request/{match_id}")
+        if not isinstance(result, dict):
+            return None
+        job = result.get("job")
+        if isinstance(job, dict):
+            job_id = job.get("jobId")
+            return int(job_id) if job_id is not None else None
+        job_id = result.get("jobId")
+        return int(job_id) if job_id is not None else None
