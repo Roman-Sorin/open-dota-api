@@ -926,7 +926,7 @@ with st.sidebar:
         "Min matches per item",
         min_value=1,
         max_value=30,
-        value=st.session_state.get("min_item_matches", 1),
+        value=st.session_state.get("min_item_matches", 2),
         step=1,
     )
     load = st.button("Refresh Turbo Dashboard", type="primary")
