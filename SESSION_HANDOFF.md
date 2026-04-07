@@ -577,6 +577,7 @@ CLI remains available as a secondary interface.
 - Added consumable-buff support to both `Recent Matches` and `Item Winrates`: cached detail rows now surface consumed `Aghanim's Scepter`, `Aghanim's Shard`, and `Moon Shard` with timing when available, plus visible `buff` chips on the item icons in the UI.
 - Updated `Matchups` default ordering so global `Player Teammates` render highest-`WR` first while global `Player Opponents` render lowest-`WR` first.
 - Fixed `Item Winrates` item thumbnails to preserve the original Dota item aspect ratio, and timing chips now round to whole minutes.
+- `Item Winrates` now reuses the same table-shell styling as `Recent Matches`, so both sections share the same border/divider rhythm instead of maintaining two near-duplicate HTML table styles.
 - Centralized parse-based item timing backfill behind `backfill_item_timing_details(...)`; `load_match_snapshot(..., hydrate_details=True)` now invokes it automatically for cached final-inventory matches missing timing data, and `scripts/backfill_item_timings.py` can be used to run one-off patch-scoped backfills against the local cache.
 
 ## 2026-03-26 reported bad-match exclusion

@@ -2067,10 +2067,10 @@ if isinstance(item_snapshot_payload, dict):
         st.html(
             (
                 "<style>"
-                ".item-winrates-wrap{overflow-x:auto;margin-top:0.5rem;}"
-                ".item-winrates-table{width:100%;min-width:640px;border-collapse:collapse;font-size:0.84rem;}"
-                ".item-winrates-table th{text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;opacity:0.72;padding:0.45rem 0.55rem;border-bottom:1px solid rgba(49,51,63,0.18);white-space:nowrap;}"
-                ".item-winrates-table td{padding:0.55rem;border-bottom:1px solid rgba(49,51,63,0.1);vertical-align:middle;}"
+                ".recent-matches-wrap{overflow-x:auto;margin-top:0.5rem;}"
+                ".recent-matches-table{width:100%;min-width:640px;border-collapse:collapse;font-size:0.84rem;}"
+                ".recent-matches-table th{text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;opacity:0.72;padding:0.45rem 0.55rem;border-bottom:1px solid rgba(49,51,63,0.18);white-space:nowrap;}"
+                ".recent-matches-table td{padding:0.55rem;border-bottom:1px solid rgba(49,51,63,0.1);vertical-align:middle;}"
                 ".item-winrate-item-cell{display:flex;align-items:center;gap:0.6rem;min-width:220px;}"
                 ".item-winrate-item-name{font-weight:700;line-height:1.1;}"
                 ".item-winrate-num{white-space:nowrap;font-weight:700;}"
@@ -2083,7 +2083,7 @@ if isinstance(item_snapshot_payload, dict):
                 ".recent-item-chip-buff{top:-5px;right:-5px;color:#111827;background:rgba(245,158,11,0.96);border-color:rgba(17,24,39,0.2);}"
                 ".recent-item-chip.na{opacity:0.58;}"
                 "</style>"
-                '<div class="item-winrates-wrap"><table class="item-winrates-table">'
+                '<div class="recent-matches-wrap"><table class="recent-matches-table">'
                 "<thead><tr>"
                 "<th>Item</th>"
                 "<th>WR</th>"
