@@ -1,12 +1,18 @@
 from pathlib import Path
 from bisect import bisect_right
+import base64
 from datetime import date, datetime, timedelta
+from functools import lru_cache
+from io import BytesIO
 import inspect
 import os
 import re
+import requests
 import subprocess
 import sys
 import time
+
+from PIL import Image, ImageDraw, ImageFont
 
 import pandas as pd
 import streamlit as st
@@ -1068,6 +1074,63 @@ def _get_item_winrate_snapshot_safe(
         top_n=top_n,
     )
 
+
+@lru_cache(maxsize=512)
+def _download_item_icon(image_url: str) -> bytes | None:
+    if not image_url:
+        return None
+    try:
+        response = requests.get(image_url, timeout=20)
+        response.raise_for_status()
+    except Exception:
+        return None
+    return response.content
+
+
+@lru_cache(maxsize=1024)
+def _item_icon_with_timing(image_url: str, timing_min: float | None) -> str:
+    if timing_min is None:
+        return image_url or ""
+
+    icon_bytes = _download_item_icon(image_url)
+    if not icon_bytes:
+        return image_url or ""
+
+    try:
+        icon = Image.open(BytesIO(icon_bytes)).convert("RGBA").resize((34, 34))
+    except Exception:
+        return image_url or ""
+
+    canvas = Image.new("RGBA", (40, 40), (0, 0, 0, 0))
+    canvas.alpha_composite(icon, (3, 3))
+
+    draw = ImageDraw.Draw(canvas)
+    font = ImageFont.load_default()
+    timing_label = f"{timing_min:.1f}m"
+    bbox = draw.textbbox((0, 0), timing_label, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    badge_width = text_width + 8
+    badge_height = text_height + 4
+    badge_x = 4
+    badge_y = 35 - badge_height
+    draw.rounded_rectangle(
+        (badge_x, badge_y, badge_x + badge_width, badge_y + badge_height),
+        radius=4,
+        fill=(17, 24, 39, 235),
+    )
+    draw.text(
+        (badge_x + 4, badge_y + 1),
+        timing_label,
+        fill=(255, 255, 255, 255),
+        font=font,
+    )
+
+    buffer = BytesIO()
+    canvas.save(buffer, format="PNG")
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
 with st.sidebar:
     st.header("Filters")
     st.caption(f"Version: `{app_version}`")
@@ -1834,9 +1897,11 @@ if isinstance(item_snapshot_payload, dict):
         item_winrate_table = pd.DataFrame(
             [
                 {
-                    "Icon": row.get("item_image", ""),
+                    "Icon": _item_icon_with_timing(
+                        str(row.get("item_image", "")),
+                        float(row["avg_item_timing_min"]) if row.get("avg_item_timing_min") is not None else None,
+                    ),
                     "Item": row["item"],
-                    "Avg Time": row.get("avg_item_timing_min"),
                     "Item Winrate": round(float(row["item_winrate"])),
                     "Matches": int(row.get("matches_with_item", 0)),
                     "Won": int(row.get("wins_with_item", 0)),
@@ -1866,7 +1931,6 @@ if isinstance(item_snapshot_payload, dict):
             hide_index=True,
             column_config={
                 "Icon": st.column_config.ImageColumn("Item", help="Item icon", width="small"),
-                "Avg Time": st.column_config.NumberColumn("Avg Time", format="%.1f min"),
                 "Item Winrate": st.column_config.NumberColumn("Item Winrate", format="%.0f%%"),
             },
         )
