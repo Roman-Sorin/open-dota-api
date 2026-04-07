@@ -707,7 +707,10 @@ class SQLiteMatchStore:
             SELECT *
             FROM match_parse_requests
             WHERE {' AND '.join(clauses)}
-            ORDER BY requested_at DESC
+            ORDER BY
+                CASE WHEN last_polled_at IS NULL THEN 0 ELSE 1 END ASC,
+                COALESCE(last_polled_at, requested_at) ASC,
+                requested_at ASC
             LIMIT ?
             """,
             params,

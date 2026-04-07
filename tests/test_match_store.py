@@ -1164,3 +1164,114 @@ def test_background_sync_cycle_updates_state_history_and_parse_queue() -> None:
     assert runs[0]["parse_requested"] == 1
     assert parse_request is not None
     assert parse_request["status"] == "pending"
+
+
+def test_background_sync_cycle_refreshes_oldest_pending_parse_requests_first() -> None:
+    class _PendingRefreshClient(_FakeClient):
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 52,
+                    "start_time": 1771552800,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 8,
+                    "deaths": 3,
+                    "assists": 11,
+                    "duration": 1400,
+                    "hero_id": 1,
+                    "item_0": 1,
+                },
+                {
+                    "match_id": 51,
+                    "start_time": 1771466400,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 8,
+                    "deaths": 3,
+                    "assists": 11,
+                    "duration": 1400,
+                    "hero_id": 1,
+                    "item_0": 1,
+                },
+            ]
+
+        def get_match_details(self, match_id: int) -> dict:
+            return {
+                "match_id": match_id,
+                "version": 22,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0,
+                        "item_0": 1,
+                        "purchase_log": [{"key": "blink", "time": 600}],
+                    }
+                ],
+            }
+
+    client = _PendingRefreshClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    service.references.item_ids_by_key["blink"] = 1
+    service.references.item_names_by_id[1] = "Blink Dagger"
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 52,
+                "start_time": 1771552800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 8,
+                "deaths": 3,
+                "assists": 11,
+                "duration": 1400,
+                "hero_id": 1,
+                "item_0": 1,
+            },
+            {
+                "match_id": 51,
+                "start_time": 1771466400,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 8,
+                "deaths": 3,
+                "assists": 11,
+                "duration": 1400,
+                "hero_id": 1,
+                "item_0": 1,
+            },
+        ],
+    )
+    store.upsert_match_detail(
+        52,
+        {"match_id": 52, "version": None, "players": [{"account_id": 123, "player_slot": 0, "item_0": 1}]},
+    )
+    store.upsert_match_detail(
+        51,
+        {"match_id": 51, "version": None, "players": [{"account_id": 123, "player_slot": 0, "item_0": 1}]},
+    )
+    store.upsert_match_parse_request(51, 123, status="pending", requested_at="2026-04-07T10:00:00+00:00")
+    store.upsert_match_parse_request(52, 123, status="pending", requested_at="2026-04-07T11:00:00+00:00")
+
+    result = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=1,
+        force=True,
+    )
+
+    first = store.get_match_parse_request(51)
+    second = store.get_match_parse_request(52)
+
+    assert result.coverage.pending_parse_count == 1
+    assert first is not None and first["status"] == "completed"
+    assert second is not None and second["status"] == "pending"
