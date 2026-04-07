@@ -1,29 +1,38 @@
 from __future__ import annotations
 
+import importlib
 import os
 import subprocess
 from pathlib import Path
 
-from clients.opendota_client import OpenDotaClient
-from services.analytics_service import DotaAnalyticsService
-from utils.cache import JsonFileCache
-from utils.config import get_cache_dir, get_match_store_path, get_settings
-from utils.match_store import SQLiteMatchStore
-
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def build_service() -> DotaAnalyticsService:
-    settings = get_settings()
-    client = OpenDotaClient(
+def build_service():
+    config_module = importlib.import_module("utils.config")
+    cache_module = importlib.import_module("utils.cache")
+    client_module = importlib.import_module("clients.opendota_client")
+    match_store_module = importlib.import_module("utils.match_store")
+    analytics_module = importlib.import_module("services.analytics_service")
+
+    config_module = importlib.reload(config_module)
+    cache_module = importlib.reload(cache_module)
+    client_module = importlib.reload(client_module)
+    match_store_module = importlib.reload(match_store_module)
+    analytics_module = importlib.reload(analytics_module)
+
+    settings = config_module.get_settings()
+    client = client_module.OpenDotaClient(
         base_url=settings.base_url,
         timeout_seconds=settings.timeout_seconds,
         api_key=settings.api_key,
     )
-    cache = JsonFileCache(cache_dir=get_cache_dir(), ttl_hours=settings.cache_ttl_hours)
-    match_store = SQLiteMatchStore(get_match_store_path())
-    return DotaAnalyticsService(client=client, cache=cache, match_store=match_store)
+    cache = cache_module.JsonFileCache(
+        cache_dir=config_module.get_cache_dir(),
+        ttl_hours=settings.cache_ttl_hours,
+    )
+    match_store = match_store_module.SQLiteMatchStore(config_module.get_match_store_path())
+    return analytics_module.DotaAnalyticsService(client=client, cache=cache, match_store=match_store)
 
 
 def get_app_version() -> str:
