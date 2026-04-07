@@ -58,6 +58,8 @@ The project includes two interfaces:
 - Item winrate table (wins with item / matches with item), includes per-item match count
 - Item winrates count only end-of-match inventory items; cached match details add backpack slots, and summary-only fallback uses final slot columns only
 - Item winrates use a dedicated section-schema cache key so older session payloads built from legacy purchase-log logic are not reused after deploys
+- Item winrates self-rebuild from cached final inventory/backpack data in the UI if a mixed-runtime session still surfaces a legacy purchase-based snapshot after deploy
+- Item winrates show `Avg Time` in minutes, averaged from cached item timing data (`purchase_log` / `first_purchase_time` / Aegis objective time when available) for matches where the item is part of the end-of-match inventory snapshot
 - Item winrates show an explicit coverage warning when some matches still lack cached item detail data, instead of silently undercounting them as if the snapshot were complete
 - Main dashboard refresh rehydrates legacy cached match-detail rows that are missing the selected-player `purchase_log`, so recent-match item timings can recover without manual cache deletion
 - Item winrate table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red

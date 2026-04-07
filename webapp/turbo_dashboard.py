@@ -42,7 +42,7 @@ from webapp.styling import apply_cell_style
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
 OVERVIEW_SCHEMA_VERSION = 15
-ITEM_WINRATES_SCHEMA_VERSION = 2
+ITEM_WINRATES_SCHEMA_VERSION = 3
 DEFAULT_FILTER_BASELINE_DATE = date(2026, 3, 24)
 
 st.markdown(
@@ -848,6 +848,211 @@ def _get_turbo_overview_snapshot_safe(
     return _FallbackSnapshot(service.build_turbo_hero_overview_rows(matches) if matches else [])
 
 
+def _build_item_purchase_times_by_item(
+    service: DotaAnalyticsService,
+    *,
+    player_row: dict | None,
+    details: dict | None,
+    player_slot: int | None,
+    tracked_item_ids: set[int],
+) -> dict[int, list[int]]:
+    purchase_times_by_item: dict[int, list[int]] = {}
+    if not isinstance(player_row, dict):
+        return purchase_times_by_item
+
+    purchase_log = player_row.get("purchase_log")
+    if isinstance(purchase_log, list):
+        for event in purchase_log:
+            if not isinstance(event, dict):
+                continue
+            item_id = service.references.item_ids_by_key.get(str(event.get("key") or ""))
+            if not item_id or item_id not in tracked_item_ids:
+                continue
+            purchase_times_by_item.setdefault(item_id, []).append(max(int(event.get("time") or 0) // 60, 0))
+
+    first_purchase_time = player_row.get("first_purchase_time")
+    if isinstance(first_purchase_time, dict):
+        for key, value in first_purchase_time.items():
+            item_id = service.references.item_ids_by_key.get(str(key))
+            if not item_id or item_id not in tracked_item_ids or item_id in purchase_times_by_item:
+                continue
+            try:
+                purchase_times_by_item[item_id] = [max(int(value) // 60, 0)]
+            except (TypeError, ValueError):
+                continue
+
+    if 117 in tracked_item_ids and 117 not in purchase_times_by_item and isinstance(details, dict):
+        objectives = details.get("objectives")
+        if isinstance(objectives, list):
+            for event in objectives:
+                if not isinstance(event, dict):
+                    continue
+                if str(event.get("type") or "") != "CHAT_MESSAGE_AEGIS":
+                    continue
+                if player_slot is not None and int(event.get("player_slot") or -1) != int(player_slot):
+                    continue
+                try:
+                    purchase_times_by_item[117] = [max(int(event.get("time") or 0) // 60, 0)]
+                except (TypeError, ValueError):
+                    pass
+                break
+
+    return purchase_times_by_item
+
+
+def _build_item_winrate_snapshot_from_cached_inventory(
+    service: DotaAnalyticsService,
+    *,
+    player_id: int,
+    matches: list[MatchSummary],
+    top_n: int,
+) -> dict[str, object]:
+    total = len(matches)
+    if total == 0:
+        return {
+            "rows": [],
+            "note": "No matches available for item stats.",
+            "missing_matches": 0,
+            "summary_only_matches": 0,
+            "detail_backed_matches": 0,
+            "is_complete": True,
+            "total_matches": 0,
+        }
+
+    appear_counter: dict[int, int] = {}
+    win_counter: dict[int, int] = {}
+    timing_sum_by_item: dict[int, int] = {}
+    timing_count_by_item: dict[int, int] = {}
+    detail_backed_matches = 0
+    summary_only_matches = 0
+    missing_matches = 0
+    timed_item_matches = 0
+
+    for match in matches:
+        summary_items = {
+            int(item_id)
+            for item_id in (match.item_0, match.item_1, match.item_2, match.item_3, match.item_4, match.item_5)
+            if int(item_id or 0) > 0
+        }
+        unique_items = set(summary_items)
+        detail_backed_this_match = False
+        purchase_times_by_item: dict[int, list[int]] = {}
+
+        details = service.get_match_details_if_cached(match.match_id)
+        if isinstance(details, dict):
+            player_row = service._extract_player_from_match_details(  # noqa: SLF001
+                details,
+                player_id=player_id,
+                player_slot=match.player_slot,
+            )
+            if isinstance(player_row, dict):
+                detail_items = {
+                    int(player_row.get(field_name) or 0)
+                    for field_name in (
+                        "item_0",
+                        "item_1",
+                        "item_2",
+                        "item_3",
+                        "item_4",
+                        "item_5",
+                        "backpack_0",
+                        "backpack_1",
+                        "backpack_2",
+                    )
+                    if int(player_row.get(field_name) or 0) > 0
+                }
+                if detail_items:
+                    unique_items.update(detail_items)
+                    detail_backed_this_match = True
+                    purchase_times_by_item = _build_item_purchase_times_by_item(
+                        service,
+                        player_row=player_row,
+                        details=details,
+                        player_slot=match.player_slot,
+                        tracked_item_ids=detail_items,
+                    )
+
+        if not unique_items:
+            missing_matches += 1
+            continue
+
+        if detail_backed_this_match:
+            detail_backed_matches += 1
+        elif summary_items:
+            summary_only_matches += 1
+
+        for item_id in unique_items:
+            appear_counter[item_id] = appear_counter.get(item_id, 0) + 1
+            if match.did_win:
+                win_counter[item_id] = win_counter.get(item_id, 0) + 1
+            item_times = purchase_times_by_item.get(item_id)
+            if item_times:
+                timing_sum_by_item[item_id] = timing_sum_by_item.get(item_id, 0) + min(item_times)
+                timing_count_by_item[item_id] = timing_count_by_item.get(item_id, 0) + 1
+                timed_item_matches += 1
+
+    rows: list[dict[str, object]] = []
+    for item_id, appearances in appear_counter.items():
+        wins = win_counter.get(item_id, 0)
+        avg_time_count = timing_count_by_item.get(item_id, 0)
+        rows.append(
+            {
+                "item_id": item_id,
+                "item": service.references.item_names_by_id.get(item_id, f"Item #{item_id}"),
+                "item_image": service.resolve_item_image(item_id),
+                "matches_with_item": appearances,
+                "item_pick_rate": round((appearances / total) * 100, 2) if total > 0 else 0.0,
+                "wins_with_item": wins,
+                "item_winrate": round((wins / appearances) * 100, 2) if appearances > 0 else 0.0,
+                "avg_item_timing_min": (
+                    round(timing_sum_by_item[item_id] / avg_time_count, 1)
+                    if avg_time_count > 0
+                    else None
+                ),
+                "timed_matches_with_item": avg_time_count,
+            }
+        )
+
+    rows.sort(
+        key=lambda row: (
+            -float(row["item_winrate"]),
+            -int(row["matches_with_item"]),
+            -int(row["wins_with_item"]),
+            str(row["item"]),
+        )
+    )
+
+    notes: list[str] = []
+    if detail_backed_matches > 0:
+        notes.append(
+            f"Cached match details contributed final-inventory/backpack coverage for {detail_backed_matches} match(es)."
+        )
+    if summary_only_matches > 0:
+        notes.append(
+            f"{summary_only_matches} match(es) rely on summary final slots only, so sold/replaced items may be missed there."
+        )
+    if missing_matches > 0:
+        notes.append(
+            f"Item stats are incomplete for {missing_matches} match(es) because neither cached details nor summary item slots are available. Run `Refresh Turbo Dashboard` to hydrate missing match details."
+        )
+    if timed_item_matches > 0:
+        notes.append("Average item timings use cached timing data when available.")
+
+    return {
+        "rows": rows[:top_n],
+        "note": " ".join(notes).strip(),
+        "missing_matches": missing_matches,
+        "summary_only_matches": summary_only_matches,
+        "detail_backed_matches": detail_backed_matches,
+        "is_complete": missing_matches == 0,
+        "total_matches": total,
+    }
+
+
+def _item_snapshot_uses_legacy_purchase_logic(snapshot_payload: dict[str, object]) -> bool:
+    return "purchase/final-item coverage" in str(snapshot_payload.get("note") or "")
+
+
 def _get_item_winrate_snapshot_safe(
     service: DotaAnalyticsService,
     *,
@@ -856,39 +1061,12 @@ def _get_item_winrate_snapshot_safe(
     top_n: int,
     allow_detail_fetch: bool,
 ) -> dict[str, object]:
-    snapshot_getter = getattr(service, "get_item_winrate_snapshot", None)
-    if callable(snapshot_getter):
-        snapshot = snapshot_getter(
-            player_id=player_id,
-            matches=matches,
-            top_n=top_n,
-            allow_detail_fetch=allow_detail_fetch,
-        )
-        return {
-            "rows": list(snapshot.rows),
-            "note": str(snapshot.note or ""),
-            "missing_matches": int(snapshot.missing_matches),
-            "summary_only_matches": int(snapshot.summary_only_matches),
-            "detail_backed_matches": int(snapshot.detail_backed_matches),
-            "is_complete": bool(snapshot.is_complete),
-            "total_matches": int(snapshot.total_matches),
-        }
-
-    rows = service.get_item_winrates(
+    return _build_item_winrate_snapshot_from_cached_inventory(
+        service,
         player_id=player_id,
         matches=matches,
         top_n=top_n,
-        allow_detail_fetch=allow_detail_fetch,
     )
-    return {
-        "rows": list(rows),
-        "note": "",
-        "missing_matches": 0,
-        "summary_only_matches": 0,
-        "detail_backed_matches": 0,
-        "is_complete": True,
-        "total_matches": len(matches),
-    }
 
 with st.sidebar:
     st.header("Filters")
@@ -1595,8 +1773,12 @@ if load_all_sections or load_item_winrates:
 st.markdown("### Item Winrates")
 st.caption("Counts use final inventory only. Cached match details can add backpack items; summary-only matches fall back to final slots.")
 item_snapshot_payload = _cache_get("item_rows_by_key", current_item_request_key)
+if isinstance(item_snapshot_payload, dict) and _item_snapshot_uses_legacy_purchase_logic(item_snapshot_payload):
+    item_snapshot_payload = None
 if item_snapshot_payload is None:
     item_snapshot_payload = _get_current_section_snapshot("item", current_item_request_key)
+    if isinstance(item_snapshot_payload, dict) and _item_snapshot_uses_legacy_purchase_logic(item_snapshot_payload):
+        item_snapshot_payload = None
     if item_snapshot_payload is not None:
         _cache_set("item_rows_by_key", current_item_request_key, item_snapshot_payload)
 if item_snapshot_payload is None and _is_section_visible("item", current_item_request_key):
@@ -1654,6 +1836,7 @@ if isinstance(item_snapshot_payload, dict):
                 {
                     "Icon": row.get("item_image", ""),
                     "Item": row["item"],
+                    "Avg Time": row.get("avg_item_timing_min"),
                     "Item Winrate": round(float(row["item_winrate"])),
                     "Matches": int(row.get("matches_with_item", 0)),
                     "Won": int(row.get("wins_with_item", 0)),
@@ -1683,6 +1866,7 @@ if isinstance(item_snapshot_payload, dict):
             hide_index=True,
             column_config={
                 "Icon": st.column_config.ImageColumn("Item", help="Item icon", width="small"),
+                "Avg Time": st.column_config.NumberColumn("Avg Time", format="%.1f min"),
                 "Item Winrate": st.column_config.NumberColumn("Item Winrate", format="%.0f%%"),
             },
         )
