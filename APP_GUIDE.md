@@ -37,6 +37,7 @@ The project includes two interfaces:
 - Selected-hero sections restore independently from cache across reruns; refreshing one section must not hide another already loaded section for the same hero snapshot
 - The action bar also includes `Refresh All Hero Sections` so all four selected-hero sections can be rebuilt in one Streamlit rerun
 - `Refresh Hero Details`, `Refresh Matchups`, `Refresh Item Winrates`, and `Refresh Recent Matches` are cache-only section rebuilds and do not issue hidden OpenDota detail fetches
+- Selected-hero sections (`Hero Details`, `Matchups`, `Item Winrates`, `Recent Matches`) now open automatically for the current hero snapshot; `Refresh All Hero Sections` remains a manual rebuild action, not the only way to reveal them
 - Per-hero detailed stats (avg K/D/A, KDA, avg duration, avg net worth, avg damage, max kills, max hero damage, Radiant/Dire WR)
 - Matchups section now uses the same two-table layout everywhere: `Teammates` and `Opponents`
   - Both `Selected Hero` and `All Heroes` use `Hero Icon / Hero / WR / Matches / Won / Lost`
@@ -56,6 +57,7 @@ The project includes two interfaces:
 - Most frequent final items
 - Item winrate table (wins with item / matches with item), includes per-item match count
 - Item winrates count only end-of-match inventory items; cached match details add backpack slots, and summary-only fallback uses final slot columns only
+- Item winrates use a dedicated section-schema cache key so older session payloads built from legacy purchase-log logic are not reused after deploys
 - Item winrates show an explicit coverage warning when some matches still lack cached item detail data, instead of silently undercounting them as if the snapshot were complete
 - Main dashboard refresh rehydrates legacy cached match-detail rows that are missing the selected-player `purchase_log`, so recent-match item timings can recover without manual cache deletion
 - Item winrate table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red

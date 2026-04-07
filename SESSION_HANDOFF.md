@@ -572,6 +572,7 @@ CLI remains available as a secondary interface.
 - Added `OpenDotaClient.request_match_parse(...)` and `DotaAnalyticsService.repair_recent_match_item_timings(...)` so the app can request parses for visible recent matches, poll briefly, refresh cached details, and rebuild the section once timing data becomes available.
 - Added regression coverage in `tests/test_match_store.py` for the explicit parse-repair flow and verified against the live Spectre match id `8757792129` that a parse request eventually yields `purchase_log`.
 - Re-scoped dashboard `Item Winrates` back to end-of-match inventory only: cached detail rows now contribute final slots plus backpack, while `purchase_log` remains timing-only for recent matches so temporary buys like `Tango`, `TP`, `Magic Stick`, and `Iron Branch` do not pollute item winrates.
+- Added an `Item Winrates` section-schema request key in the Streamlit UI so older in-session payloads from the legacy purchase-log implementation are invalidated after deploy, and selected-hero sections now auto-open for the active hero snapshot instead of requiring `Refresh All Hero Sections` just to become visible.
 
 ## 2026-03-26 reported bad-match exclusion
 

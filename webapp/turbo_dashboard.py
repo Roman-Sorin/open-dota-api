@@ -41,7 +41,8 @@ from webapp.styling import apply_cell_style
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
-OVERVIEW_SCHEMA_VERSION = 14
+OVERVIEW_SCHEMA_VERSION = 15
+ITEM_WINRATES_SCHEMA_VERSION = 2
 DEFAULT_FILTER_BASELINE_DATE = date(2026, 3, 24)
 
 st.markdown(
@@ -656,6 +657,11 @@ def _is_section_visible(section_name: str, request_key: object) -> bool:
     return st.session_state.get(f"current_{section_name}_visible_request_key") == request_key
 
 
+def _ensure_section_visible(section_name: str, request_key: object) -> None:
+    if st.session_state.get(f"current_{section_name}_visible_request_key") != request_key:
+        _mark_section_visible(section_name, request_key)
+
+
 def _utcnow_iso() -> str:
     return datetime.utcnow().isoformat()
 
@@ -1247,7 +1253,18 @@ current_hero_snapshot_key = build_hero_snapshot_request_key(
     active_start_date=active_start_date,
     dashboard_loaded_at=str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
 )
-current_item_request_key = (*current_hero_snapshot_key, int(min_item_matches))
+matchup_request_key = _matchup_cache_key(
+    player_id=player_id,
+    days=days,
+    active_patches=active_patches,
+    active_start_date=active_start_date,
+    dashboard_loaded_at=str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
+    selected_hero_id=selected_hero_id,
+)
+current_item_request_key = (*current_hero_snapshot_key, int(min_item_matches), ITEM_WINRATES_SCHEMA_VERSION)
+_ensure_section_visible("matchup", matchup_request_key)
+_ensure_section_visible("item", current_item_request_key)
+_ensure_section_visible("recent", current_hero_snapshot_key)
 hero_matches = _cache_get("hero_matches_by_key", current_hero_snapshot_key)
 hero_matches_loaded = isinstance(hero_matches, list)
 hero_loaded_at = _cache_get("hero_loaded_at_by_key", current_hero_snapshot_key)
@@ -1351,14 +1368,6 @@ else:
     st.info("Hero details load automatically from cache when available. Use the hero action bar above to build this section from the current dashboard snapshot.")
 
 st.markdown("### Matchups")
-matchup_request_key = _matchup_cache_key(
-    player_id=player_id,
-    days=days,
-    active_patches=active_patches,
-    active_start_date=active_start_date,
-    dashboard_loaded_at=str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
-    selected_hero_id=selected_hero_id,
-)
 if load_all_sections or load_matchups:
     try:
         _mark_section_visible("matchup", matchup_request_key)

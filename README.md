@@ -38,6 +38,7 @@ Turbo-only dashboard for your account:
 - If the current cached snapshot still lacks required match details for some heroes, the app does not render that overview as valid data and tells you to rebuild the snapshot
 - Detailed hero section in Turbo includes avg duration, avg damage, avg net worth, max kills, and max hero damage
 - Selected-hero section refreshes are grouped into one action bar above the sections (`Hero Details`, `Matchups`, `Item Winrates`, `Recent Matches`)
+- Selected-hero sections now open automatically for the current hero snapshot; `Refresh All Hero Sections` rebuilds them, but you no longer need it just to reveal them
 - Selected-hero sections restore independently from cache across reruns; refreshing one section must not hide another already loaded section for the same hero snapshot
 - The action bar also includes `Refresh All Hero Sections` so all four selected-hero sections can be rebuilt in one Streamlit rerun
 - Matchups section now uses the same two-table layout everywhere: `Teammates` and `Opponents`
@@ -56,6 +57,7 @@ Turbo-only dashboard for your account:
 - Section actions are refresh actions now; if dashboard data is newer than a section cache, the UI shows a stale hint instead of silently hiding that fact
 - Hero Overview snapshots with suspicious per-hero zero `NW`/`Dmg`/`Max Dmg` rows are auto-invalidated and rebuilt instead of being rendered as valid data
 - Item winrates count only end-of-match inventory items; cached match details add backpack slots, and summary-only fallback uses final slot columns only
+- Item winrates use a dedicated section-schema cache key so legacy session payloads from the old purchase-log behavior are not reused after updates
 - Item winrates now show a coverage warning when cached match details are missing, instead of silently presenting partial counts as complete analytics
 - Item winrates table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red
 - Item winrates UI has a safe legacy fallback, so mixed deploy/runtime restarts do not crash if an older service object is still alive during a rerun
