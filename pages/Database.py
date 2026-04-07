@@ -21,9 +21,9 @@ from webapp.app_runtime import build_service, get_app_version
 
 ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 SYNC_PRESETS: dict[str, dict[str, int]] = {
-    "Safe": {"detail_batch": 4, "parse_batch": 1, "interval_seconds": 90},
-    "Balanced": {"detail_batch": 6, "parse_batch": 2, "interval_seconds": 60},
-    "Fast": {"detail_batch": 10, "parse_batch": 3, "interval_seconds": 45},
+    "Safe": {"detail_batch": 4, "parse_batch": 1, "interval_seconds": 30},
+    "Balanced": {"detail_batch": 6, "parse_batch": 2, "interval_seconds": 15},
+    "Fast": {"detail_batch": 10, "parse_batch": 3, "interval_seconds": 15},
 }
 
 
@@ -219,16 +219,16 @@ with st.expander("How to use this page", expanded=True):
     st.caption(
         "Times on this page are shown in Israel time. During implementation I tested real OpenDota requests and observed "
         "rate-limit headers such as `X-Rate-Limit-Remaining-Minute` and `X-Rate-Limit-Remaining-Day`. "
-        "Based on that, the default auto mode is now `Balanced` at 60 seconds, not 120."
+        "Based on that, the default auto mode is now `Balanced` at 15 seconds."
     )
 
 player_default = st.session_state.get("database_player_raw", st.session_state.get("player_raw", "1233793238"))
 window_default = int(st.session_state.get("database_window_days", 365) or 365)
 detail_default = int(st.session_state.get("database_detail_batch", 6) or 6)
 parse_default = int(st.session_state.get("database_parse_batch", 2) or 2)
-cooldown_default = int(st.session_state.get("database_cooldown_seconds", 600) or 600)
-auto_default = bool(st.session_state.get("database_auto_run", False))
-interval_default = int(st.session_state.get("database_auto_run_seconds", 60) or 60)
+cooldown_default = int(st.session_state.get("database_cooldown_seconds", 30) or 30)
+auto_default = bool(st.session_state.get("database_auto_run", True))
+interval_default = int(st.session_state.get("database_auto_run_seconds", 15) or 15)
 preset_default = st.session_state.get("database_sync_preset", "Balanced")
 if preset_default not in SYNC_PRESETS:
     preset_default = "Balanced"
