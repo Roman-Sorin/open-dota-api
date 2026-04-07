@@ -1319,6 +1319,7 @@ def _render_sortable_item_winrates_table(item_wr_rows: list[dict[str, object]]) 
           margin: 0;
           padding: 0;
           background: transparent;
+          color: rgba(250, 250, 250, 0.92);
           font-family: sans-serif;
         }}
         .recent-matches-wrap{{overflow-x:auto;margin-top:0.5rem;}}
