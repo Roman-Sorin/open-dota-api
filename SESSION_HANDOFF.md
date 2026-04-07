@@ -653,6 +653,9 @@ CLI remains available as a secondary interface.
   - behavior:
     - normal cycle -> sleep `interval-seconds`
     - `rate_limited` / `cooldown` -> sleep until retry time or configured pause-after-429
+- Added Windows helper launcher:
+  - `scripts/run_background_sync_once.bat`
+  - intended for local Task Scheduler / one-click execution on the user's Windows machine
 - Explicit limitation documented in repo docs:
   - Streamlit Community Cloud does not provide a true always-on worker inside the page process
   - current implementation is cooperative only while the `Database` page is open
