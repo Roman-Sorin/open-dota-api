@@ -30,6 +30,7 @@ Turbo-only dashboard for your account:
 - Separate multipage `Database` view monitors Turbo cache coverage for the selected player over a rolling window (default `365` days)
 - `Database` shows match-level cache status (`detail cached`, `timings ready`, `parse pending`) plus cycle history, cooldown state, and contiguous full-coverage range
 - `Database` can run one bounded background-cache cycle per refresh and optionally auto-run while that page stays open
+- `Database` times are shown in Israel time and the page now exposes user-facing `Sync Speed` presets (`Safe`, `Balanced`, `Fast`) instead of only raw batch knobs
 - Default selected hero is `Spectre` when that hero exists in the current overview snapshot; otherwise the first available hero is used
 - Dashboard loading is manual by section:
   - cached overview data can auto-open from local SQLite storage when available

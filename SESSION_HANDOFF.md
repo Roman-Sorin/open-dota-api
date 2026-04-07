@@ -637,6 +637,15 @@ CLI remains available as a secondary interface.
   - match-level table with `Match ID`, played time, hero, result, K/D/A, duration, detail status, timing status, and cache timestamps
 - Added cooperative auto-run mode on `Database`:
   - while the page stays open, it can refresh and run another bounded cycle automatically
+- Follow-up UX pass:
+  - `Database` times now render in Israel time instead of UTC
+  - raw `Detail batch` / `Parse batch` controls were demoted into `Advanced settings`
+  - primary UX now uses `Sync Speed` presets:
+    - `Safe`
+    - `Balanced`
+    - `Fast`
+  - default auto interval changed from `120` sec to `60` sec (`Balanced`) after live OpenDota request checks showed rate-limit headers such as `X-Rate-Limit-Remaining-Minute` / `X-Rate-Limit-Remaining-Day`
+  - added in-page usage instructions and terminology explanations so the page is understandable without reading repo docs
 - Explicit limitation documented in repo docs:
   - Streamlit Community Cloud does not provide a true always-on worker inside the page process
   - current implementation is cooperative only while the `Database` page is open

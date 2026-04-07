@@ -5,6 +5,7 @@ import html
 from pathlib import Path
 import sys
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
@@ -18,6 +19,13 @@ from utils.exceptions import OpenDotaError, OpenDotaRateLimitError, ValidationEr
 from utils.helpers import format_duration, parse_player_id, unix_to_dt
 from webapp.app_runtime import build_service, get_app_version
 
+ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
+SYNC_PRESETS: dict[str, dict[str, int]] = {
+    "Safe": {"detail_batch": 4, "parse_batch": 1, "interval_seconds": 90},
+    "Balanced": {"detail_batch": 6, "parse_batch": 2, "interval_seconds": 60},
+    "Fast": {"detail_batch": 10, "parse_batch": 3, "interval_seconds": 45},
+}
+
 
 def _format_datetime(value: str | None) -> str:
     if not value:
@@ -26,13 +34,13 @@ def _format_datetime(value: str | None) -> str:
         dt = datetime.fromisoformat(value)
     except ValueError:
         return str(value)
-    return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    return dt.astimezone(ISRAEL_TZ).strftime("%Y-%m-%d %H:%M Israel")
 
 
 def _format_match_time(start_time: int | None) -> str:
     if not start_time:
         return "-"
-    return unix_to_dt(int(start_time)).strftime("%Y-%m-%d %H:%M UTC")
+    return unix_to_dt(int(start_time)).astimezone(ISRAEL_TZ).strftime("%Y-%m-%d %H:%M Israel")
 
 
 def _status_chip(label: str, *, color: str, background: str) -> str:
@@ -70,6 +78,15 @@ def _cycle_status_chip(status: str) -> str:
     if normalized == "error":
         return _status_chip("Error", color="#991b1b", background="rgba(239,68,68,0.16)")
     return _status_chip(status.title(), color="#854d0e", background="rgba(234,179,8,0.18)")
+
+
+def _preset_help_text(preset_name: str) -> str:
+    preset = SYNC_PRESETS[preset_name]
+    return (
+        f"{preset_name}: up to {preset['detail_batch']} match details and "
+        f"{preset['parse_batch']} parse request(s) per cycle, auto-refresh every "
+        f"{preset['interval_seconds']} sec."
+    )
 
 
 def _metric_card(label: str, value: str) -> str:
@@ -184,24 +201,53 @@ st.caption(
     "This page monitors the Turbo cache backlog for one player. It can auto-run one sync cycle per refresh while the page stays open. "
     "A true always-on background worker still requires an external runner; Streamlit pages do not keep running after the session is closed."
 )
+with st.expander("How to use this page", expanded=True):
+    st.markdown(
+        """
+        1. Open this page and check `Turbo Matches In Window`, `Detail Cached`, and `Timings Ready`.
+        2. Press `Run Sync Cycle` once if you want one manual cache-fill pass.
+        3. Enable `Auto-fill while this page stays open` if you want the page to keep working in the background while this browser tab stays open.
+        4. Use `Sync Speed` to control how aggressive each cycle is. `Balanced` is the recommended default.
+
+        Terms:
+        - `Detail Cached`: full OpenDota match payload is already stored locally.
+        - `Timings Ready`: item timings are already usable for that match.
+        - `Pending Parse`: OpenDota replay parse was requested, but timing data is not ready yet.
+        - `Fully Cached Through`: newest continuous part of the window that is already complete without gaps.
+        """
+    )
+    st.caption(
+        "Times on this page are shown in Israel time. During implementation I tested real OpenDota requests and observed "
+        "rate-limit headers such as `X-Rate-Limit-Remaining-Minute` and `X-Rate-Limit-Remaining-Day`. "
+        "Based on that, the default auto mode is now `Balanced` at 60 seconds, not 120."
+    )
 
 player_default = st.session_state.get("database_player_raw", st.session_state.get("player_raw", "1233793238"))
 window_default = int(st.session_state.get("database_window_days", 365) or 365)
-detail_default = int(st.session_state.get("database_detail_batch", 8) or 8)
-parse_default = int(st.session_state.get("database_parse_batch", 3) or 3)
+detail_default = int(st.session_state.get("database_detail_batch", 6) or 6)
+parse_default = int(st.session_state.get("database_parse_batch", 2) or 2)
 cooldown_default = int(st.session_state.get("database_cooldown_minutes", 60) or 60)
 auto_default = bool(st.session_state.get("database_auto_run", False))
-interval_default = int(st.session_state.get("database_auto_run_seconds", 120) or 120)
+interval_default = int(st.session_state.get("database_auto_run_seconds", 60) or 60)
+preset_default = st.session_state.get("database_sync_preset", "Balanced")
+if preset_default not in SYNC_PRESETS:
+    preset_default = "Balanced"
 
-controls = st.columns([1.2, 0.8, 0.8, 0.8])
+controls = st.columns([1.2, 0.8, 1.0])
 player_raw = controls[0].text_input("Player ID or OpenDota URL", value=player_default, key="database_player_raw")
 window_days = controls[1].number_input("Window (days)", min_value=30, max_value=365, value=window_default, step=1, key="database_window_days")
-detail_batch = controls[2].number_input("Detail batch", min_value=1, max_value=50, value=detail_default, step=1, key="database_detail_batch")
-parse_batch = controls[3].number_input("Parse batch", min_value=0, max_value=20, value=parse_default, step=1, key="database_parse_batch")
+sync_preset = controls[2].selectbox(
+    "Sync Speed",
+    options=list(SYNC_PRESETS.keys()),
+    index=list(SYNC_PRESETS.keys()).index(preset_default),
+    key="database_sync_preset",
+    help="Safe = slower but gentler on quota, Balanced = recommended, Fast = more aggressive.",
+)
+st.caption(_preset_help_text(sync_preset))
 
-secondary = st.columns([0.8, 0.8, 1.2, 1.2])
+secondary = st.columns([1.4, 1.0, 1.0])
 cooldown_minutes = secondary[0].number_input(
-    "Cooldown (min)",
+    "Retry after rate limit (min)",
     min_value=5,
     max_value=240,
     value=cooldown_default,
@@ -209,12 +255,56 @@ cooldown_minutes = secondary[0].number_input(
     key="database_cooldown_minutes",
 )
 table_limit = secondary[1].number_input("Rows", min_value=10, max_value=200, value=50, step=10)
-auto_run = secondary[2].checkbox("Auto-run while this page stays open", value=auto_default, key="database_auto_run")
-auto_run_seconds = secondary[3].slider("Auto-run interval (sec)", min_value=15, max_value=300, value=interval_default, step=15, key="database_auto_run_seconds")
+auto_run = secondary[2].checkbox("Auto-fill while this page stays open", value=auto_default, key="database_auto_run")
+
+active_detail_batch = SYNC_PRESETS[sync_preset]["detail_batch"]
+active_parse_batch = SYNC_PRESETS[sync_preset]["parse_batch"]
+active_interval_seconds = SYNC_PRESETS[sync_preset]["interval_seconds"]
+
+with st.expander("Advanced settings"):
+    detail_batch = st.number_input(
+        "Match details per cycle",
+        min_value=1,
+        max_value=50,
+        value=detail_default,
+        step=1,
+        key="database_detail_batch",
+        help="How many missing full match payloads the job may fetch in one cycle.",
+    )
+    parse_batch = st.number_input(
+        "Replay parses per cycle",
+        min_value=0,
+        max_value=20,
+        value=parse_default,
+        step=1,
+        key="database_parse_batch",
+        help="How many OpenDota replay-parse requests may be submitted in one cycle for missing item timings.",
+    )
+    auto_run_seconds = st.slider(
+        "Auto-fill interval (sec)",
+        min_value=15,
+        max_value=300,
+        value=interval_default,
+        step=15,
+        key="database_auto_run_seconds",
+        help="How often the page runs another cycle while this tab stays open.",
+    )
+    use_advanced_batches = st.checkbox(
+        "Use advanced batch values instead of Sync Speed preset",
+        value=False,
+        key="database_use_advanced_batches",
+    )
+
+if st.session_state.get("database_use_advanced_batches"):
+    active_detail_batch = int(detail_batch)
+    active_parse_batch = int(parse_batch)
+    active_interval_seconds = int(auto_run_seconds)
+else:
+    st.session_state["database_auto_run_seconds"] = active_interval_seconds
 
 button_cols = st.columns([0.9, 0.9, 2.2])
-run_cycle = button_cols[0].button("Run Sync Cycle", type="primary")
-force_cycle = button_cols[1].button("Force Sync Cycle")
+run_cycle = button_cols[0].button("Run One Sync Cycle", type="primary")
+force_cycle = button_cols[1].button("Run Now Ignoring Cooldown")
 
 try:
     player_id = parse_player_id(player_raw)
@@ -231,8 +321,8 @@ if run_cycle or force_cycle or auto_run:
             player_id=player_id,
             game_mode=23,
             window_days=int(window_days),
-            max_detail_fetches=int(detail_batch),
-            max_parse_requests=int(parse_batch),
+            max_detail_fetches=int(active_detail_batch),
+            max_parse_requests=int(active_parse_batch),
             rate_limit_cooldown_minutes=int(cooldown_minutes),
             force=bool(force_cycle),
         )
@@ -257,6 +347,10 @@ if run_result is not None:
         st.warning(run_result.note)
 
 _render_metrics(coverage, state)
+st.caption(
+    f"Current cycle settings: up to {active_detail_batch} detail fetch(es) and {active_parse_batch} parse request(s) per cycle. "
+    f"Auto-fill interval: {active_interval_seconds} sec. Retry-after-429: {int(cooldown_minutes)} min."
+)
 
 recent_runs_df = pd.DataFrame(
     [
@@ -297,6 +391,6 @@ else:
 
 if auto_run:
     st.caption(
-        "Auto-run is enabled for this browser session. The page will refresh and run another cycle while it remains open."
+        "Auto-fill is enabled for this browser session. The page will refresh and run another cycle while it remains open."
     )
-    _schedule_autorefresh(int(auto_run_seconds))
+    _schedule_autorefresh(int(active_interval_seconds))

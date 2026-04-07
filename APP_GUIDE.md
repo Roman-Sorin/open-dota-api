@@ -26,6 +26,8 @@ The project includes two interfaces:
 - Separate multipage `Database` view tracks cache coverage for one player's Turbo matches over a rolling window (default `365` days)
 - `Database` shows match-level cache states, replay-parse backlog, recent sync-cycle history, cooldown state after 429s, and the contiguous date range that is already fully cached
 - `Database` can run one bounded cache-fill cycle per refresh and optionally auto-run while that page remains open
+- `Database` times are rendered in Israel time
+- `Database` exposes `Sync Speed` presets (`Safe`, `Balanced`, `Fast`) for normal use; raw detail/parse batch controls remain under `Advanced settings`
 - Time filter modes: `Days`, `Patches`, `Start Date`
 - Default time filter mode is `Patches`, preselected to patch family `7.41` (`7.41` plus any available `7.41x` letter patches)
 - Default baseline/start date is `2026-03-24`
