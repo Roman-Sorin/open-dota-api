@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import html
 from pathlib import Path
 import sys
+from typing import Any
 
 import pandas as pd
 import streamlit as st
@@ -13,7 +14,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from services.analytics_service import BackgroundMatchStatusRow, BackgroundSyncCoverage
 from utils.exceptions import OpenDotaError, OpenDotaRateLimitError, ValidationError
 from utils.helpers import format_duration, parse_player_id, unix_to_dt
 from webapp.app_runtime import build_service, get_app_version
@@ -43,13 +43,13 @@ def _status_chip(label: str, *, color: str, background: str) -> str:
     )
 
 
-def _detail_chip(row: BackgroundMatchStatusRow) -> str:
+def _detail_chip(row: Any) -> str:
     if row.detail_status == "cached":
         return _status_chip("Cached", color="#166534", background="rgba(34,197,94,0.14)")
     return _status_chip("Missing", color="#991b1b", background="rgba(239,68,68,0.16)")
 
 
-def _timing_chip(row: BackgroundMatchStatusRow) -> str:
+def _timing_chip(row: Any) -> str:
     if row.timing_status == "ready":
         return _status_chip("Ready", color="#166534", background="rgba(34,197,94,0.14)")
     if row.timing_status == "not_needed":
@@ -82,7 +82,7 @@ def _metric_card(label: str, value: str) -> str:
     )
 
 
-def _render_metrics(coverage: BackgroundSyncCoverage, state: dict[str, object] | None) -> None:
+def _render_metrics(coverage: Any, state: dict[str, object] | None) -> None:
     state = state or {}
     cards = [
         _metric_card("Turbo Matches In Window", str(coverage.total_matches)),
@@ -102,7 +102,7 @@ def _render_metrics(coverage: BackgroundSyncCoverage, state: dict[str, object] |
     )
 
 
-def _render_match_table(rows: list[BackgroundMatchStatusRow], service) -> None:
+def _render_match_table(rows: list[Any], service) -> None:
     table_rows: list[str] = []
     for row in rows:
         hero_name = html.escape(service.resolve_hero_name(row.hero_id))
