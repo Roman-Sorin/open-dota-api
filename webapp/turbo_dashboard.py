@@ -1,6 +1,7 @@
 from pathlib import Path
 from bisect import bisect_right
 from datetime import date, datetime, timedelta
+import html
 import inspect
 import os
 import re
@@ -11,6 +12,7 @@ from types import SimpleNamespace
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -1276,6 +1278,135 @@ def _render_item_icon_html(*, image_url: str, item_name: str, timing_min: float 
         "</div>"
     )
 
+
+def _render_sortable_item_winrates_table(item_wr_rows: list[dict[str, object]]) -> tuple[str, int]:
+    rows_html = ""
+    for row in item_wr_rows:
+        item_name = str(row["item"])
+        item_wr = float(row["item_winrate"])
+        matches = int(row.get("matches_with_item", 0))
+        won = int(row.get("wins_with_item", 0))
+        lost = matches - won
+        avg_timing = float(row["avg_item_timing_min"]) if row.get("avg_item_timing_min") is not None else None
+        icon_html = _render_item_icon_html(
+            image_url=str(row.get("item_image", "")),
+            item_name=item_name,
+            timing_min=avg_timing,
+            is_buff=bool(row.get("is_buff")),
+        )
+        rows_html += (
+            f'<tr data-item="{html.escape(item_name.lower())}" data-wr="{item_wr}" data-matches="{matches}" data-won="{won}" data-lost="{lost}">'
+            "<td>"
+            '<div class="item-winrate-item-cell">'
+            f"{icon_html}"
+            f'<div class="item-winrate-item-name">{html.escape(item_name)}</div>'
+            "</div>"
+            "</td>"
+            f'<td><span class="item-winrate-num" style="color:{winrate_color(item_wr)};">{round(item_wr)}%</span></td>'
+            f'<td><span class="item-winrate-num">{matches}</span></td>'
+            f'<td><span class="item-winrate-win">{won}</span></td>'
+            f'<td><span class="item-winrate-loss">{lost}</span></td>'
+            "</tr>"
+        )
+
+    table_height = min(max(180, 88 + (len(item_wr_rows) * 42)), 980)
+    return f"""
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        html, body {{
+          margin: 0;
+          padding: 0;
+          background: transparent;
+          font-family: sans-serif;
+        }}
+        .recent-matches-wrap{{overflow-x:auto;margin-top:0.5rem;}}
+        .recent-matches-table{{width:100%;min-width:640px;border-collapse:collapse;font-size:0.84rem;}}
+        .recent-matches-table th{{text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;opacity:0.72;padding:0.45rem 0.55rem;border-bottom:1px solid rgba(49,51,63,0.18);white-space:nowrap;cursor:pointer;user-select:none;}}
+        .recent-matches-table td{{padding:0.55rem;border-bottom:1px solid rgba(49,51,63,0.1);vertical-align:middle;}}
+        .item-winrate-item-cell{{display:flex;align-items:center;gap:0.6rem;min-width:220px;}}
+        .item-winrate-item-name{{font-weight:700;line-height:1.1;}}
+        .item-winrate-num{{white-space:nowrap;font-weight:700;}}
+        .item-winrate-win{{color:#23a55a;font-weight:700;}}
+        .item-winrate-loss{{color:#d9534f;font-weight:700;}}
+        .recent-item-inline{{position:relative;width:34px;flex:0 0 34px;display:inline-flex;align-items:flex-start;justify-content:center;padding-bottom:0.15rem;}}
+        .recent-item-inline img{{width:34px;height:auto;border-radius:5px;display:block;margin:0 auto;}}
+        .recent-item-chip{{position:absolute;min-width:16px;height:16px;padding:0 4px;border-radius:999px;font-size:0.6rem;font-weight:700;line-height:16px;text-align:center;white-space:nowrap;color:#fff;background:rgba(17,24,39,0.92);border:1px solid rgba(255,255,255,0.16);}}
+        .recent-item-chip-time{{left:-5px;bottom:-5px;}}
+        .recent-item-chip-buff{{top:-5px;right:-5px;color:#111827;background:rgba(245,158,11,0.96);border-color:rgba(17,24,39,0.2);}}
+        .recent-item-chip.na{{opacity:0.58;}}
+        .sort-indicator{{display:inline-block;min-width:1ch;margin-left:0.2rem;opacity:0.7;}}
+      </style>
+    </head>
+    <body>
+      <div class="recent-matches-wrap">
+        <table class="recent-matches-table" id="item-winrates-table">
+          <thead>
+            <tr>
+              <th data-sort-key="item" data-default-dir="asc">Item<span class="sort-indicator"></span></th>
+              <th data-sort-key="wr" data-default-dir="desc">WR<span class="sort-indicator">v</span></th>
+              <th data-sort-key="matches" data-default-dir="desc">Matches<span class="sort-indicator"></span></th>
+              <th data-sort-key="won" data-default-dir="desc">Won<span class="sort-indicator"></span></th>
+              <th data-sort-key="lost" data-default-dir="desc">Lost<span class="sort-indicator"></span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows_html}
+          </tbody>
+        </table>
+      </div>
+      <script>
+        (() => {{
+          const table = document.getElementById('item-winrates-table');
+          const tbody = table.querySelector('tbody');
+          const headers = [...table.querySelectorAll('th[data-sort-key]')];
+          let activeKey = 'wr';
+          let activeDir = 'desc';
+
+          const applyIndicators = () => {{
+            headers.forEach((header) => {{
+              const indicator = header.querySelector('.sort-indicator');
+              if (!indicator) return;
+              indicator.textContent = header.dataset.sortKey === activeKey ? (activeDir === 'asc' ? '^' : 'v') : '';
+            }});
+          }};
+
+          const sortRows = (key, dir) => {{
+            const rows = [...tbody.querySelectorAll('tr')];
+            rows.sort((a, b) => {{
+              const av = a.dataset[key] ?? '';
+              const bv = b.dataset[key] ?? '';
+              if (key === 'item') {{
+                return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+              }}
+              const an = Number(av);
+              const bn = Number(bv);
+              if (an !== bn) return dir === 'asc' ? an - bn : bn - an;
+              return (a.dataset.item ?? '').localeCompare(b.dataset.item ?? '');
+            }});
+            rows.forEach((row) => tbody.appendChild(row));
+            activeKey = key;
+            activeDir = dir;
+            applyIndicators();
+          }};
+
+          headers.forEach((header) => {{
+            header.addEventListener('click', () => {{
+              const key = header.dataset.sortKey;
+              const defaultDir = header.dataset.defaultDir || 'desc';
+              const nextDir = activeKey === key ? (activeDir === 'desc' ? 'asc' : 'desc') : defaultDir;
+              sortRows(key, nextDir);
+            }});
+          }});
+
+          sortRows(activeKey, activeDir);
+        }})();
+      </script>
+    </body>
+    </html>
+    """, table_height
+
 with st.sidebar:
     st.header("Filters")
     st.caption(f"Version: `{app_version}`")
@@ -2039,62 +2170,11 @@ if isinstance(item_snapshot_payload, dict):
         else:
             st.warning(item_note)
     if item_wr_rows:
-        item_rows_html = ""
-        for row in item_wr_rows:
-            avg_timing = float(row["avg_item_timing_min"]) if row.get("avg_item_timing_min") is not None else None
-            item_wr = float(row["item_winrate"])
-            item_wr_color = winrate_color(item_wr)
-            icon_html = _render_item_icon_html(
-                image_url=str(row.get("item_image", "")),
-                item_name=str(row["item"]),
-                timing_min=avg_timing,
-                is_buff=bool(row.get("is_buff")),
-            )
-            item_rows_html += (
-                "<tr>"
-                "<td>"
-                '<div class="item-winrate-item-cell">'
-                f"{icon_html}"
-                f'<div class="item-winrate-item-name">{row["item"]}</div>'
-                "</div>"
-                "</td>"
-                f'<td><span class="item-winrate-num" style="color:{item_wr_color};">{round(item_wr)}%</span></td>'
-                f'<td><span class="item-winrate-num">{int(row.get("matches_with_item", 0))}</span></td>'
-                f'<td><span class="item-winrate-win">{int(row.get("wins_with_item", 0))}</span></td>'
-                f'<td><span class="item-winrate-loss">{int(row.get("matches_with_item", 0)) - int(row.get("wins_with_item", 0))}</span></td>'
-                "</tr>"
-            )
-        st.markdown(
-            (
-                "<style>"
-                ".recent-matches-wrap{overflow-x:auto;margin-top:0.5rem;}"
-                ".recent-matches-table{width:100%;min-width:640px;border-collapse:collapse;font-size:0.84rem;}"
-                ".recent-matches-table th{text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;opacity:0.72;padding:0.45rem 0.55rem;border-bottom:1px solid rgba(49,51,63,0.18);white-space:nowrap;}"
-                ".recent-matches-table td{padding:0.55rem;border-bottom:1px solid rgba(49,51,63,0.1);vertical-align:middle;}"
-                ".item-winrate-item-cell{display:flex;align-items:center;gap:0.6rem;min-width:220px;}"
-                ".item-winrate-item-name{font-weight:700;line-height:1.1;}"
-                ".item-winrate-num{white-space:nowrap;font-weight:700;}"
-                ".item-winrate-win{color:#23a55a;font-weight:700;}"
-                ".item-winrate-loss{color:#d9534f;font-weight:700;}"
-                ".recent-item-inline{position:relative;width:34px;flex:0 0 34px;display:inline-flex;align-items:flex-start;justify-content:center;padding-bottom:0.15rem;}"
-                ".recent-item-inline img{width:34px;height:auto;border-radius:5px;display:block;margin:0 auto;}"
-                ".recent-item-chip{position:absolute;min-width:16px;height:16px;padding:0 4px;border-radius:999px;font-size:0.6rem;font-weight:700;line-height:16px;text-align:center;white-space:nowrap;color:#fff;background:rgba(17,24,39,0.92);border:1px solid rgba(255,255,255,0.16);}"
-                ".recent-item-chip-time{left:-5px;bottom:-5px;}"
-                ".recent-item-chip-buff{top:-5px;right:-5px;color:#111827;background:rgba(245,158,11,0.96);border-color:rgba(17,24,39,0.2);}"
-                ".recent-item-chip.na{opacity:0.58;}"
-                "</style>"
-                '<div class="recent-matches-wrap"><table class="recent-matches-table">'
-                "<thead><tr>"
-                "<th>Item</th>"
-                "<th>WR</th>"
-                "<th>Matches</th>"
-                "<th>Won</th>"
-                "<th>Lost</th>"
-                "</tr></thead>"
-                f"<tbody>{item_rows_html}</tbody>"
-                "</table></div>"
-            ),
-            unsafe_allow_html=True,
+        item_table_html, item_table_height = _render_sortable_item_winrates_table(item_wr_rows)
+        components.html(
+            item_table_html,
+            height=item_table_height,
+            scrolling=False,
         )
     else:
         st.info("No items satisfy current minimum matches threshold.")
