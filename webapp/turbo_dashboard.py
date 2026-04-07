@@ -16,13 +16,13 @@ st.set_page_config(page_title="Turbo Buff", layout="wide")
 navigation = st.navigation(
     [
         st.Page(
-            "webapp/dashboard_page.py",
+            Path(__file__).with_name("dashboard_page.py"),
             title="Dashboard",
             url_path="",
             default=True,
         ),
         st.Page(
-            "pages/Database.py",
+            PROJECT_ROOT / "pages" / "Database.py",
             title="Database",
             url_path="database",
         ),
