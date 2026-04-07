@@ -711,8 +711,8 @@ class DotaAnalyticsService:
         return datetime.now(tz=timezone.utc).isoformat()
 
     @staticmethod
-    def _iso_after_minutes(minutes: int) -> str:
-        return (datetime.now(tz=timezone.utc) + timedelta(minutes=minutes)).isoformat()
+    def _iso_after_seconds(seconds: int) -> str:
+        return (datetime.now(tz=timezone.utc) + timedelta(seconds=seconds)).isoformat()
 
     @staticmethod
     def _iso_is_future(value: str | None) -> bool:
@@ -1833,7 +1833,7 @@ class DotaAnalyticsService:
         window_days: int = 365,
         max_detail_fetches: int = 8,
         max_parse_requests: int = 3,
-        rate_limit_cooldown_minutes: int = 60,
+        rate_limit_cooldown_seconds: int = 600,
         force: bool = False,
     ) -> BackgroundSyncCycleResult:
         if self.match_store is None:
@@ -1910,7 +1910,7 @@ class DotaAnalyticsService:
                 if detail_status.rate_limited:
                     rate_limited = True
                     status = "rate_limited"
-                    next_retry_at = self._iso_after_minutes(rate_limit_cooldown_minutes)
+                    next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
                     note_parts.append("OpenDota rate limit was hit during detail hydration.")
 
             if not rate_limited:
@@ -1944,7 +1944,7 @@ class DotaAnalyticsService:
                     except OpenDotaRateLimitError:
                         rate_limited = True
                         status = "rate_limited"
-                        next_retry_at = self._iso_after_minutes(rate_limit_cooldown_minutes)
+                        next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
                         note_parts.append("OpenDota rate limit was hit while requesting replay parses.")
                         break
                     self.match_store.upsert_match_parse_request(

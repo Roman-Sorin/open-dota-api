@@ -226,7 +226,7 @@ player_default = st.session_state.get("database_player_raw", st.session_state.ge
 window_default = int(st.session_state.get("database_window_days", 365) or 365)
 detail_default = int(st.session_state.get("database_detail_batch", 6) or 6)
 parse_default = int(st.session_state.get("database_parse_batch", 2) or 2)
-cooldown_default = int(st.session_state.get("database_cooldown_minutes", 60) or 60)
+cooldown_default = int(st.session_state.get("database_cooldown_seconds", 600) or 600)
 auto_default = bool(st.session_state.get("database_auto_run", False))
 interval_default = int(st.session_state.get("database_auto_run_seconds", 60) or 60)
 preset_default = st.session_state.get("database_sync_preset", "Balanced")
@@ -253,14 +253,14 @@ sync_preset = controls[2].selectbox(
 st.caption(_preset_help_text(sync_preset))
 
 secondary = st.columns([1.4, 1.0, 1.0])
-cooldown_minutes = secondary[0].number_input(
-    "Wait after 429 (min)",
-    min_value=5,
-    max_value=240,
+cooldown_seconds = secondary[0].number_input(
+    "Pause after rate-limit error (sec)",
+    min_value=10,
+    max_value=3600,
     value=cooldown_default,
-    step=5,
-    key="database_cooldown_minutes",
-    help="If OpenDota returns a rate-limit error (HTTP 429), the page waits this many minutes before the next automatic attempt.",
+    step=10,
+    key="database_cooldown_seconds",
+    help="If OpenDota returns HTTP 429, auto-fill pauses for this many seconds before trying again.",
 )
 table_limit = secondary[1].number_input(
     "Matches shown",
@@ -272,7 +272,7 @@ table_limit = secondary[1].number_input(
 )
 auto_run = secondary[2].checkbox("Auto-fill while this page stays open", value=auto_default, key="database_auto_run")
 st.caption(
-    f"If OpenDota rate-limits the job with HTTP 429, auto-fill pauses for {int(cooldown_minutes)} minute(s) and then tries again."
+    f"If OpenDota returns HTTP 429, auto-fill pauses for {int(cooldown_seconds)} second(s) and then tries again."
 )
 
 active_detail_batch = SYNC_PRESETS[sync_preset]["detail_batch"]
@@ -339,7 +339,7 @@ if run_cycle or force_cycle or auto_run:
             window_days=int(window_days),
             max_detail_fetches=int(active_detail_batch),
             max_parse_requests=int(active_parse_batch),
-            rate_limit_cooldown_minutes=int(cooldown_minutes),
+            rate_limit_cooldown_seconds=int(cooldown_seconds),
             force=bool(force_cycle),
         )
     except (OpenDotaError, OpenDotaRateLimitError) as exc:
@@ -365,7 +365,7 @@ if run_result is not None:
 _render_metrics(coverage, state)
 st.caption(
     f"Current cycle settings: up to {active_detail_batch} detail fetch(es) and {active_parse_batch} parse request(s) per cycle. "
-    f"Auto-fill interval: {active_interval_seconds} sec. Retry-after-429: {int(cooldown_minutes)} min."
+    f"Auto-fill interval: {active_interval_seconds} sec. Pause after 429: {int(cooldown_seconds)} sec."
 )
 
 recent_runs_df = pd.DataFrame(
