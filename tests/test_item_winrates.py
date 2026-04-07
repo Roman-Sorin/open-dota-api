@@ -18,6 +18,9 @@ class _FakeClient:
             "branches": {"id": 8, "dname": "Iron Branch", "img": "/apps/dota2/images/items/branches.png"},
             "quelling_blade": {"id": 9, "dname": "Quelling Blade", "img": "/apps/dota2/images/items/quelling_blade.png"},
             "tpscroll": {"id": 10, "dname": "Town Portal Scroll", "img": "/apps/dota2/images/items/tpscroll.png"},
+            "ultimate_scepter": {"id": 108, "dname": "Aghanim's Scepter", "img": "/apps/dota2/images/items/ultimate_scepter.png"},
+            "moon_shard": {"id": 247, "dname": "Moon Shard", "img": "/apps/dota2/images/items/moon_shard.png"},
+            "aghanims_shard": {"id": 609, "dname": "Aghanim's Shard", "img": "/apps/dota2/images/items/aghanims_shard.png"},
         }
 
     def get_constants_patch(self) -> list[dict]:
@@ -217,3 +220,50 @@ def test_item_winrate_snapshot_marks_summary_only_matches_as_partial() -> None:
     assert snapshot.missing_matches == 1
     assert snapshot.is_complete is False
     assert "incomplete for 1 match(es)" in snapshot.note
+
+
+def test_item_winrate_snapshot_includes_consumed_buffs_from_cached_details() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        _match(1, True, [1]),
+        _match(2, False, [1]),
+    ]
+    service._match_details_memory_cache[1] = {
+        "players": [
+            {
+                "account_id": 123,
+                "player_slot": 0,
+                "item_0": 1,
+                "item_1": 0,
+                "item_2": 0,
+                "item_3": 0,
+                "item_4": 0,
+                "item_5": 0,
+                "aghanims_scepter": 1,
+                "permanent_buffs": [{"permanent_buff": 2, "grant_time": 900}],
+            }
+        ]
+    }
+    service._match_details_memory_cache[2] = {
+        "players": [
+            {
+                "account_id": 123,
+                "player_slot": 0,
+                "item_0": 1,
+                "item_1": 0,
+                "item_2": 0,
+                "item_3": 0,
+                "item_4": 0,
+                "item_5": 0,
+                "aghanims_scepter": 1,
+                "permanent_buffs": [{"permanent_buff": 2, "grant_time": 960}],
+            }
+        ]
+    }
+
+    snapshot = service.get_item_winrate_snapshot(player_id=123, matches=matches, top_n=20, allow_detail_fetch=False)
+
+    scepter = next(row for row in snapshot.rows if row["item"] == "Aghanim's Scepter")
+    assert scepter["matches_with_item"] == 2
+    assert scepter["wins_with_item"] == 1
+    assert scepter["is_buff"] is True

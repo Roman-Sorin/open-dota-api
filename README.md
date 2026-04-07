@@ -60,12 +60,14 @@ Turbo-only dashboard for your account:
 - Item winrates use a dedicated section-schema cache key so legacy session payloads from the old purchase-log behavior are not reused after updates
 - Item winrates also self-rebuild from cached final inventory/backpack data when a mixed-runtime session still exposes a legacy purchase-based snapshot after deploy
 - Item winrates include average timing as a small badge on the item icon, sourced from cached timing data for matches where the item remains in the final inventory/backpack snapshot
+- Item winrates also include end-of-match consumable buffs (`Aghanim's Scepter`, `Aghanim's Shard`, `Moon Shard`) when cached details expose them, and those rows are marked as buffs
 - Item winrates now show a coverage warning when cached match details are missing, instead of silently presenting partial counts as complete analytics
 - Item winrates table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red
 - Item winrates UI has a safe legacy fallback, so mixed deploy/runtime restarts do not crash if an older service object is still alive during a rerun
 - Item winrates no longer show Avg K/D/A or derived KDA columns
 - Recent hero matches shown as a compact one-row-per-match table under the item table
 - Recent hero matches show only final slots, and item timings are shown only when the final item completion time is available
+- Recent hero matches also show consumable buffs from cached match details and mark them with a small `BUFF` badge
 - When final-item timings are available, recent-match items are ordered by earliest completion time
 - Recent hero matches include `Net Worth` and player `Hero Damage`
 - Recent hero matches show both `K/D/A` and per-match `KDA` rounded to one decimal

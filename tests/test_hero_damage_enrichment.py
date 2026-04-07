@@ -18,7 +18,10 @@ class _FakeClient:
             "armlet": {"id": 114, "dname": "Armlet of Mordiggian", "img": "/apps/dota2/images/items/armlet.png"},
             "skadi": {"id": 160, "dname": "Eye of Skadi", "img": "/apps/dota2/images/items/skadi.png"},
             "orchid": {"id": 151, "dname": "Orchid Malevolence", "img": "/apps/dota2/images/items/orchid.png"},
-            "heart": {"id": 108, "dname": "Heart of Tarrasque", "img": "/apps/dota2/images/items/heart.png"},
+            "heart": {"id": 250, "dname": "Heart of Tarrasque", "img": "/apps/dota2/images/items/heart.png"},
+            "ultimate_scepter": {"id": 108, "dname": "Aghanim's Scepter", "img": "/apps/dota2/images/items/ultimate_scepter.png"},
+            "aghanims_shard": {"id": 609, "dname": "Aghanim's Shard", "img": "/apps/dota2/images/items/aghanims_shard.png"},
+            "moon_shard": {"id": 247, "dname": "Moon Shard", "img": "/apps/dota2/images/items/moon_shard.png"},
         }
 
     def get_constants_patch(self) -> list[dict]:
@@ -566,7 +569,7 @@ def test_recent_hero_matches_use_final_slots_with_matching_final_item_timings() 
             item_1=114,
             item_2=160,
             item_3=151,
-            item_4=108,
+            item_4=250,
             item_5=1,
         )
     ]
@@ -584,7 +587,7 @@ def test_recent_hero_matches_use_final_slots_with_matching_final_item_timings() 
                 "item_1": 114,
                 "item_2": 160,
                 "item_3": 151,
-                "item_4": 108,
+                "item_4": 250,
                 "item_5": 1,
                 "purchase_log": [
                     {"key": "boots", "time": 15},
@@ -607,7 +610,7 @@ def test_recent_hero_matches_use_final_slots_with_matching_final_item_timings() 
     assert rows[0].net_worth == 26173
     assert rows[0].hero_damage == 15592
     assert rows[0].kda_ratio == 9.0
-    assert [item.item_id for item in rows[0].items] == [63, 114, 151, 1, 108, 160]
+    assert [item.item_id for item in rows[0].items] == [63, 114, 151, 1, 250, 160]
     assert [item.purchase_time_min for item in rows[0].items] == [3, 5, 9, 12, 17, 23]
 
 
@@ -627,7 +630,7 @@ def test_recent_hero_matches_use_aegis_objective_time_when_purchase_log_lacks_ae
             item_0=117,
             item_1=160,
             item_2=151,
-            item_3=108,
+            item_3=250,
             item_4=1,
             item_5=0,
         )
@@ -646,7 +649,7 @@ def test_recent_hero_matches_use_aegis_objective_time_when_purchase_log_lacks_ae
                 "item_0": 117,
                 "item_1": 160,
                 "item_2": 151,
-                "item_3": 108,
+                "item_3": 250,
                 "item_4": 1,
                 "item_5": 0,
                 "purchase_log": [
@@ -664,8 +667,64 @@ def test_recent_hero_matches_use_aegis_objective_time_when_purchase_log_lacks_ae
 
     rows = service.build_recent_hero_matches(player_id=123, matches=matches, limit=10)
 
-    assert [item.item_id for item in rows[0].items] == [151, 1, 117, 160, 108]
+    assert [item.item_id for item in rows[0].items] == [151, 1, 117, 160, 250]
     assert [item.purchase_time_min for item in rows[0].items] == [12, 15, 17, 20, 22]
+
+
+def test_recent_hero_matches_include_consumed_buff_items() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=103,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=13,
+            deaths=6,
+            assists=17,
+            duration=1645,
+            hero_id=1,
+            item_0=160,
+            item_1=151,
+            item_2=1,
+            item_3=63,
+            item_4=114,
+            item_5=250,
+        )
+    ]
+
+    service._get_match_details_cached = lambda _: {  # type: ignore[method-assign]
+        "players": [
+            {
+                "account_id": 123,
+                "player_slot": 0,
+                "level": 30,
+                "hero_variant": 0,
+                "item_0": 160,
+                "item_1": 151,
+                "item_2": 1,
+                "item_3": 63,
+                "item_4": 114,
+                "item_5": 250,
+                "aghanims_scepter": 1,
+                "permanent_buffs": [{"permanent_buff": 2, "grant_time": 910}],
+                "purchase_log": [
+                    {"key": "power_treads", "time": 180},
+                    {"key": "armlet", "time": 344},
+                    {"key": "orchid", "time": 543},
+                    {"key": "blink", "time": 774},
+                    {"key": "skadi", "time": 1190},
+                    {"key": "ultimate_scepter", "time": 910},
+                ],
+            }
+        ]
+    }
+
+    rows = service.build_recent_hero_matches(player_id=123, matches=matches, limit=10)
+
+    assert rows[0].items[0].item_name == "Aghanim's Scepter"
+    assert rows[0].items[0].purchase_time_min == 15
+    assert rows[0].items[0].is_buff is True
 
 
 def test_turbo_hero_overview_matches_reported_muerta_example() -> None:

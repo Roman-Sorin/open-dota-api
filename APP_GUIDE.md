@@ -60,6 +60,7 @@ The project includes two interfaces:
 - Item winrates use a dedicated section-schema cache key so older session payloads built from legacy purchase-log logic are not reused after deploys
 - Item winrates self-rebuild from cached final inventory/backpack data in the UI if a mixed-runtime session still surfaces a legacy purchase-based snapshot after deploy
 - Item winrates show average timing as a small badge on the item icon, using cached item timing data (`purchase_log` / `first_purchase_time` / Aegis objective time when available) for matches where the item is part of the end-of-match inventory snapshot
+- Item winrates also include end-of-match consumable buffs (`Aghanim's Scepter`, `Aghanim's Shard`, `Moon Shard`) when cached match details expose them; buff entries are marked visually and use the same icon timing treatment as recent-match items
 - Item winrates show an explicit coverage warning when some matches still lack cached item detail data, instead of silently undercounting them as if the snapshot were complete
 - Main dashboard refresh rehydrates legacy cached match-detail rows that are missing the selected-player `purchase_log`, so recent-match item timings can recover without manual cache deletion
 - Item winrate table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red
@@ -70,6 +71,7 @@ The project includes two interfaces:
 - Dashboard filter `Min matches per item` defaults to `2`
 - Recent hero matches are displayed as a compact table below the item table
 - Recent hero matches show final item slots only; timings are attached only to those final items when available from match details
+- Recent hero matches also show consumable buffs from cached match details (for example consumed `Aghanim's Scepter`), marked with a small `BUFF` badge and ordered alongside timed final items
 - Recent hero matches repair legacy cached item timings on the next main dashboard refresh when an older stored detail row is missing `purchase_log`
 - If `Recent Matches` is already visible, `Refresh Turbo Dashboard` rebuilds that section from cached data in the same rerun so repaired item timings appear immediately
 - `Repair Missing Item Timings via OpenDota Parse` explicitly requests OpenDota replay parses for the visible recent hero matches that still have no timing data, waits briefly, then rebuilds the section from the refreshed cached details

@@ -34,6 +34,8 @@ class RecentMatchItem:
     item_name: str
     item_image: str
     purchase_time_min: int | None
+    is_buff: bool = False
+    buff_label: str | None = None
 
 
 @dataclass(slots=True)
@@ -107,6 +109,17 @@ class ItemWinrateSnapshot:
 
 
 class DotaAnalyticsService:
+    CONSUMABLE_BUFF_ITEM_IDS: dict[str, int] = {
+        "moon_shard": 247,
+        "ultimate_scepter": 108,
+        "aghanims_shard": 609,
+    }
+    PERMANENT_BUFF_ITEM_KEYS: dict[int, str] = {
+        1: "moon_shard",
+        2: "ultimate_scepter",
+        12: "aghanims_shard",
+    }
+
     def __init__(self, client: OpenDotaClient, cache: JsonFileCache, match_store: SQLiteMatchStore | None = None) -> None:
         self.client = client
         self.cache = cache
@@ -812,6 +825,52 @@ class DotaAnalyticsService:
         item_ids.extend(int(player_row.get(f"backpack_{i}") or 0) for i in range(3))
         return item_ids
 
+    def _player_row_buff_items(self, player_row: dict | None) -> list[tuple[int, int | None]]:
+        if not isinstance(player_row, dict):
+            return []
+
+        by_item_id: dict[int, int | None] = {}
+        permanent_buffs = player_row.get("permanent_buffs")
+        if isinstance(permanent_buffs, list):
+            for buff in permanent_buffs:
+                if not isinstance(buff, dict):
+                    continue
+                item_key = self.PERMANENT_BUFF_ITEM_KEYS.get(int(buff.get("permanent_buff") or 0))
+                if not item_key:
+                    continue
+                item_id = self.CONSUMABLE_BUFF_ITEM_IDS.get(item_key)
+                if not item_id:
+                    continue
+                grant_time = buff.get("grant_time")
+                try:
+                    by_item_id[item_id] = max(int(grant_time) // 60, 0)
+                except (TypeError, ValueError):
+                    by_item_id[item_id] = None
+
+        first_purchase_time = player_row.get("first_purchase_time")
+        if isinstance(first_purchase_time, dict):
+            for item_key, item_id in self.CONSUMABLE_BUFF_ITEM_IDS.items():
+                if item_id in by_item_id and by_item_id[item_id] is not None:
+                    continue
+                if item_key not in first_purchase_time:
+                    continue
+                try:
+                    by_item_id[item_id] = max(int(first_purchase_time[item_key]) // 60, 0)
+                except (TypeError, ValueError):
+                    by_item_id[item_id] = None
+
+        for field_name, item_key in (
+            ("moonshard", "moon_shard"),
+            ("aghanims_scepter", "ultimate_scepter"),
+            ("aghanims_shard", "aghanims_shard"),
+        ):
+            if int(player_row.get(field_name) or 0) <= 0:
+                continue
+            item_id = self.CONSUMABLE_BUFF_ITEM_IDS[item_key]
+            by_item_id.setdefault(item_id, None)
+
+        return [(item_id, by_item_id[item_id]) for item_id in by_item_id]
+
     def _player_row_purchase_item_ids(self, player_row: dict) -> set[int]:
         purchase_log = player_row.get("purchase_log") if isinstance(player_row, dict) else None
         if not isinstance(purchase_log, list):
@@ -1282,6 +1341,20 @@ class DotaAnalyticsService:
                     break
 
         items: list[RecentMatchItem] = []
+        for buff_item_id, grant_time_min in self._player_row_buff_items(player_row):
+            items.append(
+                (
+                    -1,
+                    RecentMatchItem(
+                        item_id=buff_item_id,
+                        item_name=self.references.item_names_by_id.get(buff_item_id, f"Item #{buff_item_id}"),
+                        item_image=self.references.item_images_by_id.get(buff_item_id, ""),
+                        purchase_time_min=grant_time_min,
+                        is_buff=True,
+                        buff_label="Buff",
+                    ),
+                )
+            )
         for original_index, item_id in enumerate(final_item_ids):
             if item_id <= 0:
                 continue
@@ -1296,12 +1369,13 @@ class DotaAnalyticsService:
             items.append((original_index, item))
         items.sort(
             key=lambda pair: (
+                not pair[1].is_buff,
                 pair[1].purchase_time_min is None,
                 pair[1].purchase_time_min if pair[1].purchase_time_min is not None else 10_000,
                 pair[0],
             )
         )
-        return [item for _, item in items[:6]]
+        return [item for _, item in items]
 
     def build_recent_hero_matches(
         self,
@@ -1541,6 +1615,7 @@ class DotaAnalyticsService:
                     )
                     if player_row:
                         detail_items = set(self._player_row_item_winrate_ids(player_row))
+                        detail_items.update(item_id for item_id, _ in self._player_row_buff_items(player_row))
                         detail_items.discard(0)
                         if detail_items:
                             unique_items.update(detail_items)
@@ -1574,6 +1649,7 @@ class DotaAnalyticsService:
                     "item_pick_rate": winrate_percent(appearances, total),
                     "wins_with_item": wins,
                     "item_winrate": winrate_percent(wins, appearances),
+                    "is_buff": item_id in self.CONSUMABLE_BUFF_ITEM_IDS.values(),
                 }
             )
 

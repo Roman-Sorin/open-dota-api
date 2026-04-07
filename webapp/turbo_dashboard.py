@@ -1,18 +1,12 @@
 from pathlib import Path
 from bisect import bisect_right
-import base64
 from datetime import date, datetime, timedelta
-from functools import lru_cache
-from io import BytesIO
 import inspect
 import os
 import re
-import requests
 import subprocess
 import sys
 import time
-
-from PIL import Image, ImageDraw, ImageFont
 
 import pandas as pd
 import streamlit as st
@@ -252,6 +246,18 @@ st.markdown(
         display: block;
         margin: 0 auto 0.15rem auto;
     }
+    .recent-item-inline-badge {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        padding: 1px 3px;
+        border-radius: 4px;
+        font-size: 0.54rem;
+        line-height: 1.05;
+        font-weight: 700;
+        color: #111827;
+        background: rgba(245, 158, 11, 0.96);
+    }
     .recent-item-inline-time {
         font-size: 0.63rem;
         line-height: 1.1;
@@ -267,6 +273,49 @@ st.markdown(
     }
     .recent-item-inline-time.na {
         opacity: 0.58;
+    }
+    .item-winrates-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.84rem;
+        margin-top: 0.45rem;
+    }
+    .item-winrates-table th {
+        text-align: left;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        opacity: 0.72;
+        padding: 0.45rem 0.55rem;
+        border-bottom: 1px solid rgba(49, 51, 63, 0.18);
+        white-space: nowrap;
+    }
+    .item-winrates-table td {
+        padding: 0.5rem 0.55rem;
+        border-bottom: 1px solid rgba(49, 51, 63, 0.08);
+        vertical-align: middle;
+    }
+    .item-winrate-item-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        min-width: 220px;
+    }
+    .item-winrate-item-name {
+        font-weight: 600;
+        line-height: 1.2;
+    }
+    .item-winrate-num {
+        white-space: nowrap;
+        font-weight: 700;
+    }
+    .item-winrate-win {
+        color: #23a55a;
+        font-weight: 700;
+    }
+    .item-winrate-loss {
+        color: #d9534f;
+        font-weight: 700;
     }
     @media (max-width: 768px) {
         .block-container {
@@ -968,6 +1017,8 @@ def _build_item_winrate_snapshot_from_cached_inventory(
                     if int(player_row.get(field_name) or 0) > 0
                 }
                 if detail_items:
+                    buff_items = service._player_row_buff_items(player_row)  # noqa: SLF001
+                    detail_items.update(item_id for item_id, _ in buff_items)
                     unique_items.update(detail_items)
                     detail_backed_this_match = True
                     purchase_times_by_item = _build_item_purchase_times_by_item(
@@ -977,6 +1028,11 @@ def _build_item_winrate_snapshot_from_cached_inventory(
                         player_slot=match.player_slot,
                         tracked_item_ids=detail_items,
                     )
+                    for buff_item_id, grant_time_min in buff_items:
+                        if grant_time_min is None:
+                            purchase_times_by_item.setdefault(buff_item_id, [])
+                            continue
+                        purchase_times_by_item.setdefault(buff_item_id, []).append(grant_time_min)
 
         if not unique_items:
             missing_matches += 1
@@ -1016,6 +1072,7 @@ def _build_item_winrate_snapshot_from_cached_inventory(
                     else None
                 ),
                 "timed_matches_with_item": avg_time_count,
+                "is_buff": item_id in service.CONSUMABLE_BUFF_ITEM_IDS.values(),
             }
         )
 
@@ -1075,61 +1132,25 @@ def _get_item_winrate_snapshot_safe(
     )
 
 
-@lru_cache(maxsize=512)
-def _download_item_icon(image_url: str) -> bytes | None:
-    if not image_url:
-        return None
-    try:
-        response = requests.get(image_url, timeout=20)
-        response.raise_for_status()
-    except Exception:
-        return None
-    return response.content
-
-
-@lru_cache(maxsize=1024)
-def _item_icon_with_timing(image_url: str, timing_min: float | None) -> str:
+def _format_item_timing_label(timing_min: float | None) -> str:
     if timing_min is None:
-        return image_url or ""
+        return "-"
+    rounded = round(float(timing_min), 1)
+    if float(rounded).is_integer():
+        return f"{int(rounded)}m"
+    return f"{rounded:.1f}m"
 
-    icon_bytes = _download_item_icon(image_url)
-    if not icon_bytes:
-        return image_url or ""
 
-    try:
-        icon = Image.open(BytesIO(icon_bytes)).convert("RGBA").resize((34, 34))
-    except Exception:
-        return image_url or ""
-
-    canvas = Image.new("RGBA", (40, 40), (0, 0, 0, 0))
-    canvas.alpha_composite(icon, (3, 3))
-
-    draw = ImageDraw.Draw(canvas)
-    font = ImageFont.load_default()
-    timing_label = f"{timing_min:.1f}m"
-    bbox = draw.textbbox((0, 0), timing_label, font=font)
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
-    badge_width = text_width + 8
-    badge_height = text_height + 4
-    badge_x = 4
-    badge_y = 35 - badge_height
-    draw.rounded_rectangle(
-        (badge_x, badge_y, badge_x + badge_width, badge_y + badge_height),
-        radius=4,
-        fill=(17, 24, 39, 235),
+def _render_item_icon_html(*, image_url: str, item_name: str, timing_min: float | int | None, is_buff: bool) -> str:
+    badge_html = '<div class="recent-item-inline-badge">BUFF</div>' if is_buff else ""
+    time_class_suffix = " na" if timing_min is None else ""
+    return (
+        '<div class="recent-item-inline">'
+        f'<img src="{image_url}" alt="{item_name}" title="{item_name}"/>'
+        f"{badge_html}"
+        f'<div class="recent-item-inline-time{time_class_suffix}">{_format_item_timing_label(None if timing_min is None else float(timing_min))}</div>'
+        "</div>"
     )
-    draw.text(
-        (badge_x + 4, badge_y + 1),
-        timing_label,
-        fill=(255, 255, 255, 255),
-        font=font,
-    )
-
-    buffer = BytesIO()
-    canvas.save(buffer, format="PNG")
-    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
-    return f"data:image/png;base64,{encoded}"
 
 with st.sidebar:
     st.header("Filters")
@@ -1894,45 +1915,59 @@ if isinstance(item_snapshot_payload, dict):
         else:
             st.warning(item_note)
     if item_wr_rows:
-        item_winrate_table = pd.DataFrame(
-            [
-                {
-                    "Icon": _item_icon_with_timing(
-                        str(row.get("item_image", "")),
-                        float(row["avg_item_timing_min"]) if row.get("avg_item_timing_min") is not None else None,
-                    ),
-                    "Item": row["item"],
-                    "Item Winrate": round(float(row["item_winrate"])),
-                    "Matches": int(row.get("matches_with_item", 0)),
-                    "Won": int(row.get("wins_with_item", 0)),
-                    "Lost": int(row.get("matches_with_item", 0)) - int(row.get("wins_with_item", 0)),
-                }
-                for row in item_wr_rows
-            ]
-        )
-        item_winrate_styler = apply_cell_style(
-            item_winrate_table.style,
-            _style_winrate_cell,
-            subset=["Item Winrate"],
-        )
-        item_winrate_styler = apply_cell_style(
-            item_winrate_styler,
-            lambda _: "color: #23a55a; font-weight: 700;",
-            subset=["Won"],
-        )
-        item_winrate_styler = apply_cell_style(
-            item_winrate_styler,
-            lambda _: "color: #d9534f; font-weight: 700;",
-            subset=["Lost"],
-        )
-        st.dataframe(
-            item_winrate_styler,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Icon": st.column_config.ImageColumn("Item", help="Item icon", width="small"),
-                "Item Winrate": st.column_config.NumberColumn("Item Winrate", format="%.0f%%"),
-            },
+        item_rows_html = ""
+        for row in item_wr_rows:
+            avg_timing = float(row["avg_item_timing_min"]) if row.get("avg_item_timing_min") is not None else None
+            item_wr = float(row["item_winrate"])
+            item_wr_color = winrate_color(item_wr)
+            icon_html = _render_item_icon_html(
+                image_url=str(row.get("item_image", "")),
+                item_name=str(row["item"]),
+                timing_min=avg_timing,
+                is_buff=bool(row.get("is_buff")),
+            )
+            item_rows_html += (
+                "<tr>"
+                "<td>"
+                '<div class="item-winrate-item-cell">'
+                f"{icon_html}"
+                f'<div class="item-winrate-item-name">{row["item"]}</div>'
+                "</div>"
+                "</td>"
+                f'<td><span class="item-winrate-num" style="color:{item_wr_color};">{round(item_wr)}%</span></td>'
+                f'<td><span class="item-winrate-num">{int(row.get("matches_with_item", 0))}</span></td>'
+                f'<td><span class="item-winrate-win">{int(row.get("wins_with_item", 0))}</span></td>'
+                f'<td><span class="item-winrate-loss">{int(row.get("matches_with_item", 0)) - int(row.get("wins_with_item", 0))}</span></td>'
+                "</tr>"
+            )
+        st.html(
+            (
+                "<style>"
+                ".item-winrates-table{width:100%;border-collapse:collapse;font-size:0.84rem;margin-top:0.45rem;}"
+                ".item-winrates-table th{text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;opacity:0.72;padding:0.45rem 0.55rem;border-bottom:1px solid rgba(49,51,63,0.18);white-space:nowrap;}"
+                ".item-winrates-table td{padding:0.5rem 0.55rem;border-bottom:1px solid rgba(49,51,63,0.08);vertical-align:middle;}"
+                ".item-winrate-item-cell{display:flex;align-items:center;gap:0.6rem;min-width:220px;}"
+                ".item-winrate-item-name{font-weight:600;line-height:1.2;}"
+                ".item-winrate-num{white-space:nowrap;font-weight:700;}"
+                ".item-winrate-win{color:#23a55a;font-weight:700;}"
+                ".item-winrate-loss{color:#d9534f;font-weight:700;}"
+                ".recent-item-inline{position:relative;width:34px;flex:0 0 34px;}"
+                ".recent-item-inline img{width:34px;height:34px;border-radius:5px;display:block;margin:0 auto 0.15rem auto;}"
+                ".recent-item-inline-badge{position:absolute;top:2px;right:2px;padding:1px 3px;border-radius:4px;font-size:0.54rem;line-height:1.05;font-weight:700;color:#111827;background:rgba(245,158,11,0.96);}"
+                ".recent-item-inline-time{font-size:0.63rem;line-height:1.1;font-weight:700;white-space:nowrap;position:absolute;left:2px;bottom:2px;padding:1px 3px;border-radius:4px;color:#fff;background:rgba(17,24,39,0.92);}"
+                ".recent-item-inline-time.na{opacity:0.58;}"
+                "</style>"
+                '<table class="item-winrates-table">'
+                "<thead><tr>"
+                "<th>Item</th>"
+                "<th>WR</th>"
+                "<th>Matches</th>"
+                "<th>Won</th>"
+                "<th>Lost</th>"
+                "</tr></thead>"
+                f"<tbody>{item_rows_html}</tbody>"
+                "</table>"
+            )
         )
     else:
         st.info("No items satisfy current minimum matches threshold.")
@@ -2085,13 +2120,11 @@ if recent_matches_loaded:
         duration_percent = duration_bar_percent(row.duration_seconds)
         kills_pct, deaths_pct, assists_pct = kda_bar_segments(row.kills, row.deaths, row.assists)
         item_html = "".join(
-            (
-                '<div class="recent-item-inline">'
-                f'<img src="{item.item_image}" alt="{item.item_name}" title="{item.item_name}"/>'
-                f'<div class="recent-item-inline-time{" na" if item.purchase_time_min is None else ""}">'
-                f'{f"{item.purchase_time_min}m" if item.purchase_time_min is not None else "-"}'
-                "</div>"
-                "</div>"
+            _render_item_icon_html(
+                image_url=item.item_image,
+                item_name=item.item_name,
+                timing_min=item.purchase_time_min,
+                is_buff=bool(getattr(item, "is_buff", False)),
             )
             for item in row.items
         ) or '<div class="recent-items-inline empty">No item data</div>'
