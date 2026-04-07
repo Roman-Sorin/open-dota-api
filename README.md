@@ -63,6 +63,7 @@ Turbo-only dashboard for your account:
 - Item winrates include average timing as a small badge on the item icon, sourced from cached timing data for matches where the item remains in the final inventory/backpack snapshot
 - Item timing chips are rounded to whole minutes and item icons keep their original aspect ratio instead of being forced into square thumbnails
 - `Item Winrates` now reuses the same table shell styling as `Recent Matches`, so borders, header rhythm, and row dividers stay visually aligned
+- `Item Winrates` is rendered through the same Streamlit markdown-table path as `Recent Matches`, avoiding wrapper-level style drift between `stHtml` and markdown containers
 - Item winrates also include end-of-match consumable buffs (`Aghanim's Scepter`, `Aghanim's Shard`, `Moon Shard`) when cached details expose them, and those rows are marked with a small `buff` chip on the item icon
 - Item winrates now show a coverage warning when cached match details are missing, instead of silently presenting partial counts as complete analytics
 - Item winrates table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red

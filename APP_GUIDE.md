@@ -63,6 +63,7 @@ The project includes two interfaces:
 - Item winrates show average timing as a small badge on the item icon, using cached item timing data (`purchase_log` / `first_purchase_time` / Aegis objective time when available) for matches where the item is part of the end-of-match inventory snapshot
 - Item timing chips round to whole minutes, and item thumbnails preserve the original Dota item aspect ratio instead of being forced into square boxes
 - `Item Winrates` reuses the same table shell styling as `Recent Matches`, keeping borders, row dividers, and spacing consistent across both sections
+- `Item Winrates` now renders through the same Streamlit markdown container path as `Recent Matches`, so wrapper-level border/padding differences from `stHtml` no longer apply
 - Item winrates also include end-of-match consumable buffs (`Aghanim's Scepter`, `Aghanim's Shard`, `Moon Shard`) when cached match details expose them; buff entries are marked with a small `buff` chip on the item icon and use the same icon timing treatment as recent-match items
 - Item winrates show an explicit coverage warning when some matches still lack cached item detail data, instead of silently undercounting them as if the snapshot were complete
 - Main dashboard refresh rehydrates legacy cached match-detail rows that are missing the selected-player `purchase_log`, so recent-match item timings can recover without manual cache deletion

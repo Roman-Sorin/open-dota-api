@@ -2064,7 +2064,7 @@ if isinstance(item_snapshot_payload, dict):
                 f'<td><span class="item-winrate-loss">{int(row.get("matches_with_item", 0)) - int(row.get("wins_with_item", 0))}</span></td>'
                 "</tr>"
             )
-        st.html(
+        st.markdown(
             (
                 "<style>"
                 ".recent-matches-wrap{overflow-x:auto;margin-top:0.5rem;}"
@@ -2093,7 +2093,8 @@ if isinstance(item_snapshot_payload, dict):
                 "</tr></thead>"
                 f"<tbody>{item_rows_html}</tbody>"
                 "</table></div>"
-            )
+            ),
+            unsafe_allow_html=True,
         )
     else:
         st.info("No items satisfy current minimum matches threshold.")
