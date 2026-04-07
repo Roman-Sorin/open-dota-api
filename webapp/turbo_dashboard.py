@@ -1886,7 +1886,7 @@ if isinstance(matchup_rows, dict):
                 st.caption("Hero Opponents")
                 st.dataframe(
                     matchup_utils.build_matchup_styler(
-                        matchup_utils.sort_matchup_summary_dataframe(selected_against, best_first=True)
+                        matchup_utils.sort_matchup_summary_dataframe(selected_against, best_first=False)
                     ),
                     use_container_width=True,
                     hide_index=True,
