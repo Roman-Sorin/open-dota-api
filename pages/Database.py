@@ -299,8 +299,6 @@ if st.session_state.get("database_use_advanced_batches"):
     active_detail_batch = int(detail_batch)
     active_parse_batch = int(parse_batch)
     active_interval_seconds = int(auto_run_seconds)
-else:
-    st.session_state["database_auto_run_seconds"] = active_interval_seconds
 
 button_cols = st.columns([0.9, 0.9, 2.2])
 run_cycle = button_cols[0].button("Run One Sync Cycle", type="primary")
