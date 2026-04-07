@@ -235,7 +235,14 @@ if preset_default not in SYNC_PRESETS:
 
 controls = st.columns([1.2, 0.8, 1.0])
 player_raw = controls[0].text_input("Player ID or OpenDota URL", value=player_default, key="database_player_raw")
-window_days = controls[1].number_input("Window (days)", min_value=30, max_value=365, value=window_default, step=1, key="database_window_days")
+window_days = controls[1].number_input(
+    "Window (days)",
+    min_value=30,
+    value=window_default,
+    step=1,
+    key="database_window_days",
+    help="How far back the background cache should cover. Default is 365 days, but you can set a larger window.",
+)
 sync_preset = controls[2].selectbox(
     "Sync Speed",
     options=list(SYNC_PRESETS.keys()),
@@ -247,15 +254,26 @@ st.caption(_preset_help_text(sync_preset))
 
 secondary = st.columns([1.4, 1.0, 1.0])
 cooldown_minutes = secondary[0].number_input(
-    "Retry after rate limit (min)",
+    "Wait after 429 (min)",
     min_value=5,
     max_value=240,
     value=cooldown_default,
     step=5,
     key="database_cooldown_minutes",
+    help="If OpenDota returns a rate-limit error (HTTP 429), the page waits this many minutes before the next automatic attempt.",
 )
-table_limit = secondary[1].number_input("Rows", min_value=10, max_value=200, value=50, step=10)
+table_limit = secondary[1].number_input(
+    "Matches shown",
+    min_value=10,
+    max_value=200,
+    value=50,
+    step=10,
+    help="How many cached matches to display in the table below. This does not limit the database job itself.",
+)
 auto_run = secondary[2].checkbox("Auto-fill while this page stays open", value=auto_default, key="database_auto_run")
+st.caption(
+    f"If OpenDota rate-limits the job with HTTP 429, auto-fill pauses for {int(cooldown_minutes)} minute(s) and then tries again."
+)
 
 active_detail_batch = SYNC_PRESETS[sync_preset]["detail_batch"]
 active_parse_batch = SYNC_PRESETS[sync_preset]["parse_batch"]
