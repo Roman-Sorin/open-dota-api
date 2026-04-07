@@ -1288,6 +1288,7 @@ def _render_sortable_item_winrates_table(item_wr_rows: list[dict[str, object]]) 
         won = int(row.get("wins_with_item", 0))
         lost = matches - won
         avg_timing = float(row["avg_item_timing_min"]) if row.get("avg_item_timing_min") is not None else None
+        timing_sort_value = "" if avg_timing is None else f"{avg_timing:.3f}"
         icon_html = _render_item_icon_html(
             image_url=str(row.get("item_image", "")),
             item_name=item_name,
@@ -1295,7 +1296,7 @@ def _render_sortable_item_winrates_table(item_wr_rows: list[dict[str, object]]) 
             is_buff=bool(row.get("is_buff")),
         )
         rows_html += (
-            f'<tr data-item="{html.escape(item_name.lower())}" data-wr="{item_wr}" data-matches="{matches}" data-won="{won}" data-lost="{lost}">'
+            f'<tr data-item="{html.escape(item_name.lower())}" data-timing="{timing_sort_value}" data-wr="{item_wr}" data-matches="{matches}" data-won="{won}" data-lost="{lost}">'
             "<td>"
             '<div class="item-winrate-item-cell">'
             f"{icon_html}"
@@ -1345,7 +1346,7 @@ def _render_sortable_item_winrates_table(item_wr_rows: list[dict[str, object]]) 
         <table class="recent-matches-table" id="item-winrates-table">
           <thead>
             <tr>
-              <th data-sort-key="item" data-default-dir="asc">Item<span class="sort-indicator"></span></th>
+              <th data-sort-key="timing" data-default-dir="asc">Item<span class="sort-indicator"></span></th>
               <th data-sort-key="wr" data-default-dir="desc">WR<span class="sort-indicator">v</span></th>
               <th data-sort-key="matches" data-default-dir="desc">Matches<span class="sort-indicator"></span></th>
               <th data-sort-key="won" data-default-dir="desc">Won<span class="sort-indicator"></span></th>
@@ -1378,6 +1379,18 @@ def _render_sortable_item_winrates_table(item_wr_rows: list[dict[str, object]]) 
             rows.sort((a, b) => {{
               const av = a.dataset[key] ?? '';
               const bv = b.dataset[key] ?? '';
+              if (key === 'timing') {{
+                const aMissing = av === '';
+                const bMissing = bv === '';
+                if (aMissing || bMissing) {{
+                  if (aMissing && bMissing) return (a.dataset.item ?? '').localeCompare(b.dataset.item ?? '');
+                  return aMissing ? 1 : -1;
+                }}
+                const an = Number(av);
+                const bn = Number(bv);
+                if (an !== bn) return dir === 'asc' ? an - bn : bn - an;
+                return (a.dataset.item ?? '').localeCompare(b.dataset.item ?? '');
+              }}
               if (key === 'item') {{
                 return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
               }}

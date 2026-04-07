@@ -580,6 +580,7 @@ CLI remains available as a secondary interface.
 - `Item Winrates` now reuses the same table-shell styling as `Recent Matches`, so both sections share the same border/divider rhythm instead of maintaining two near-duplicate HTML table styles.
 - Final parity fix: `Item Winrates` no longer uses `st.html`; it renders through the same markdown container path as `Recent Matches`, which removes the remaining wrapper-level style drift that users still observed in production DOM.
 - To restore header-click sorting without losing custom icon/timing/buff rendering, `Item Winrates` now uses a small client-side sortable table component; default order still starts from highest `WR`.
+- Follow-up UX tweak: clicking the `Item` header now sorts by average timing (earliest to latest, then reversed on second click) instead of alphabetic item name order.
 - Centralized parse-based item timing backfill behind `backfill_item_timing_details(...)`; `load_match_snapshot(..., hydrate_details=True)` now invokes it automatically for cached final-inventory matches missing timing data, and `scripts/backfill_item_timings.py` can be used to run one-off patch-scoped backfills against the local cache.
 
 ## 2026-03-26 reported bad-match exclusion

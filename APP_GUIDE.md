@@ -65,6 +65,7 @@ The project includes two interfaces:
 - `Item Winrates` reuses the same table shell styling as `Recent Matches`, keeping borders, row dividers, and spacing consistent across both sections
 - `Item Winrates` now renders through the same Streamlit markdown container path as `Recent Matches`, so wrapper-level border/padding differences from `stHtml` no longer apply
 - `Item Winrates` column headers are clickable again for client-side sorting while preserving item icon chips, timings, and buff badges
+- In `Item Winrates`, the `Item` header sorts by average item timing instead of alphabetic item name order
 - Item winrates also include end-of-match consumable buffs (`Aghanim's Scepter`, `Aghanim's Shard`, `Moon Shard`) when cached match details expose them; buff entries are marked with a small `buff` chip on the item icon and use the same icon timing treatment as recent-match items
 - Item winrates show an explicit coverage warning when some matches still lack cached item detail data, instead of silently undercounting them as if the snapshot were complete
 - Main dashboard refresh rehydrates legacy cached match-detail rows that are missing the selected-player `purchase_log`, so recent-match item timings can recover without manual cache deletion
