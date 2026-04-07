@@ -41,7 +41,7 @@ from webapp.styling import apply_cell_style
 
 
 st.set_page_config(page_title="Turbo Buff", layout="wide")
-OVERVIEW_SCHEMA_VERSION = 13
+OVERVIEW_SCHEMA_VERSION = 14
 DEFAULT_FILTER_BASELINE_DATE = date(2026, 3, 24)
 
 st.markdown(
@@ -1584,7 +1584,7 @@ if load_all_sections or load_item_winrates:
         show_error(exc)
 
 st.markdown("### Item Winrates")
-st.caption("Counts use cached purchase logs when available and fall back to final inventory/final slots otherwise.")
+st.caption("Counts use final inventory only. Cached match details can add backpack items; summary-only matches fall back to final slots.")
 item_snapshot_payload = _cache_get("item_rows_by_key", current_item_request_key)
 if item_snapshot_payload is None:
     item_snapshot_payload = _get_current_section_snapshot("item", current_item_request_key)

@@ -55,9 +55,9 @@ The project includes two interfaces:
 - Overview snapshots with suspicious per-hero zero `NW`/`Dmg`/`Max Dmg` rows are treated as stale and rebuilt automatically
 - Most frequent final items
 - Item winrate table (wins with item / matches with item), includes per-item match count
-- Item winrates count cached purchased items first; when cached `purchase_log` is missing, the app falls back to cached final inventory / summary final slots for that match
+- Item winrates count only end-of-match inventory items; cached match details add backpack slots, and summary-only fallback uses final slot columns only
 - Item winrates show an explicit coverage warning when some matches still lack cached item detail data, instead of silently undercounting them as if the snapshot were complete
-- Main dashboard refresh rehydrates legacy cached match-detail rows that are missing the selected-player `purchase_log`, so item timings and purchased-item coverage can recover without manual cache deletion
+- Main dashboard refresh rehydrates legacy cached match-detail rows that are missing the selected-player `purchase_log`, so recent-match item timings can recover without manual cache deletion
 - Item winrate table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red
 - Item winrates section has a safe legacy fallback path so mixed deploy/runtime restarts do not crash the section if the process still holds an older service object
 - Item winrate table no longer shows Avg K/D/A or derived KDA columns
@@ -133,7 +133,7 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - Some Turbo rows from `players/{id}/matches` can have empty item slots.
 - Match-detail-heavy fields are hydrated during the main dashboard refresh and then reused from local storage by all sections.
 - Some requested metrics may depend on detail payload fields that are not guaranteed in every parsed match. Lane-derived values are currently not shown in the UI until the data source is made reliable.
-- `purchase_log` is often incomplete; purchased-item stats may have partial coverage.
+- `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
 
 ## Troubleshooting
 

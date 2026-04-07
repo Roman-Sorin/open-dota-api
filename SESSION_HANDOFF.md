@@ -571,6 +571,7 @@ CLI remains available as a secondary interface.
 - Root cause refinement from live verification: the reported Spectre matches were not parsed by OpenDota yet (`version: null`), so no `purchase_log` existed for the app to read until a replay parse completed.
 - Added `OpenDotaClient.request_match_parse(...)` and `DotaAnalyticsService.repair_recent_match_item_timings(...)` so the app can request parses for visible recent matches, poll briefly, refresh cached details, and rebuild the section once timing data becomes available.
 - Added regression coverage in `tests/test_match_store.py` for the explicit parse-repair flow and verified against the live Spectre match id `8757792129` that a parse request eventually yields `purchase_log`.
+- Re-scoped dashboard `Item Winrates` back to end-of-match inventory only: cached detail rows now contribute final slots plus backpack, while `purchase_log` remains timing-only for recent matches so temporary buys like `Tango`, `TP`, `Magic Stick`, and `Iron Branch` do not pollute item winrates.
 
 ## 2026-03-26 reported bad-match exclusion
 

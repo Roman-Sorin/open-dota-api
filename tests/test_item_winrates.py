@@ -13,6 +13,11 @@ class _FakeClient:
             "bkb": {"id": 3, "dname": "Black King Bar", "img": "/apps/dota2/images/items/black_king_bar.png"},
             "abyssal_blade": {"id": 4, "dname": "Abyssal Blade", "img": "/apps/dota2/images/items/abyssal_blade.png"},
             "basher": {"id": 5, "dname": "Skull Basher", "img": "/apps/dota2/images/items/basher.png"},
+            "tango": {"id": 6, "dname": "Tango", "img": "/apps/dota2/images/items/tango.png"},
+            "magic_stick": {"id": 7, "dname": "Magic Stick", "img": "/apps/dota2/images/items/magic_stick.png"},
+            "branches": {"id": 8, "dname": "Iron Branch", "img": "/apps/dota2/images/items/branches.png"},
+            "quelling_blade": {"id": 9, "dname": "Quelling Blade", "img": "/apps/dota2/images/items/quelling_blade.png"},
+            "tpscroll": {"id": 10, "dname": "Town Portal Scroll", "img": "/apps/dota2/images/items/tpscroll.png"},
         }
 
     def get_constants_patch(self) -> list[dict]:
@@ -90,28 +95,36 @@ def test_item_winrates_cache_only_does_not_fetch_missing_match_details() -> None
     assert rows == []
 
 
-def test_item_winrate_snapshot_uses_cached_purchase_logs_not_just_final_slots() -> None:
+def test_item_winrate_snapshot_ignores_purchase_log_only_items_and_counts_final_inventory_and_backpack() -> None:
     service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
     matches = [
         _match(match_id, True, [0, 0, 0, 0, 0, 0])
-        for match_id in range(1, 65)
+        for match_id in range(1, 9)
     ]
-    detailed_ids = list(range(1, 13))
+    detailed_ids = list(range(1, 7))
     for match_id in detailed_ids:
         service._match_details_memory_cache[match_id] = {
             "players": [
                 {
                     "account_id": 123,
                     "player_slot": 0,
-                    "item_0": 4 if match_id <= 5 else 1,
-                    "item_1": 1,
+                    "item_0": 1,
+                    "item_1": 0,
                     "item_2": 0,
                     "item_3": 0,
                     "item_4": 0,
                     "item_5": 0,
+                    "backpack_0": 4 if match_id <= 4 else 0,
+                    "backpack_1": 0,
+                    "backpack_2": 0,
                     "purchase_log": [
-                        {"key": "abyssal_blade", "time": 1200},
+                        {"key": "tango", "time": 0},
+                        {"key": "magic_stick", "time": 0},
+                        {"key": "branches", "time": 0},
+                        {"key": "quelling_blade", "time": 0},
+                        {"key": "tpscroll", "time": 0},
                         {"key": "manta", "time": 800},
+                        {"key": "abyssal_blade", "time": 1200},
                     ],
                 }
             ]
@@ -121,12 +134,74 @@ def test_item_winrate_snapshot_uses_cached_purchase_logs_not_just_final_slots() 
 
     abyssal = next(row for row in snapshot.rows if row["item"] == "Abyssal Blade")
     manta = next(row for row in snapshot.rows if row["item"] == "Manta Style")
-    assert snapshot.total_matches == 64
-    assert snapshot.detail_backed_matches == 12
-    assert snapshot.missing_matches == 52
+    assert snapshot.total_matches == 8
+    assert snapshot.detail_backed_matches == 6
+    assert snapshot.missing_matches == 2
     assert snapshot.is_complete is False
-    assert abyssal["matches_with_item"] == 12
-    assert manta["matches_with_item"] == 12
+    assert abyssal["matches_with_item"] == 4
+    assert manta["matches_with_item"] == 6
+    assert all(
+        row["item"] not in {"Tango", "Magic Stick", "Iron Branch", "Quelling Blade", "Town Portal Scroll"}
+        for row in snapshot.rows
+    )
+    assert "final-inventory/backpack coverage for 6 match(es)" in snapshot.note
+
+
+def test_item_winrates_mix_summary_slots_with_cached_detail_backpack_without_counting_purchase_log_noise() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        _match(1, True, [1]),
+        _match(2, False, [0, 0, 0, 0, 0, 0]),
+        _match(3, True, [0, 0, 0, 0, 0, 0]),
+    ]
+    service._match_details_memory_cache[2] = {
+        "players": [
+            {
+                "account_id": 123,
+                "player_slot": 0,
+                "item_0": 0,
+                "item_1": 0,
+                "item_2": 0,
+                "item_3": 0,
+                "item_4": 0,
+                "item_5": 0,
+                "backpack_0": 4,
+                "backpack_1": 0,
+                "backpack_2": 0,
+                "purchase_log": [
+                    {"key": "tango", "time": 0},
+                    {"key": "magic_stick", "time": 0},
+                ],
+            }
+        ]
+    }
+    service._match_details_memory_cache[3] = {
+        "players": [
+            {
+                "account_id": 123,
+                "player_slot": 0,
+                "item_0": 0,
+                "item_1": 0,
+                "item_2": 0,
+                "item_3": 0,
+                "item_4": 0,
+                "item_5": 0,
+                "backpack_0": 0,
+                "backpack_1": 0,
+                "backpack_2": 0,
+                "purchase_log": [
+                    {"key": "tango", "time": 0},
+                    {"key": "magic_stick", "time": 0},
+                ],
+            }
+        ]
+    }
+
+    rows = service.get_item_winrates(player_id=123, matches=matches, top_n=20, allow_detail_fetch=False)
+
+    assert [row["item"] for row in rows] == ["Manta Style", "Abyssal Blade"]
+    assert next(row for row in rows if row["item"] == "Manta Style")["matches_with_item"] == 1
+    assert next(row for row in rows if row["item"] == "Abyssal Blade")["matches_with_item"] == 1
 
 
 def test_item_winrate_snapshot_marks_summary_only_matches_as_partial() -> None:

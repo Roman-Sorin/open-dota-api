@@ -806,6 +806,12 @@ class DotaAnalyticsService:
     def _player_row_item_ids(player_row: dict) -> list[int]:
         return [int(player_row.get(f"item_{i}") or 0) for i in range(6)]
 
+    @staticmethod
+    def _player_row_item_winrate_ids(player_row: dict) -> list[int]:
+        item_ids = [int(player_row.get(f"item_{i}") or 0) for i in range(6)]
+        item_ids.extend(int(player_row.get(f"backpack_{i}") or 0) for i in range(3))
+        return item_ids
+
     def _player_row_purchase_item_ids(self, player_row: dict) -> set[int]:
         purchase_log = player_row.get("purchase_log") if isinstance(player_row, dict) else None
         if not isinstance(purchase_log, list):
@@ -1534,9 +1540,8 @@ class DotaAnalyticsService:
                         player_slot=match.player_slot,
                     )
                     if player_row:
-                        detail_items = set(self._player_row_item_ids(player_row))
+                        detail_items = set(self._player_row_item_winrate_ids(player_row))
                         detail_items.discard(0)
-                        detail_items.update(self._player_row_purchase_item_ids(player_row))
                         if detail_items:
                             unique_items.update(detail_items)
                             detail_backed_this_match = True
@@ -1583,7 +1588,7 @@ class DotaAnalyticsService:
         notes: list[str] = []
         if detail_backed_matches > 0:
             notes.append(
-                f"Cached match details contributed purchase/final-item coverage for {detail_backed_matches} match(es)."
+                f"Cached match details contributed final-inventory/backpack coverage for {detail_backed_matches} match(es)."
             )
         if summary_only_matches > 0:
             notes.append(

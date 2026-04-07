@@ -55,7 +55,7 @@ Turbo-only dashboard for your account:
 - Section caches are invalidated only by real dashboard sync timestamps; local enrichment writes do not count as a new snapshot and must not close already built sections
 - Section actions are refresh actions now; if dashboard data is newer than a section cache, the UI shows a stale hint instead of silently hiding that fact
 - Hero Overview snapshots with suspicious per-hero zero `NW`/`Dmg`/`Max Dmg` rows are auto-invalidated and rebuilt instead of being rendered as valid data
-- Item winrates count a match when the item appears in cached `purchase_log`; if that is unavailable, the app falls back to cached final inventory / summary final slots
+- Item winrates count only end-of-match inventory items; cached match details add backpack slots, and summary-only fallback uses final slot columns only
 - Item winrates now show a coverage warning when cached match details are missing, instead of silently presenting partial counts as complete analytics
 - Item winrates table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red
 - Item winrates UI has a safe legacy fallback, so mixed deploy/runtime restarts do not crash if an older service object is still alive during a rerun
@@ -145,7 +145,7 @@ tests/
 - Player matches are persisted in local `SQLite` storage and reused for later filters/analytics.
 - Match details are persisted separately and reused for enrichment-heavy sections.
 - The service performs incremental syncs instead of refetching whole history on each reload.
-- `purchase_log` is often incomplete, so purchased-item analytics may cover only part of matches.
+- `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
 - Without API key, rate limits can be hit.
 
 ## Dependency policy
