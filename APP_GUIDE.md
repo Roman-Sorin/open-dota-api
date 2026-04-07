@@ -165,6 +165,23 @@ For already cached matches in a specific patch window, run:
 python scripts/backfill_item_timings.py --player 1233793238 --patch 7.41 --patch 7.41a --batch-size 100
 ```
 
+## Autonomous cache worker
+
+If you want the cache-fill job to run without pressing buttons in the web UI, use:
+
+```powershell
+python scripts/background_sync_worker.py --player 1233793238 --window-days 365 --interval-seconds 60 --pause-after-429-seconds 600
+```
+
+What it does:
+
+- runs the same bounded sync cycle used by the `Database` page
+- keeps looping without the Streamlit page being open
+- sleeps between normal cycles
+- if OpenDota returns `HTTP 429`, sleeps longer and retries later
+
+Use `--once` if you want exactly one cycle and then exit.
+
 ## Troubleshooting
 
 - `ModuleNotFoundError`: activate `.venv` and reinstall requirements.

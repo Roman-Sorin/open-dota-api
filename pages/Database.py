@@ -396,7 +396,7 @@ else:
     st.caption(
         f"Observed over last {len(runs)} cycle(s): {detail_total} detail payload(s) fetched, "
         f"{parse_total} parse request(s) submitted, {rate_limited_runs} rate-limited cycle(s). "
-        f"Cooldown policy on this page is {int(cooldown_minutes)} minute(s) after a 429."
+        f"Current pause-after-429 on this page is {int(cooldown_seconds)} second(s)."
     )
 
 st.subheader("Cached Matches")

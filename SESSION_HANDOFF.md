@@ -646,6 +646,13 @@ CLI remains available as a secondary interface.
     - `Fast`
   - default auto interval changed from `120` sec to `60` sec (`Balanced`) after live OpenDota request checks showed rate-limit headers such as `X-Rate-Limit-Remaining-Minute` / `X-Rate-Limit-Remaining-Day`
   - added in-page usage instructions and terminology explanations so the page is understandable without reading repo docs
+  - replaced the awkward `Wait after 429` wording with a seconds-based pause control
+- Added standalone autonomous worker script:
+  - `scripts/background_sync_worker.py`
+  - purpose: keep running the cache sync loop without the Streamlit page being open
+  - behavior:
+    - normal cycle -> sleep `interval-seconds`
+    - `rate_limited` / `cooldown` -> sleep until retry time or configured pause-after-429
 - Explicit limitation documented in repo docs:
   - Streamlit Community Cloud does not provide a true always-on worker inside the page process
   - current implementation is cooperative only while the `Database` page is open

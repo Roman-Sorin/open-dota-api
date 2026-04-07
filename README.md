@@ -175,6 +175,23 @@ python scripts/backfill_item_timings.py --player 1233793238 --patch 7.41 --patch
 ```
 - Without API key, rate limits can be hit.
 
+## Autonomous cache worker
+
+If you want the cache job to run without pressing buttons in the UI, run the standalone worker:
+
+```bash
+python scripts/background_sync_worker.py --player 1233793238 --window-days 365 --interval-seconds 60 --pause-after-429-seconds 600
+```
+
+- This worker runs outside Streamlit UI.
+- It keeps looping on its own:
+  - sync summaries
+  - fetch missing match details
+  - submit replay parses
+  - sleep normally between cycles
+  - pause longer after `HTTP 429`
+- `--once` runs a single cycle and exits.
+
 ## Dependency policy
 
 - Runtime and test dependencies in [requirements.txt](/C:/development/projects/open-dota-api/requirements.txt) are pinned to exact versions.
