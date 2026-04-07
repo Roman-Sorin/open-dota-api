@@ -263,12 +263,12 @@ cooldown_seconds = secondary[0].number_input(
     help="If OpenDota returns HTTP 429, auto-fill pauses for this many seconds before trying again.",
 )
 table_limit = secondary[1].number_input(
-    "Matches shown",
+    "Newest matches shown",
     min_value=10,
     max_value=200,
     value=50,
     step=10,
-    help="How many cached matches to display in the table below. This does not limit the database job itself.",
+    help="How many of the newest cached matches to display below. This does not limit the database job itself.",
 )
 auto_run = secondary[2].checkbox("Auto-fill while this page stays open", value=auto_default, key="database_auto_run")
 st.caption(
@@ -403,6 +403,10 @@ st.subheader("Cached Matches")
 if not coverage.rows:
     st.info("No cached Turbo matches for the selected window yet.")
 else:
+    st.caption(
+        f"Showing newest {min(int(table_limit), len(coverage.rows))} of {len(coverage.rows)} cached match(es). "
+        "This table is newest-first, so older cached matches may already exist below the visible slice."
+    )
     _render_match_table(coverage.rows[: int(table_limit)], service)
 
 if auto_run:
