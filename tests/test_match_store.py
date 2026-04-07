@@ -837,3 +837,120 @@ def test_repair_recent_match_item_timings_requests_parse_and_rebuilds_recent_row
     assert status.completed == 1
     assert status.pending == 0
     assert [item.purchase_time_min for item in recent[0].items] == [8, 12, 15, 17, 20]
+
+
+def test_load_match_snapshot_auto_backfills_missing_item_timings_for_unparsed_details() -> None:
+    class _AutoParseTimingClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.parse_requested: set[int] = set()
+
+        def get_match_details(self, match_id: int) -> dict:
+            if match_id in self.parse_requested:
+                return {
+                    "match_id": match_id,
+                    "version": 22,
+                    "players": [
+                        {
+                            "account_id": 123,
+                            "player_slot": 0,
+                            "item_0": 2001,
+                            "item_1": 2002,
+                            "item_2": 0,
+                            "item_3": 0,
+                            "item_4": 0,
+                            "item_5": 0,
+                            "purchase_log": [
+                                {"key": "phylactery", "time": 480},
+                                {"key": "orchid", "time": 720},
+                            ],
+                        }
+                    ],
+                }
+            return {
+                "match_id": match_id,
+                "version": None,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0,
+                        "item_0": 2001,
+                        "item_1": 2002,
+                        "item_2": 0,
+                        "item_3": 0,
+                        "item_4": 0,
+                        "item_5": 0,
+                    }
+                ],
+            }
+
+        def request_match_parse(self, match_id: int) -> int | None:
+            self.parse_requested.add(match_id)
+            return 1
+
+    client = _AutoParseTimingClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    service.references.item_ids_by_key.update(
+        {
+            "phylactery": 2001,
+            "orchid": 2002,
+        }
+    )
+    service.references.item_names_by_id.update(
+        {
+            2001: "Phylactery",
+            2002: "Orchid Malevolence",
+        }
+    )
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 800001,
+                "start_time": 1771552800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 3,
+                "deaths": 1,
+                "assists": 14,
+                "duration": 1276,
+                "hero_id": 1,
+                "item_0": 2001,
+                "item_1": 2002,
+                "item_2": 0,
+                "item_3": 0,
+                "item_4": 0,
+                "item_5": 0,
+            }
+        ],
+    )
+    store.upsert_match_detail(
+        800001,
+        {
+            "match_id": 800001,
+            "version": None,
+            "players": [
+                {
+                    "account_id": 123,
+                    "player_slot": 0,
+                    "item_0": 2001,
+                    "item_1": 2002,
+                    "item_2": 0,
+                    "item_3": 0,
+                    "item_4": 0,
+                    "item_5": 0,
+                }
+            ],
+        },
+    )
+
+    filters = QueryFilters(player_id=123, game_mode=23, game_mode_name="Turbo")
+    matches, status = service.load_match_snapshot(filters, force_sync=False, hydrate_details=True)
+    recent = service.build_recent_hero_matches(123, matches, limit=1, allow_detail_fetch=False)
+
+    assert status.requested == 1
+    assert 800001 in client.parse_requested
+    assert [item.purchase_time_min for item in recent[0].items] == [8, 12]

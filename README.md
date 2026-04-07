@@ -44,6 +44,7 @@ Turbo-only dashboard for your account:
 - Matchups section now uses the same two-table layout everywhere: `Teammates` and `Opponents`
   - Both `Selected Hero` and `All Heroes` show the same column order: `Hero Icon / Hero / WR / Matches / Won / Lost`
   - In Matchups, only `WR` is color-coded; `Won` and `Lost` stay neutral
+  - In `All Heroes`, `Player Teammates` default to highest `WR` first, while `Player Opponents` default to lowest `WR` first
   - Matchup winrates remain numeric under the hood so both built-in sorting and user-click sorting treat `100.00` correctly
   - Changing `Min matchup matches` only filters the already built matchup snapshot; it does not require pressing `Refresh Matchups` again
   - `Refresh Matchups` is cache-only for match details and does not call OpenDota for missing details
@@ -60,6 +61,7 @@ Turbo-only dashboard for your account:
 - Item winrates use a dedicated section-schema cache key so legacy session payloads from the old purchase-log behavior are not reused after updates
 - Item winrates also self-rebuild from cached final inventory/backpack data when a mixed-runtime session still exposes a legacy purchase-based snapshot after deploy
 - Item winrates include average timing as a small badge on the item icon, sourced from cached timing data for matches where the item remains in the final inventory/backpack snapshot
+- Item timing chips are rounded to whole minutes and item icons keep their original aspect ratio instead of being forced into square thumbnails
 - Item winrates also include end-of-match consumable buffs (`Aghanim's Scepter`, `Aghanim's Shard`, `Moon Shard`) when cached details expose them, and those rows are marked with a small `buff` chip on the item icon
 - Item winrates now show a coverage warning when cached match details are missing, instead of silently presenting partial counts as complete analytics
 - Item winrates table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red
@@ -148,10 +150,19 @@ tests/
 
 - Some `players/{id}/matches` rows may have empty `item_0..item_5` (especially Turbo cases).
 - Missing detail-heavy fields are hydrated during the main dashboard refresh and then reused from local storage by all sections.
+- Main dashboard refresh now also attempts OpenDota parse-based backfill for missing item timings on cached final-inventory matches, so newly synced matches usually do not require pressing the manual repair button.
 - Player matches are persisted in local `SQLite` storage and reused for later filters/analytics.
 - Match details are persisted separately and reused for enrichment-heavy sections.
 - The service performs incremental syncs instead of refetching whole history on each reload.
 - `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
+
+## Timing backfill job
+
+For already cached matches, you can backfill missing parsed item timings without opening the UI:
+
+```bash
+python scripts/backfill_item_timings.py --player 1233793238 --patch 7.41 --patch 7.41a --batch-size 100
+```
 - Without API key, rate limits can be hit.
 
 ## Dependency policy

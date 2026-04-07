@@ -575,6 +575,9 @@ CLI remains available as a secondary interface.
 - Added an `Item Winrates` section-schema request key in the Streamlit UI so older in-session payloads from the legacy purchase-log implementation are invalidated after deploy, and selected-hero sections now auto-open for the active hero snapshot instead of requiring `Refresh All Hero Sections` just to become visible.
 - Hardened `Item Winrates` against mixed-runtime deploy sessions by rebuilding the section directly from cached final inventory/backpack data when a legacy purchase-based snapshot slips through, and added average item timing as a badge rendered on each item icon for final-inventory items only.
 - Added consumable-buff support to both `Recent Matches` and `Item Winrates`: cached detail rows now surface consumed `Aghanim's Scepter`, `Aghanim's Shard`, and `Moon Shard` with timing when available, plus visible `buff` chips on the item icons in the UI.
+- Updated `Matchups` default ordering so global `Player Teammates` render highest-`WR` first while global `Player Opponents` render lowest-`WR` first.
+- Fixed `Item Winrates` item thumbnails to preserve the original Dota item aspect ratio, and timing chips now round to whole minutes.
+- Centralized parse-based item timing backfill behind `backfill_item_timing_details(...)`; `load_match_snapshot(..., hydrate_details=True)` now invokes it automatically for cached final-inventory matches missing timing data, and `scripts/backfill_item_timings.py` can be used to run one-off patch-scoped backfills against the local cache.
 
 ## 2026-03-26 reported bad-match exclusion
 

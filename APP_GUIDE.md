@@ -43,6 +43,7 @@ The project includes two interfaces:
   - Both `Selected Hero` and `All Heroes` use `Hero Icon / Hero / WR / Matches / Won / Lost`
   - Matchup tables intentionally omit `Avg K/D/A` and `KDA`
   - In Matchups, only `WR` uses semantic color; `Won` and `Lost` stay neutral
+  - In `All Heroes`, `Player Teammates` default to highest `WR` first and `Player Opponents` default to lowest `WR` first
   - Matchup `WR` stays numeric in the dataframe; percent formatting is applied only at render time so sorting remains correct
   - Adjusting `Min matchup matches` filters the cached matchup rows and does not require a second `Refresh Matchups`
   - `Refresh Matchups` uses cached match details only; it will not spend API calls to hydrate missing details
@@ -60,9 +61,11 @@ The project includes two interfaces:
 - Item winrates use a dedicated section-schema cache key so older session payloads built from legacy purchase-log logic are not reused after deploys
 - Item winrates self-rebuild from cached final inventory/backpack data in the UI if a mixed-runtime session still surfaces a legacy purchase-based snapshot after deploy
 - Item winrates show average timing as a small badge on the item icon, using cached item timing data (`purchase_log` / `first_purchase_time` / Aegis objective time when available) for matches where the item is part of the end-of-match inventory snapshot
+- Item timing chips round to whole minutes, and item thumbnails preserve the original Dota item aspect ratio instead of being forced into square boxes
 - Item winrates also include end-of-match consumable buffs (`Aghanim's Scepter`, `Aghanim's Shard`, `Moon Shard`) when cached match details expose them; buff entries are marked with a small `buff` chip on the item icon and use the same icon timing treatment as recent-match items
 - Item winrates show an explicit coverage warning when some matches still lack cached item detail data, instead of silently undercounting them as if the snapshot were complete
 - Main dashboard refresh rehydrates legacy cached match-detail rows that are missing the selected-player `purchase_log`, so recent-match item timings can recover without manual cache deletion
+- Main dashboard refresh also attempts parse-based timing backfill for cached final-inventory matches that still have `version = None`, reducing the need to press the manual repair button for newly synced matches
 - Item winrate table shows `Matches`, `Won`, and `Lost`; `Won` is green and `Lost` is red
 - Item winrates section has a safe legacy fallback path so mixed deploy/runtime restarts do not crash the section if the process still holds an older service object
 - Item winrate table no longer shows Avg K/D/A or derived KDA columns
@@ -141,6 +144,14 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - Match-detail-heavy fields are hydrated during the main dashboard refresh and then reused from local storage by all sections.
 - Some requested metrics may depend on detail payload fields that are not guaranteed in every parsed match. Lane-derived values are currently not shown in the UI until the data source is made reliable.
 - `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
+
+## Batch timing repair
+
+For already cached matches in a specific patch window, run:
+
+```powershell
+python scripts/backfill_item_timings.py --player 1233793238 --patch 7.41 --patch 7.41a --batch-size 100
+```
 
 ## Troubleshooting
 

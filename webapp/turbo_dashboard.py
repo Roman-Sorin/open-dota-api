@@ -264,13 +264,17 @@ st.markdown(
         position: relative;
         width: 34px;
         flex: 0 0 34px;
+        display: inline-flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-bottom: 0.15rem;
     }
     .recent-item-inline img {
         width: 34px;
-        height: 34px;
+        height: auto;
         border-radius: 5px;
         display: block;
-        margin: 0 auto 0.15rem auto;
+        margin: 0 auto;
     }
     .recent-item-chip {
         position: absolute;
@@ -1258,10 +1262,7 @@ def _get_item_winrate_snapshot_safe(
 def _format_item_timing_label(timing_min: float | None) -> str:
     if timing_min is None:
         return "-"
-    rounded = round(float(timing_min), 1)
-    if float(rounded).is_integer():
-        return f"{int(rounded)}m"
-    return f"{rounded:.1f}m"
+    return f"{int(round(float(timing_min)))}m"
 
 
 def _render_item_icon_html(*, image_url: str, item_name: str, timing_min: float | int | None, is_buff: bool) -> str:
@@ -1920,7 +1921,7 @@ if isinstance(matchup_rows, dict):
                 st.caption("Player Opponents")
                 st.dataframe(
                     matchup_utils.build_matchup_styler(
-                        matchup_utils.sort_matchup_summary_dataframe(global_matchup_summary, best_first=True)
+                        matchup_utils.sort_matchup_summary_dataframe(global_matchup_summary, best_first=False)
                     ),
                     use_container_width=True,
                     hide_index=True,
@@ -2066,21 +2067,23 @@ if isinstance(item_snapshot_payload, dict):
         st.html(
             (
                 "<style>"
-                ".item-winrates-table{width:100%;border-collapse:collapse;font-size:0.84rem;margin-top:0.45rem;}"
+                ".item-winrates-wrap{overflow-x:auto;margin-top:0.5rem;}"
+                ".item-winrates-table{width:100%;min-width:640px;border-collapse:collapse;font-size:0.84rem;}"
                 ".item-winrates-table th{text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;opacity:0.72;padding:0.45rem 0.55rem;border-bottom:1px solid rgba(49,51,63,0.18);white-space:nowrap;}"
-                ".item-winrates-table td{padding:0.5rem 0.55rem;border-bottom:1px solid rgba(49,51,63,0.08);vertical-align:middle;}"
+                ".item-winrates-table td{padding:0.55rem;border-bottom:1px solid rgba(49,51,63,0.1);vertical-align:middle;}"
                 ".item-winrate-item-cell{display:flex;align-items:center;gap:0.6rem;min-width:220px;}"
-                ".item-winrate-item-name{font-weight:600;line-height:1.2;}"
+                ".item-winrate-item-name{font-weight:700;line-height:1.1;}"
                 ".item-winrate-num{white-space:nowrap;font-weight:700;}"
                 ".item-winrate-win{color:#23a55a;font-weight:700;}"
                 ".item-winrate-loss{color:#d9534f;font-weight:700;}"
-                ".recent-item-inline{position:relative;width:34px;flex:0 0 34px;}"
-                ".recent-item-inline img{width:34px;height:34px;border-radius:5px;display:block;margin:0 auto 0.15rem auto;}"
-                ".recent-item-inline-badge{position:absolute;top:2px;right:2px;padding:1px 3px;border-radius:4px;font-size:0.54rem;line-height:1.05;font-weight:700;color:#111827;background:rgba(245,158,11,0.96);}"
-                ".recent-item-inline-time{font-size:0.63rem;line-height:1.1;font-weight:700;white-space:nowrap;position:absolute;left:2px;bottom:2px;padding:1px 3px;border-radius:4px;color:#fff;background:rgba(17,24,39,0.92);}"
-                ".recent-item-inline-time.na{opacity:0.58;}"
+                ".recent-item-inline{position:relative;width:34px;flex:0 0 34px;display:inline-flex;align-items:flex-start;justify-content:center;padding-bottom:0.15rem;}"
+                ".recent-item-inline img{width:34px;height:auto;border-radius:5px;display:block;margin:0 auto;}"
+                ".recent-item-chip{position:absolute;min-width:16px;height:16px;padding:0 4px;border-radius:999px;font-size:0.6rem;font-weight:700;line-height:16px;text-align:center;white-space:nowrap;color:#fff;background:rgba(17,24,39,0.92);border:1px solid rgba(255,255,255,0.16);}"
+                ".recent-item-chip-time{left:-5px;bottom:-5px;}"
+                ".recent-item-chip-buff{top:-5px;right:-5px;color:#111827;background:rgba(245,158,11,0.96);border-color:rgba(17,24,39,0.2);}"
+                ".recent-item-chip.na{opacity:0.58;}"
                 "</style>"
-                '<table class="item-winrates-table">'
+                '<div class="item-winrates-wrap"><table class="item-winrates-table">'
                 "<thead><tr>"
                 "<th>Item</th>"
                 "<th>WR</th>"
@@ -2089,7 +2092,7 @@ if isinstance(item_snapshot_payload, dict):
                 "<th>Lost</th>"
                 "</tr></thead>"
                 f"<tbody>{item_rows_html}</tbody>"
-                "</table>"
+                "</table></div>"
             )
         )
     else:

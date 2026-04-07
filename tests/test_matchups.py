@@ -175,3 +175,21 @@ def test_sort_matchup_summary_dataframe_orders_full_matchup_list() -> None:
 
     assert list(sort_matchup_summary_dataframe(summary, best_first=True)["Hero"]) == ["Axe", "Bane", "Lion"]
     assert list(sort_matchup_summary_dataframe(summary, best_first=False)["Hero"]) == ["Lion", "Bane", "Axe"]
+
+
+def test_player_matchup_default_ordering_matches_requested_wr_direction() -> None:
+    df = build_matchup_dataframe(
+        [
+            MatchupRow(hero_id=1, hero="Axe", hero_image="axe.png", matches=4, wins=3, losses=1, winrate=75.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0),
+            MatchupRow(hero_id=2, hero="Bane", hero_image="bane.png", matches=4, wins=2, losses=2, winrate=50.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0),
+            MatchupRow(hero_id=3, hero="Lion", hero_image="lion.png", matches=4, wins=1, losses=3, winrate=25.0, avg_kills=0.0, avg_deaths=0.0, avg_assists=0.0, kda=0.0),
+        ],
+        min_matches=1,
+    )
+
+    summary = build_matchup_summary_dataframe(df)
+    teammates = sort_matchup_summary_dataframe(summary, best_first=True)
+    opponents = sort_matchup_summary_dataframe(summary, best_first=False)
+
+    assert list(teammates["Hero"]) == ["Axe", "Bane", "Lion"]
+    assert list(opponents["Hero"]) == ["Lion", "Bane", "Axe"]

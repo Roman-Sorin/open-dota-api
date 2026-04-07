@@ -884,6 +884,13 @@ class DotaAnalyticsService:
                 purchased.add(item_id)
         return purchased
 
+    def _player_row_has_tracked_final_items(self, player_row: dict | None) -> bool:
+        if not isinstance(player_row, dict):
+            return False
+        if any(self._player_row_item_winrate_ids(player_row)):
+            return True
+        return bool(self._player_row_buff_items(player_row))
+
     def _has_match_details_cached(self, match_id: int) -> bool:
         if match_id in self._match_details_memory_cache:
             return True
@@ -1050,6 +1057,14 @@ class DotaAnalyticsService:
                 completed=0,
                 remaining=len(missing_before),
                 rate_limited=False,
+            )
+        if hydrate_details and matches:
+            self.backfill_item_timing_details(
+                player_id=filters.player_id,
+                matches=matches,
+                batch_size=len(matches),
+                poll_timeout_seconds=30,
+                poll_interval_seconds=3,
             )
         return matches, hydration_status
 
@@ -1440,21 +1455,44 @@ class DotaAnalyticsService:
         poll_timeout_seconds: int = 75,
         poll_interval_seconds: int = 5,
     ) -> RecentItemTimingRepairStatus:
-        target_matches = matches[:limit]
+        return self.backfill_item_timing_details(
+            player_id=player_id,
+            matches=matches[:limit],
+            batch_size=limit,
+            poll_timeout_seconds=poll_timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+        )
+
+    def backfill_item_timing_details(
+        self,
+        *,
+        player_id: int,
+        matches: list[MatchSummary],
+        batch_size: int = 20,
+        poll_timeout_seconds: int = 75,
+        poll_interval_seconds: int = 5,
+    ) -> RecentItemTimingRepairStatus:
+        target_matches = matches[:batch_size] if batch_size > 0 else list(matches)
         if not target_matches:
             return RecentItemTimingRepairStatus(requested=0, submitted=0, completed=0, pending=0, already_available=0)
 
         requested_ids: list[int] = []
         already_available = 0
         for match in target_matches:
-            details = self.get_match_details_if_cached(match.match_id)
-            if not isinstance(details, dict):
-                details = self.get_or_fetch_match_details(match.match_id)
+            try:
+                details = self.get_match_details_if_cached(match.match_id)
+                if not isinstance(details, dict):
+                    details = self.get_or_fetch_match_details(match.match_id)
+            except OpenDotaRateLimitError:
+                break
             player_row = self._extract_player_from_match_details(
                 details,
                 player_id=player_id,
                 player_slot=match.player_slot,
             )
+            if not self._player_row_has_tracked_final_items(player_row):
+                already_available += 1
+                continue
             if self._player_row_has_timing_data(player_row):
                 already_available += 1
                 continue
@@ -1476,7 +1514,10 @@ class DotaAnalyticsService:
                 match_id = int(match.match_id)
                 if match_id not in pending_ids:
                     continue
-                details = self.get_or_fetch_match_details(match_id, force_refresh=True)
+                try:
+                    details = self.get_or_fetch_match_details(match_id, force_refresh=True)
+                except OpenDotaRateLimitError:
+                    continue
                 player_row = self._extract_player_from_match_details(
                     details,
                     player_id=player_id,
