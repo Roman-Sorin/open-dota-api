@@ -574,7 +574,7 @@ CLI remains available as a secondary interface.
 - Re-scoped dashboard `Item Winrates` back to end-of-match inventory only: cached detail rows now contribute final slots plus backpack, while `purchase_log` remains timing-only for recent matches so temporary buys like `Tango`, `TP`, `Magic Stick`, and `Iron Branch` do not pollute item winrates.
 - Added an `Item Winrates` section-schema request key in the Streamlit UI so older in-session payloads from the legacy purchase-log implementation are invalidated after deploy, and selected-hero sections now auto-open for the active hero snapshot instead of requiring `Refresh All Hero Sections` just to become visible.
 - Hardened `Item Winrates` against mixed-runtime deploy sessions by rebuilding the section directly from cached final inventory/backpack data when a legacy purchase-based snapshot slips through, and added average item timing as a badge rendered on each item icon for final-inventory items only.
-- Added consumable-buff support to both `Recent Matches` and `Item Winrates`: cached detail rows now surface consumed `Aghanim's Scepter`, `Aghanim's Shard`, and `Moon Shard` with timing when available, plus a visible `BUFF` badge in the UI.
+- Added consumable-buff support to both `Recent Matches` and `Item Winrates`: cached detail rows now surface consumed `Aghanim's Scepter`, `Aghanim's Shard`, and `Moon Shard` with timing when available, plus visible `buff` chips on the item icons in the UI.
 
 ## 2026-03-26 reported bad-match exclusion
 

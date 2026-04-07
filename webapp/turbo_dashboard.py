@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 
 import pandas as pd
 import streamlit as st
@@ -43,6 +44,16 @@ from webapp.styling import apply_cell_style
 st.set_page_config(page_title="Turbo Buff", layout="wide")
 OVERVIEW_SCHEMA_VERSION = 15
 ITEM_WINRATES_SCHEMA_VERSION = 3
+CONSUMABLE_BUFF_ITEM_KEYS: dict[str, int] = {
+    "moon_shard": 247,
+    "ultimate_scepter": 108,
+    "aghanims_shard": 609,
+}
+PERMANENT_BUFF_ITEM_KEYS: dict[int, str] = {
+    1: "moon_shard",
+    2: "ultimate_scepter",
+    12: "aghanims_shard",
+}
 DEFAULT_FILTER_BASELINE_DATE = date(2026, 3, 24)
 
 st.markdown(
@@ -228,8 +239,23 @@ st.markdown(
     .recent-items-inline {
         display: flex;
         align-items: flex-start;
+        justify-content: space-between;
         gap: 0.35rem;
         min-width: 236px;
+    }
+    .recent-items-main {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.35rem;
+        min-width: 0;
+    }
+    .recent-items-buffs {
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        gap: 0.35rem;
+        margin-left: auto;
+        min-width: 0;
     }
     .recent-items-inline.empty {
         opacity: 0.65;
@@ -246,32 +272,33 @@ st.markdown(
         display: block;
         margin: 0 auto 0.15rem auto;
     }
-    .recent-item-inline-badge {
+    .recent-item-chip {
         position: absolute;
-        top: 2px;
-        right: 2px;
-        padding: 1px 3px;
-        border-radius: 4px;
-        font-size: 0.54rem;
-        line-height: 1.05;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 999px;
+        font-size: 0.6rem;
         font-weight: 700;
-        color: #111827;
-        background: rgba(245, 158, 11, 0.96);
-    }
-    .recent-item-inline-time {
-        font-size: 0.63rem;
-        line-height: 1.1;
-        font-weight: 700;
+        line-height: 16px;
+        text-align: center;
         white-space: nowrap;
-        position: absolute;
-        left: 2px;
-        bottom: 2px;
-        padding: 1px 3px;
-        border-radius: 4px;
         color: #fff;
         background: rgba(17, 24, 39, 0.92);
+        border: 1px solid rgba(255, 255, 255, 0.16);
     }
-    .recent-item-inline-time.na {
+    .recent-item-chip-time {
+        left: -5px;
+        bottom: -5px;
+    }
+    .recent-item-chip-buff {
+        top: -5px;
+        right: -5px;
+        color: #111827;
+        background: rgba(245, 158, 11, 0.96);
+        border-color: rgba(17, 24, 39, 0.2);
+    }
+    .recent-item-chip.na {
         opacity: 0.58;
     }
     .item-winrates-table {
@@ -955,6 +982,102 @@ def _build_item_purchase_times_by_item(
     return purchase_times_by_item
 
 
+def _player_row_buff_items_local(service: DotaAnalyticsService, player_row: dict | None) -> list[tuple[int, int | None]]:
+    if not isinstance(player_row, dict):
+        return []
+
+    by_item_id: dict[int, int | None] = {}
+    permanent_buffs = player_row.get("permanent_buffs")
+    if isinstance(permanent_buffs, list):
+        for buff in permanent_buffs:
+            if not isinstance(buff, dict):
+                continue
+            item_key = PERMANENT_BUFF_ITEM_KEYS.get(int(buff.get("permanent_buff") or 0))
+            if not item_key:
+                continue
+            item_id = CONSUMABLE_BUFF_ITEM_KEYS[item_key]
+            grant_time = buff.get("grant_time")
+            try:
+                by_item_id[item_id] = max(int(grant_time) // 60, 0)
+            except (TypeError, ValueError):
+                by_item_id[item_id] = None
+
+    first_purchase_time = player_row.get("first_purchase_time")
+    if isinstance(first_purchase_time, dict):
+        for item_key, item_id in CONSUMABLE_BUFF_ITEM_KEYS.items():
+            if item_id in by_item_id and by_item_id[item_id] is not None:
+                continue
+            if item_key not in first_purchase_time:
+                continue
+            try:
+                by_item_id[item_id] = max(int(first_purchase_time[item_key]) // 60, 0)
+            except (TypeError, ValueError):
+                by_item_id[item_id] = None
+
+    for field_name, item_key in (
+        ("moonshard", "moon_shard"),
+        ("aghanims_scepter", "ultimate_scepter"),
+        ("aghanims_shard", "aghanims_shard"),
+    ):
+        if int(player_row.get(field_name) or 0) <= 0:
+            continue
+        item_id = CONSUMABLE_BUFF_ITEM_KEYS[item_key]
+        by_item_id.setdefault(item_id, None)
+
+    return [(item_id, by_item_id[item_id]) for item_id in by_item_id]
+
+
+def _augment_recent_rows_with_cached_buffs(
+    service: DotaAnalyticsService,
+    *,
+    player_id: int,
+    matches: list[MatchSummary],
+    recent_rows: list[object],
+) -> list[object]:
+    match_by_id = {int(match.match_id): match for match in matches}
+    for row in recent_rows:
+        match_id = int(getattr(row, "match_id", 0) or 0)
+        match = match_by_id.get(match_id)
+        if match is None:
+            continue
+        details = service.get_match_details_if_cached(match_id)
+        if not isinstance(details, dict):
+            continue
+        player_row = service._extract_player_from_match_details(  # noqa: SLF001
+            details,
+            player_id=player_id,
+            player_slot=match.player_slot,
+        )
+        buff_items = _player_row_buff_items_local(service, player_row)
+        if not buff_items:
+            continue
+        existing_ids = {int(getattr(item, "item_id", 0) or 0) for item in getattr(row, "items", [])}
+        augmented_items = list(getattr(row, "items", []))
+        for item_id, grant_time_min in buff_items:
+            if item_id in existing_ids:
+                continue
+            augmented_items.append(
+                SimpleNamespace(
+                    item_id=item_id,
+                    item_name=service.references.item_names_by_id.get(item_id, f"Item #{item_id}"),
+                    item_image=service.references.item_images_by_id.get(item_id, ""),
+                    purchase_time_min=grant_time_min,
+                    is_buff=True,
+                    buff_label="Buff",
+                )
+            )
+        augmented_items.sort(
+            key=lambda item: (
+                not bool(getattr(item, "is_buff", False)),
+                getattr(item, "purchase_time_min", None) is None,
+                getattr(item, "purchase_time_min", None) if getattr(item, "purchase_time_min", None) is not None else 10_000,
+                getattr(item, "item_name", ""),
+            )
+        )
+        row.items = augmented_items
+    return recent_rows
+
+
 def _build_item_winrate_snapshot_from_cached_inventory(
     service: DotaAnalyticsService,
     *,
@@ -1017,7 +1140,7 @@ def _build_item_winrate_snapshot_from_cached_inventory(
                     if int(player_row.get(field_name) or 0) > 0
                 }
                 if detail_items:
-                    buff_items = service._player_row_buff_items(player_row)  # noqa: SLF001
+                    buff_items = _player_row_buff_items_local(service, player_row)
                     detail_items.update(item_id for item_id, _ in buff_items)
                     unique_items.update(detail_items)
                     detail_backed_this_match = True
@@ -1072,7 +1195,7 @@ def _build_item_winrate_snapshot_from_cached_inventory(
                     else None
                 ),
                 "timed_matches_with_item": avg_time_count,
-                "is_buff": item_id in service.CONSUMABLE_BUFF_ITEM_IDS.values(),
+                "is_buff": item_id in CONSUMABLE_BUFF_ITEM_KEYS.values(),
             }
         )
 
@@ -1142,13 +1265,13 @@ def _format_item_timing_label(timing_min: float | None) -> str:
 
 
 def _render_item_icon_html(*, image_url: str, item_name: str, timing_min: float | int | None, is_buff: bool) -> str:
-    badge_html = '<div class="recent-item-inline-badge">BUFF</div>' if is_buff else ""
+    badge_html = '<div class="recent-item-chip recent-item-chip-buff">buff</div>' if is_buff else ""
     time_class_suffix = " na" if timing_min is None else ""
     return (
         '<div class="recent-item-inline">'
         f'<img src="{image_url}" alt="{item_name}" title="{item_name}"/>'
         f"{badge_html}"
-        f'<div class="recent-item-inline-time{time_class_suffix}">{_format_item_timing_label(None if timing_min is None else float(timing_min))}</div>'
+        f'<div class="recent-item-chip recent-item-chip-time{time_class_suffix}">{_format_item_timing_label(None if timing_min is None else float(timing_min))}</div>'
         "</div>"
     )
 
@@ -1998,6 +2121,12 @@ if load_all_sections or load_recent_matches:
             limit=min(visible_recent_matches, len(matches)),
             allow_detail_fetch=False,
         )
+        recent_rows = _augment_recent_rows_with_cached_buffs(
+            service,
+            player_id=player_id,
+            matches=matches,
+            recent_rows=recent_rows,
+        )
         _store_recent_section_snapshot(
             current_hero_snapshot_key,
             recent_rows,
@@ -2031,6 +2160,12 @@ if repair_recent_item_timings:
             matches=matches,
             limit=min(visible_recent_matches, len(matches)),
             allow_detail_fetch=False,
+        )
+        recent_match_rows = _augment_recent_rows_with_cached_buffs(
+            service,
+            player_id=player_id,
+            matches=matches,
+            recent_rows=recent_match_rows,
         )
         _mark_section_visible("recent", current_hero_snapshot_key)
         _store_recent_section_snapshot(
@@ -2074,6 +2209,12 @@ if (recent_match_rows is None or (load and _is_section_visible("recent", current
             limit=min(visible_recent_matches, len(matches)),
             allow_detail_fetch=False,
         )
+        recent_match_rows = _augment_recent_rows_with_cached_buffs(
+            service,
+            player_id=player_id,
+            matches=matches,
+            recent_rows=recent_match_rows,
+        )
         _store_recent_section_snapshot(
             current_hero_snapshot_key,
             recent_match_rows,
@@ -2099,6 +2240,12 @@ if recent_matches_loaded and loaded_recent_matches != visible_recent_matches:
             limit=min(visible_recent_matches, len(matches)),
             allow_detail_fetch=False,
         )
+        recent_match_rows = _augment_recent_rows_with_cached_buffs(
+            service,
+            player_id=player_id,
+            matches=matches,
+            recent_rows=recent_match_rows,
+        )
         _store_recent_section_snapshot(
             current_hero_snapshot_key,
             recent_match_rows,
@@ -2119,7 +2266,7 @@ if recent_matches_loaded:
         result_class = "win" if row.result == "Win" else "loss"
         duration_percent = duration_bar_percent(row.duration_seconds)
         kills_pct, deaths_pct, assists_pct = kda_bar_segments(row.kills, row.deaths, row.assists)
-        item_html = "".join(
+        regular_item_html = "".join(
             _render_item_icon_html(
                 image_url=item.item_image,
                 item_name=item.item_name,
@@ -2127,7 +2274,22 @@ if recent_matches_loaded:
                 is_buff=bool(getattr(item, "is_buff", False)),
             )
             for item in row.items
-        ) or '<div class="recent-items-inline empty">No item data</div>'
+            if not bool(getattr(item, "is_buff", False))
+        )
+        buff_item_html = "".join(
+            _render_item_icon_html(
+                image_url=item.item_image,
+                item_name=item.item_name,
+                timing_min=item.purchase_time_min,
+                is_buff=True,
+            )
+            for item in row.items
+            if bool(getattr(item, "is_buff", False))
+        )
+        item_html = (
+            f'<div class="recent-items-main">{regular_item_html}</div>'
+            f'<div class="recent-items-buffs">{buff_item_html}</div>'
+        ) if (regular_item_html or buff_item_html) else '<div class="recent-items-inline empty">No item data</div>'
         table_rows_html += (
             "<tr>"
             '<td class="recent-hero-cell">'
