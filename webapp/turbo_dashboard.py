@@ -3,9 +3,7 @@ from bisect import bisect_right
 from datetime import date, datetime, timedelta
 import html
 import inspect
-import os
 import re
-import subprocess
 import sys
 import time
 from types import SimpleNamespace
@@ -26,6 +24,7 @@ from utils.config import get_cache_dir, get_match_store_path, get_settings
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError, ValidationError
 from utils.helpers import format_duration, parse_player_id
 from utils.match_store import SQLiteMatchStore
+from webapp.app_runtime import build_service, get_app_version
 from webapp.dashboard_state import build_hero_snapshot_request_key
 from webapp.filter_defaults import default_patch_selection
 from webapp.hero_defaults import default_hero_id
@@ -368,48 +367,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
-
-def build_service() -> DotaAnalyticsService:
-    settings = get_settings()
-    client = OpenDotaClient(
-        base_url=settings.base_url,
-        timeout_seconds=settings.timeout_seconds,
-        api_key=settings.api_key,
-    )
-    cache = JsonFileCache(cache_dir=get_cache_dir(), ttl_hours=settings.cache_ttl_hours)
-    match_store = SQLiteMatchStore(get_match_store_path())
-    return DotaAnalyticsService(client=client, cache=cache, match_store=match_store)
-
-
-def get_app_version() -> str:
-    env_candidates = (
-        os.getenv("APP_VERSION"),
-        os.getenv("GIT_COMMIT"),
-        os.getenv("COMMIT_SHA"),
-        os.getenv("VERCEL_GIT_COMMIT_SHA"),
-        os.getenv("GITHUB_SHA"),
-    )
-    for candidate in env_candidates:
-        if candidate:
-            return candidate[:7]
-
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=PROJECT_ROOT,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        version = result.stdout.strip()
-        if version:
-            return version
-    except Exception:  # noqa: BLE001
-        pass
-
-    return "unknown"
-
 
 def get_default_days_period() -> int:
     start_date = DEFAULT_FILTER_BASELINE_DATE

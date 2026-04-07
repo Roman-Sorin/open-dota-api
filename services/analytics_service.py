@@ -108,6 +108,60 @@ class ItemWinrateSnapshot:
         return self.missing_matches == 0 and not self.rate_limited
 
 
+@dataclass(slots=True)
+class BackgroundMatchStatusRow:
+    match_id: int
+    start_time: int
+    hero_id: int | None
+    player_slot: int
+    radiant_win: bool
+    kills: int
+    deaths: int
+    assists: int
+    duration: int
+    summary_updated_at: str | None
+    detail_updated_at: str | None
+    detail_status: str
+    timing_status: str
+    parse_status: str | None
+
+    @property
+    def is_fully_cached(self) -> bool:
+        return self.detail_status == "cached" and self.timing_status in {"ready", "not_needed"}
+
+
+@dataclass(slots=True)
+class BackgroundSyncCoverage:
+    total_matches: int
+    detail_cached_count: int
+    timing_ready_count: int
+    missing_detail_count: int
+    missing_timing_count: int
+    pending_parse_count: int
+    newest_match_start_time: int | None
+    oldest_match_start_time: int | None
+    newest_fully_cached_start_time: int | None
+    oldest_fully_cached_start_time: int | None
+    rows: list[BackgroundMatchStatusRow]
+
+
+@dataclass(slots=True)
+class BackgroundSyncCycleResult:
+    status: str
+    started_at: str
+    finished_at: str
+    summary_new_matches: int
+    total_matches_in_window: int
+    detail_requested: int
+    detail_completed: int
+    parse_requested: int
+    pending_parse_count: int
+    rate_limited: bool
+    next_retry_at: str | None
+    note: str
+    coverage: BackgroundSyncCoverage
+
+
 class DotaAnalyticsService:
     CONSUMABLE_BUFF_ITEM_IDS: dict[str, int] = {
         "moon_shard": 247,
@@ -651,6 +705,23 @@ class DotaAnalyticsService:
         merged = dict(state)
         merged["latest_match_update_at"] = latest_update
         return merged
+
+    @staticmethod
+    def _utcnow_iso() -> str:
+        return datetime.now(tz=timezone.utc).isoformat()
+
+    @staticmethod
+    def _iso_after_minutes(minutes: int) -> str:
+        return (datetime.now(tz=timezone.utc) + timedelta(minutes=minutes)).isoformat()
+
+    @staticmethod
+    def _iso_is_future(value: str | None) -> bool:
+        if not value:
+            return False
+        try:
+            return datetime.fromisoformat(value) > datetime.now(tz=timezone.utc)
+        except ValueError:
+            return False
 
     def build_stats(self, matches: list[MatchSummary]) -> StatsResult:
         total = len(matches)
@@ -1557,6 +1628,440 @@ class DotaAnalyticsService:
             except OpenDotaRateLimitError:
                 break
         return completed
+
+    def get_background_sync_state(
+        self,
+        player_id: int,
+        *,
+        game_mode: int = 23,
+        window_days: int = 365,
+    ) -> dict[str, Any] | None:
+        if self.match_store is None:
+            return None
+        return self.match_store.get_background_sync_state(
+            player_id,
+            self._sync_scope_key(game_mode),
+            window_days,
+        )
+
+    def list_background_sync_runs(
+        self,
+        player_id: int,
+        *,
+        game_mode: int = 23,
+        window_days: int = 365,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        if self.match_store is None:
+            return []
+        return self.match_store.list_background_sync_runs(
+            player_id,
+            self._sync_scope_key(game_mode),
+            window_days,
+            limit=limit,
+        )
+
+    def _background_match_status_rows(
+        self,
+        *,
+        player_id: int,
+        game_mode: int,
+        window_days: int,
+        limit: int | None = None,
+    ) -> list[BackgroundMatchStatusRow]:
+        if self.match_store is None:
+            return []
+
+        filters = QueryFilters(
+            player_id=player_id,
+            game_mode=game_mode,
+            game_mode_name="Turbo" if game_mode == 23 else None,
+            days=window_days,
+        )
+        status_rows = self.match_store.query_player_match_status_rows(
+            player_id,
+            game_mode=game_mode,
+            min_start_time=self._min_start_time(filters),
+            limit=limit,
+        )
+        rows: list[BackgroundMatchStatusRow] = []
+        for row in status_rows:
+            payload = row.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            match = self._parse_match_summary_row(payload, min_start=self._min_start_time(filters))
+            if match is None:
+                continue
+            parse_request = self.match_store.get_match_parse_request(match.match_id)
+            parse_status = str(parse_request.get("status")) if isinstance(parse_request, dict) and parse_request.get("status") else None
+            detail_updated_at = row.get("detail_updated_at")
+            if detail_updated_at:
+                details = self.get_match_details_if_cached(match.match_id)
+                player_row = self._extract_player_from_match_details(
+                    details or {},
+                    player_id=player_id,
+                    player_slot=match.player_slot,
+                )
+                has_timing = self._player_row_has_timing_data(player_row)
+                has_final_items = self._player_row_has_tracked_final_items(player_row)
+                if has_timing:
+                    timing_status = "ready"
+                elif has_final_items:
+                    timing_status = "pending_parse" if parse_status == "pending" else "missing"
+                else:
+                    timing_status = "not_needed"
+                detail_status = "cached"
+            else:
+                detail_status = "missing"
+                timing_status = "missing"
+
+            rows.append(
+                BackgroundMatchStatusRow(
+                    match_id=match.match_id,
+                    start_time=match.start_time,
+                    hero_id=match.hero_id,
+                    player_slot=match.player_slot,
+                    radiant_win=match.radiant_win,
+                    kills=match.kills,
+                    deaths=match.deaths,
+                    assists=match.assists,
+                    duration=match.duration,
+                    summary_updated_at=str(row.get("summary_updated_at")) if row.get("summary_updated_at") else None,
+                    detail_updated_at=str(detail_updated_at) if detail_updated_at else None,
+                    detail_status=detail_status,
+                    timing_status=timing_status,
+                    parse_status=parse_status,
+                )
+            )
+        return rows
+
+    def get_background_sync_coverage(
+        self,
+        *,
+        player_id: int,
+        game_mode: int = 23,
+        window_days: int = 365,
+        limit: int | None = None,
+    ) -> BackgroundSyncCoverage:
+        rows = self._background_match_status_rows(
+            player_id=player_id,
+            game_mode=game_mode,
+            window_days=window_days,
+            limit=limit,
+        )
+        total_matches = len(rows)
+        detail_cached_count = sum(1 for row in rows if row.detail_status == "cached")
+        timing_ready_count = sum(1 for row in rows if row.timing_status in {"ready", "not_needed"})
+        missing_detail_count = sum(1 for row in rows if row.detail_status != "cached")
+        missing_timing_count = sum(1 for row in rows if row.detail_status == "cached" and row.timing_status in {"missing", "pending_parse"})
+        pending_parse_count = sum(1 for row in rows if row.parse_status == "pending")
+        newest_match_start_time = rows[0].start_time if rows else None
+        oldest_match_start_time = rows[-1].start_time if rows else None
+
+        contiguous_rows: list[BackgroundMatchStatusRow] = []
+        for row in rows:
+            if not row.is_fully_cached:
+                break
+            contiguous_rows.append(row)
+
+        return BackgroundSyncCoverage(
+            total_matches=total_matches,
+            detail_cached_count=detail_cached_count,
+            timing_ready_count=timing_ready_count,
+            missing_detail_count=missing_detail_count,
+            missing_timing_count=missing_timing_count,
+            pending_parse_count=pending_parse_count,
+            newest_match_start_time=newest_match_start_time,
+            oldest_match_start_time=oldest_match_start_time,
+            newest_fully_cached_start_time=contiguous_rows[0].start_time if contiguous_rows else None,
+            oldest_fully_cached_start_time=contiguous_rows[-1].start_time if contiguous_rows else None,
+            rows=rows,
+        )
+
+    def _refresh_pending_parse_requests(
+        self,
+        *,
+        player_id: int,
+        matches_by_id: dict[int, MatchSummary],
+        limit: int,
+    ) -> None:
+        if self.match_store is None or limit <= 0:
+            return
+
+        pending_rows = self.match_store.list_match_parse_requests(player_id, status="pending", limit=limit)
+        for request in pending_rows:
+            match_id = int(request.get("match_id") or 0)
+            match = matches_by_id.get(match_id)
+            if match is None:
+                continue
+            try:
+                details = self.get_or_fetch_match_details(match_id, force_refresh=True)
+            except OpenDotaRateLimitError:
+                self.match_store.upsert_match_parse_request(
+                    match_id,
+                    player_id,
+                    status="pending",
+                    last_polled_at=self._utcnow_iso(),
+                )
+                break
+            player_row = self._extract_player_from_match_details(
+                details,
+                player_id=player_id,
+                player_slot=match.player_slot,
+            )
+            if self._player_row_has_timing_data(player_row):
+                self.match_store.upsert_match_parse_request(
+                    match_id,
+                    player_id,
+                    status="completed",
+                    last_polled_at=self._utcnow_iso(),
+                    completed_at=self._utcnow_iso(),
+                )
+            else:
+                self.match_store.upsert_match_parse_request(
+                    match_id,
+                    player_id,
+                    status="pending",
+                    last_polled_at=self._utcnow_iso(),
+                )
+
+    def run_background_sync_cycle(
+        self,
+        *,
+        player_id: int,
+        game_mode: int = 23,
+        window_days: int = 365,
+        max_detail_fetches: int = 8,
+        max_parse_requests: int = 3,
+        rate_limit_cooldown_minutes: int = 60,
+        force: bool = False,
+    ) -> BackgroundSyncCycleResult:
+        if self.match_store is None:
+            raise RuntimeError("Background sync requires SQLite match storage")
+
+        scope_key = self._sync_scope_key(game_mode)
+        state = self.match_store.get_background_sync_state(player_id, scope_key, window_days) or {}
+        if not force and self._iso_is_future(str(state.get("next_retry_at") or "")):
+            coverage = self.get_background_sync_coverage(player_id=player_id, game_mode=game_mode, window_days=window_days)
+            started_at = self._utcnow_iso()
+            finished_at = self._utcnow_iso()
+            return BackgroundSyncCycleResult(
+                status="cooldown",
+                started_at=started_at,
+                finished_at=finished_at,
+                summary_new_matches=0,
+                total_matches_in_window=coverage.total_matches,
+                detail_requested=0,
+                detail_completed=0,
+                parse_requested=0,
+                pending_parse_count=coverage.pending_parse_count,
+                rate_limited=False,
+                next_retry_at=str(state.get("next_retry_at") or ""),
+                note="Waiting for the next retry window after a previous OpenDota rate limit.",
+                coverage=coverage,
+            )
+
+        started_at = self._utcnow_iso()
+        self.match_store.upsert_background_sync_state(
+            player_id,
+            scope_key,
+            window_days,
+            status="running",
+            last_started_at=started_at,
+            last_error=None,
+        )
+
+        filters = QueryFilters(
+            player_id=player_id,
+            game_mode=game_mode,
+            game_mode_name="Turbo" if game_mode == 23 else None,
+            days=window_days,
+        )
+        summary_new_matches = 0
+        detail_requested = 0
+        detail_completed = 0
+        parse_requested = 0
+        rate_limited = False
+        next_retry_at: str | None = None
+        note_parts: list[str] = []
+        status = "completed"
+
+        try:
+            inserted_ids = self._sync_player_matches(filters, force=force)
+            summary_new_matches = len(inserted_ids)
+            matches = self.get_cached_matches(filters)
+            matches_by_id = {int(match.match_id): match for match in matches}
+            self._refresh_pending_parse_requests(
+                player_id=player_id,
+                matches_by_id=matches_by_id,
+                limit=max_parse_requests,
+            )
+
+            missing_detail_ids = self.get_match_ids_requiring_detail_hydration(
+                matches,
+                player_id=player_id,
+                require_purchase_log=False,
+                limit=max_detail_fetches,
+            )
+            detail_requested = len(missing_detail_ids)
+            if missing_detail_ids:
+                detail_status = self.hydrate_match_details_for_match_ids(missing_detail_ids)
+                detail_completed = detail_status.completed
+                if detail_status.rate_limited:
+                    rate_limited = True
+                    status = "rate_limited"
+                    next_retry_at = self._iso_after_minutes(rate_limit_cooldown_minutes)
+                    note_parts.append("OpenDota rate limit was hit during detail hydration.")
+
+            if not rate_limited:
+                matches = self.get_cached_matches(filters)
+                parse_candidates: list[int] = []
+                for match in matches:
+                    details = self.get_match_details_if_cached(match.match_id)
+                    if not isinstance(details, dict):
+                        continue
+                    player_row = self._extract_player_from_match_details(
+                        details,
+                        player_id=player_id,
+                        player_slot=match.player_slot,
+                    )
+                    if not self._player_row_has_tracked_final_items(player_row):
+                        continue
+                    if self._player_row_has_timing_data(player_row):
+                        continue
+                    if details.get("version") is not None:
+                        continue
+                    parse_request = self.match_store.get_match_parse_request(match.match_id) or {}
+                    if str(parse_request.get("status") or "") == "pending":
+                        continue
+                    parse_candidates.append(int(match.match_id))
+                    if len(parse_candidates) >= max_parse_requests:
+                        break
+
+                for match_id in parse_candidates:
+                    try:
+                        self.client.request_match_parse(match_id)
+                    except OpenDotaRateLimitError:
+                        rate_limited = True
+                        status = "rate_limited"
+                        next_retry_at = self._iso_after_minutes(rate_limit_cooldown_minutes)
+                        note_parts.append("OpenDota rate limit was hit while requesting replay parses.")
+                        break
+                    self.match_store.upsert_match_parse_request(
+                        match_id,
+                        player_id,
+                        status="pending",
+                        requested_at=self._utcnow_iso(),
+                    )
+                    parse_requested += 1
+
+            coverage = self.get_background_sync_coverage(
+                player_id=player_id,
+                game_mode=game_mode,
+                window_days=window_days,
+            )
+            finished_at = self._utcnow_iso()
+            previous_total_runs = int(state.get("total_runs") or 0)
+            previous_detail_fetches = int(state.get("total_detail_fetches") or 0)
+            previous_parse_requests = int(state.get("total_parse_requests") or 0)
+            if summary_new_matches > 0:
+                note_parts.append(f"Synced {summary_new_matches} new summary match(es).")
+            if detail_completed > 0:
+                note_parts.append(f"Fetched {detail_completed} missing detail payload(s).")
+            if parse_requested > 0:
+                note_parts.append(f"Requested {parse_requested} replay parse job(s).")
+            if not note_parts:
+                note_parts.append("No work was needed for this cycle.")
+            note = " ".join(note_parts)
+
+            self.match_store.upsert_background_sync_state(
+                player_id,
+                scope_key,
+                window_days,
+                status="idle" if status == "completed" else status,
+                last_started_at=started_at,
+                last_finished_at=finished_at,
+                last_status=status,
+                last_error=None,
+                last_rate_limited_at=started_at if rate_limited else state.get("last_rate_limited_at"),
+                next_retry_at=next_retry_at,
+                last_summary_sync_at=finished_at,
+                target_match_count=coverage.total_matches,
+                detail_cached_count=coverage.detail_cached_count,
+                timing_ready_count=coverage.timing_ready_count,
+                missing_detail_count=coverage.missing_detail_count,
+                missing_timing_count=coverage.missing_timing_count,
+                pending_parse_count=coverage.pending_parse_count,
+                newest_match_start_time=coverage.newest_match_start_time,
+                oldest_match_start_time=coverage.oldest_match_start_time,
+                newest_fully_cached_start_time=coverage.newest_fully_cached_start_time,
+                oldest_fully_cached_start_time=coverage.oldest_fully_cached_start_time,
+                total_runs=previous_total_runs + 1,
+                total_detail_fetches=previous_detail_fetches + detail_completed,
+                total_parse_requests=previous_parse_requests + parse_requested,
+            )
+            self.match_store.insert_background_sync_run(
+                account_id=player_id,
+                scope_key=scope_key,
+                window_days=window_days,
+                started_at=started_at,
+                finished_at=finished_at,
+                status=status,
+                summary_new_matches=summary_new_matches,
+                total_matches_in_window=coverage.total_matches,
+                detail_requested=detail_requested,
+                detail_completed=detail_completed,
+                parse_requested=parse_requested,
+                pending_parse_count=coverage.pending_parse_count,
+                rate_limited=rate_limited,
+                next_retry_at=next_retry_at,
+                note=note,
+            )
+            return BackgroundSyncCycleResult(
+                status=status,
+                started_at=started_at,
+                finished_at=finished_at,
+                summary_new_matches=summary_new_matches,
+                total_matches_in_window=coverage.total_matches,
+                detail_requested=detail_requested,
+                detail_completed=detail_completed,
+                parse_requested=parse_requested,
+                pending_parse_count=coverage.pending_parse_count,
+                rate_limited=rate_limited,
+                next_retry_at=next_retry_at,
+                note=note,
+                coverage=coverage,
+            )
+        except Exception as exc:
+            finished_at = self._utcnow_iso()
+            self.match_store.upsert_background_sync_state(
+                player_id,
+                scope_key,
+                window_days,
+                status="idle",
+                last_started_at=started_at,
+                last_finished_at=finished_at,
+                last_status="error",
+                last_error=str(exc),
+            )
+            self.match_store.insert_background_sync_run(
+                account_id=player_id,
+                scope_key=scope_key,
+                window_days=window_days,
+                started_at=started_at,
+                finished_at=finished_at,
+                status="error",
+                summary_new_matches=summary_new_matches,
+                total_matches_in_window=0,
+                detail_requested=detail_requested,
+                detail_completed=detail_completed,
+                parse_requested=parse_requested,
+                pending_parse_count=0,
+                rate_limited=False,
+                next_retry_at=None,
+                note=str(exc),
+            )
+            raise
 
     def get_turbo_hero_overview(
         self,

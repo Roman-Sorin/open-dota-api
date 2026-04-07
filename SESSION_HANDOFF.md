@@ -599,3 +599,51 @@ CLI remains available as a secondary interface.
   - direct OpenDota-style client results
   - SQLite-backed cached match reads
 - Updated user-facing docs (`README.md`, `APP_GUIDE.md`) so the known excluded-match list stays current.
+
+## 2026-04-07 database page + cooperative background cache worker
+
+- Added a separate multipage Streamlit view:
+  - `webapp/pages/Database.py`
+  - page title: `Database`
+- Product purpose:
+  - monitor Turbo cache progress for one player over a rolling window (default `365` days)
+  - expose match-level cache state instead of treating SQLite as an invisible implementation detail
+- Important architecture clarification:
+  - previous docs said only `Refresh Turbo Dashboard` may talk to OpenDota
+  - this is now widened intentionally:
+    - `Refresh Turbo Dashboard`
+    - `Database` page sync cycle
+  are the only UI flows allowed to spend OpenDota calls
+  - selected-hero section refreshes remain cache-only
+- Added persistent SQLite metadata tables in `utils/match_store.py`:
+  - `background_sync_state`
+  - `background_sync_runs`
+  - `match_parse_requests`
+- Added service-layer background helpers in `services/analytics_service.py`:
+  - `get_background_sync_state(...)`
+  - `list_background_sync_runs(...)`
+  - `get_background_sync_coverage(...)`
+  - `run_background_sync_cycle(...)`
+- One background sync cycle now does bounded work only:
+  - incremental Turbo summary sync
+  - fetch a small batch of missing detail payloads
+  - refresh pending replay-parse requests
+  - request a small batch of new replay parses for matches that still lack item timings
+  - enter cooldown after a `429` instead of retry-spamming
+- `Database` page shows:
+  - coverage metrics
+  - last status / next retry
+  - recent sync history
+  - match-level table with `Match ID`, played time, hero, result, K/D/A, duration, detail status, timing status, and cache timestamps
+- Added cooperative auto-run mode on `Database`:
+  - while the page stays open, it can refresh and run another bounded cycle automatically
+- Explicit limitation documented in repo docs:
+  - Streamlit Community Cloud does not provide a true always-on worker inside the page process
+  - current implementation is cooperative only while the `Database` page is open
+  - a real 24/7 worker still requires an external runner plus shared persistent storage
+- Added planning/design doc:
+  - `BACKGROUND_DATABASE_PLAN.md`
+- Added regression coverage in `tests/test_match_store.py` for:
+  - background coverage counts
+  - sync-cycle state/history persistence
+  - parse queue persistence

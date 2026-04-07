@@ -27,10 +27,13 @@ Turbo-only dashboard for your account:
 - Hero Overview is now built from a validated snapshot that tracks match-detail coverage; incomplete zero-value snapshots are rejected instead of being rendered as valid analytics
 - Reported bad matches `8743652071` and `8745970611` are excluded centrally from all dashboard statistics and hero sections
 - Top dashboard metrics include Turbo matches, wins, losses, and winrate; Turbo wins are green and Turbo losses are red
+- Separate multipage `Database` view monitors Turbo cache coverage for the selected player over a rolling window (default `365` days)
+- `Database` shows match-level cache status (`detail cached`, `timings ready`, `parse pending`) plus cycle history, cooldown state, and contiguous full-coverage range
+- `Database` can run one bounded background-cache cycle per refresh and optionally auto-run while that page stays open
 - Default selected hero is `Spectre` when that hero exists in the current overview snapshot; otherwise the first available hero is used
 - Dashboard loading is manual by section:
   - cached overview data can auto-open from local SQLite storage when available
-  - `Refresh Turbo Dashboard` is the only action allowed to talk to OpenDota for match sync/detail hydration
+  - `Refresh Turbo Dashboard` and the dedicated `Database` page are the only UI flows allowed to talk to OpenDota for cache sync/detail hydration
   - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild from the currently loaded dashboard snapshot for the selected hero
 - Section refreshes no longer pull newer matches than the currently loaded overview; only `Refresh Turbo Dashboard` advances the dataset
 - `Refresh Turbo Dashboard` now forces an incremental sync check for new matches only; already cached summaries and match details are reused instead of being re-fetched
@@ -158,7 +161,9 @@ tests/
 - Player matches are persisted in local `SQLite` storage and reused for later filters/analytics.
 - Match details are persisted separately and reused for enrichment-heavy sections.
 - The service performs incremental syncs instead of refetching whole history on each reload.
+- Background worker metadata is also persisted in local `SQLite` so the `Database` page can show cache progress and recent sync-cycle history.
 - `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
+- Streamlit Community Cloud does not provide a true always-on worker inside the page process. The `Database` page can keep advancing the backlog while it stays open, but a real 24/7 worker still requires an external runner with shared persistent storage.
 
 ## Timing backfill job
 

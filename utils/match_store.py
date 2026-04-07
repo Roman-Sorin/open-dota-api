@@ -62,6 +62,70 @@ class SQLiteMatchStore:
                 known_match_count INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (account_id, scope_key)
             );
+
+            CREATE TABLE IF NOT EXISTS background_sync_state (
+                account_id INTEGER NOT NULL,
+                scope_key TEXT NOT NULL,
+                window_days INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'idle',
+                last_started_at TEXT,
+                last_finished_at TEXT,
+                last_status TEXT,
+                last_error TEXT,
+                last_rate_limited_at TEXT,
+                next_retry_at TEXT,
+                last_summary_sync_at TEXT,
+                target_match_count INTEGER NOT NULL DEFAULT 0,
+                detail_cached_count INTEGER NOT NULL DEFAULT 0,
+                timing_ready_count INTEGER NOT NULL DEFAULT 0,
+                missing_detail_count INTEGER NOT NULL DEFAULT 0,
+                missing_timing_count INTEGER NOT NULL DEFAULT 0,
+                pending_parse_count INTEGER NOT NULL DEFAULT 0,
+                newest_match_start_time INTEGER,
+                oldest_match_start_time INTEGER,
+                newest_fully_cached_start_time INTEGER,
+                oldest_fully_cached_start_time INTEGER,
+                total_runs INTEGER NOT NULL DEFAULT 0,
+                total_detail_fetches INTEGER NOT NULL DEFAULT 0,
+                total_parse_requests INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (account_id, scope_key, window_days)
+            );
+
+            CREATE TABLE IF NOT EXISTS background_sync_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                scope_key TEXT NOT NULL,
+                window_days INTEGER NOT NULL,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                status TEXT NOT NULL,
+                summary_new_matches INTEGER NOT NULL DEFAULT 0,
+                total_matches_in_window INTEGER NOT NULL DEFAULT 0,
+                detail_requested INTEGER NOT NULL DEFAULT 0,
+                detail_completed INTEGER NOT NULL DEFAULT 0,
+                parse_requested INTEGER NOT NULL DEFAULT 0,
+                pending_parse_count INTEGER NOT NULL DEFAULT 0,
+                rate_limited INTEGER NOT NULL DEFAULT 0,
+                next_retry_at TEXT,
+                note TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_background_sync_runs_lookup
+            ON background_sync_runs (account_id, scope_key, window_days, started_at DESC);
+
+            CREATE TABLE IF NOT EXISTS match_parse_requests (
+                match_id INTEGER PRIMARY KEY,
+                account_id INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                requested_at TEXT NOT NULL,
+                last_polled_at TEXT,
+                completed_at TEXT,
+                attempts INTEGER NOT NULL DEFAULT 1,
+                last_error TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_match_parse_requests_lookup
+            ON match_parse_requests (account_id, status, requested_at DESC);
             """
         )
         self._conn.commit()
@@ -185,6 +249,51 @@ class SQLiteMatchStore:
             params.append(int(limit))
         rows = self._conn.execute(query, params).fetchall()
         return [self._json_loads(str(row["payload_json"])) for row in rows]
+
+    def query_player_match_status_rows(
+        self,
+        account_id: int,
+        hero_id: int | None = None,
+        game_mode: int | None = None,
+        min_start_time: int | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        clauses = ["pm.account_id = ?"]
+        params: list[Any] = [int(account_id)]
+        if hero_id is not None:
+            clauses.append("pm.hero_id = ?")
+            params.append(int(hero_id))
+        if game_mode is not None:
+            clauses.append("(pm.game_mode = ? OR pm.game_mode IS NULL)")
+            params.append(int(game_mode))
+        if min_start_time is not None:
+            clauses.append("pm.start_time >= ?")
+            params.append(int(min_start_time))
+
+        query = (
+            "SELECT pm.match_id, pm.payload_json, pm.updated_at AS summary_updated_at, "
+            "md.updated_at AS detail_updated_at "
+            "FROM player_matches pm "
+            "LEFT JOIN match_details md ON md.match_id = pm.match_id "
+            f"WHERE {' AND '.join(clauses)} "
+            "ORDER BY pm.start_time DESC"
+        )
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(int(limit))
+
+        rows = self._conn.execute(query, params).fetchall()
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            result.append(
+                {
+                    "match_id": int(row["match_id"]),
+                    "payload": self._json_loads(str(row["payload_json"])),
+                    "summary_updated_at": str(row["summary_updated_at"]) if row["summary_updated_at"] is not None else None,
+                    "detail_updated_at": str(row["detail_updated_at"]) if row["detail_updated_at"] is not None else None,
+                }
+            )
+        return result
 
     def update_player_match_enrichment(
         self,
@@ -348,3 +457,259 @@ class SQLiteMatchStore:
         if row is None:
             return None
         return str(row["latest_updated_at"]) if row["latest_updated_at"] is not None else None
+
+    def get_background_sync_state(
+        self,
+        account_id: int,
+        scope_key: str,
+        window_days: int,
+    ) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            """
+            SELECT *
+            FROM background_sync_state
+            WHERE account_id = ? AND scope_key = ? AND window_days = ?
+            """,
+            (int(account_id), str(scope_key), int(window_days)),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    def upsert_background_sync_state(
+        self,
+        account_id: int,
+        scope_key: str,
+        window_days: int,
+        **fields: Any,
+    ) -> None:
+        current = self.get_background_sync_state(account_id, scope_key, window_days) or {}
+        merged = {
+            "status": fields.get("status", current.get("status", "idle")),
+            "last_started_at": fields.get("last_started_at", current.get("last_started_at")),
+            "last_finished_at": fields.get("last_finished_at", current.get("last_finished_at")),
+            "last_status": fields.get("last_status", current.get("last_status")),
+            "last_error": fields.get("last_error", current.get("last_error")),
+            "last_rate_limited_at": fields.get("last_rate_limited_at", current.get("last_rate_limited_at")),
+            "next_retry_at": fields.get("next_retry_at", current.get("next_retry_at")),
+            "last_summary_sync_at": fields.get("last_summary_sync_at", current.get("last_summary_sync_at")),
+            "target_match_count": int(fields.get("target_match_count", current.get("target_match_count", 0)) or 0),
+            "detail_cached_count": int(fields.get("detail_cached_count", current.get("detail_cached_count", 0)) or 0),
+            "timing_ready_count": int(fields.get("timing_ready_count", current.get("timing_ready_count", 0)) or 0),
+            "missing_detail_count": int(fields.get("missing_detail_count", current.get("missing_detail_count", 0)) or 0),
+            "missing_timing_count": int(fields.get("missing_timing_count", current.get("missing_timing_count", 0)) or 0),
+            "pending_parse_count": int(fields.get("pending_parse_count", current.get("pending_parse_count", 0)) or 0),
+            "newest_match_start_time": fields.get("newest_match_start_time", current.get("newest_match_start_time")),
+            "oldest_match_start_time": fields.get("oldest_match_start_time", current.get("oldest_match_start_time")),
+            "newest_fully_cached_start_time": fields.get(
+                "newest_fully_cached_start_time",
+                current.get("newest_fully_cached_start_time"),
+            ),
+            "oldest_fully_cached_start_time": fields.get(
+                "oldest_fully_cached_start_time",
+                current.get("oldest_fully_cached_start_time"),
+            ),
+            "total_runs": int(fields.get("total_runs", current.get("total_runs", 0)) or 0),
+            "total_detail_fetches": int(fields.get("total_detail_fetches", current.get("total_detail_fetches", 0)) or 0),
+            "total_parse_requests": int(fields.get("total_parse_requests", current.get("total_parse_requests", 0)) or 0),
+        }
+        self._conn.execute(
+            """
+            INSERT INTO background_sync_state (
+                account_id, scope_key, window_days, status, last_started_at, last_finished_at, last_status,
+                last_error, last_rate_limited_at, next_retry_at, last_summary_sync_at, target_match_count,
+                detail_cached_count, timing_ready_count, missing_detail_count, missing_timing_count,
+                pending_parse_count, newest_match_start_time, oldest_match_start_time,
+                newest_fully_cached_start_time, oldest_fully_cached_start_time,
+                total_runs, total_detail_fetches, total_parse_requests
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(account_id, scope_key, window_days) DO UPDATE SET
+                status = excluded.status,
+                last_started_at = excluded.last_started_at,
+                last_finished_at = excluded.last_finished_at,
+                last_status = excluded.last_status,
+                last_error = excluded.last_error,
+                last_rate_limited_at = excluded.last_rate_limited_at,
+                next_retry_at = excluded.next_retry_at,
+                last_summary_sync_at = excluded.last_summary_sync_at,
+                target_match_count = excluded.target_match_count,
+                detail_cached_count = excluded.detail_cached_count,
+                timing_ready_count = excluded.timing_ready_count,
+                missing_detail_count = excluded.missing_detail_count,
+                missing_timing_count = excluded.missing_timing_count,
+                pending_parse_count = excluded.pending_parse_count,
+                newest_match_start_time = excluded.newest_match_start_time,
+                oldest_match_start_time = excluded.oldest_match_start_time,
+                newest_fully_cached_start_time = excluded.newest_fully_cached_start_time,
+                oldest_fully_cached_start_time = excluded.oldest_fully_cached_start_time,
+                total_runs = excluded.total_runs,
+                total_detail_fetches = excluded.total_detail_fetches,
+                total_parse_requests = excluded.total_parse_requests
+            """,
+            (
+                int(account_id),
+                str(scope_key),
+                int(window_days),
+                merged["status"],
+                merged["last_started_at"],
+                merged["last_finished_at"],
+                merged["last_status"],
+                merged["last_error"],
+                merged["last_rate_limited_at"],
+                merged["next_retry_at"],
+                merged["last_summary_sync_at"],
+                merged["target_match_count"],
+                merged["detail_cached_count"],
+                merged["timing_ready_count"],
+                merged["missing_detail_count"],
+                merged["missing_timing_count"],
+                merged["pending_parse_count"],
+                merged["newest_match_start_time"],
+                merged["oldest_match_start_time"],
+                merged["newest_fully_cached_start_time"],
+                merged["oldest_fully_cached_start_time"],
+                merged["total_runs"],
+                merged["total_detail_fetches"],
+                merged["total_parse_requests"],
+            ),
+        )
+        self._conn.commit()
+
+    def insert_background_sync_run(
+        self,
+        *,
+        account_id: int,
+        scope_key: str,
+        window_days: int,
+        started_at: str,
+        finished_at: str | None,
+        status: str,
+        summary_new_matches: int,
+        total_matches_in_window: int,
+        detail_requested: int,
+        detail_completed: int,
+        parse_requested: int,
+        pending_parse_count: int,
+        rate_limited: bool,
+        next_retry_at: str | None,
+        note: str | None,
+    ) -> None:
+        self._conn.execute(
+            """
+            INSERT INTO background_sync_runs (
+                account_id, scope_key, window_days, started_at, finished_at, status,
+                summary_new_matches, total_matches_in_window, detail_requested, detail_completed,
+                parse_requested, pending_parse_count, rate_limited, next_retry_at, note
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(account_id),
+                str(scope_key),
+                int(window_days),
+                started_at,
+                finished_at,
+                status,
+                int(summary_new_matches),
+                int(total_matches_in_window),
+                int(detail_requested),
+                int(detail_completed),
+                int(parse_requested),
+                int(pending_parse_count),
+                1 if rate_limited else 0,
+                next_retry_at,
+                note,
+            ),
+        )
+        self._conn.commit()
+
+    def list_background_sync_runs(
+        self,
+        account_id: int,
+        scope_key: str,
+        window_days: int,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            """
+            SELECT *
+            FROM background_sync_runs
+            WHERE account_id = ? AND scope_key = ? AND window_days = ?
+            ORDER BY started_at DESC
+            LIMIT ?
+            """,
+            (int(account_id), str(scope_key), int(window_days), int(limit)),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_match_parse_request(self, match_id: int) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM match_parse_requests WHERE match_id = ?",
+            (int(match_id),),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    def upsert_match_parse_request(
+        self,
+        match_id: int,
+        account_id: int,
+        *,
+        status: str,
+        requested_at: str | None = None,
+        last_polled_at: str | None = None,
+        completed_at: str | None = None,
+        last_error: str | None = None,
+    ) -> None:
+        current = self.get_match_parse_request(match_id) or {}
+        current_attempts = int(current.get("attempts") or 0)
+        next_attempts = current_attempts + 1 if status == "pending" and not current.get("completed_at") else current_attempts
+        if next_attempts <= 0:
+            next_attempts = 1
+        self._conn.execute(
+            """
+            INSERT INTO match_parse_requests (
+                match_id, account_id, status, requested_at, last_polled_at, completed_at, attempts, last_error
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(match_id) DO UPDATE SET
+                account_id = excluded.account_id,
+                status = excluded.status,
+                requested_at = COALESCE(excluded.requested_at, match_parse_requests.requested_at),
+                last_polled_at = COALESCE(excluded.last_polled_at, match_parse_requests.last_polled_at),
+                completed_at = COALESCE(excluded.completed_at, match_parse_requests.completed_at),
+                attempts = excluded.attempts,
+                last_error = excluded.last_error
+            """,
+            (
+                int(match_id),
+                int(account_id),
+                status,
+                requested_at or current.get("requested_at") or self._now_iso(),
+                last_polled_at or current.get("last_polled_at"),
+                completed_at or current.get("completed_at"),
+                next_attempts,
+                last_error,
+            ),
+        )
+        self._conn.commit()
+
+    def list_match_parse_requests(
+        self,
+        account_id: int,
+        *,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        params: list[Any] = [int(account_id)]
+        clauses = ["account_id = ?"]
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(str(status))
+        params.append(int(limit))
+        rows = self._conn.execute(
+            f"""
+            SELECT *
+            FROM match_parse_requests
+            WHERE {' AND '.join(clauses)}
+            ORDER BY requested_at DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+        return [dict(row) for row in rows]

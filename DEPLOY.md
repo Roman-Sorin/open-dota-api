@@ -61,6 +61,10 @@ Use Streamlit Community Cloud:
 
 After deploy, you get a stable public HTTPS URL accessible from phone.
 
+Notes:
+- The app now includes a multipage `Database` view for cache coverage / backlog monitoring.
+- Streamlit Community Cloud still does not provide a true always-on background worker inside the app process. The `Database` page can advance the queue while open, but 24/7 cache filling still needs an external runner plus shared persistent storage.
+
 Current deployed app:
 - https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/
 

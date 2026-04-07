@@ -23,6 +23,9 @@ The project includes two interfaces:
 - Hero Overview is now built from a validated snapshot that tracks match-detail coverage; incomplete zero-value snapshots are rejected instead of being rendered as valid analytics
 - Reported bad matches `8743652071` and `8745970611` are excluded centrally from all statistics and selected-hero sections
 - Dashboard summary cards: Turbo matches, wins, losses, winrate; Turbo wins are green and Turbo losses are red
+- Separate multipage `Database` view tracks cache coverage for one player's Turbo matches over a rolling window (default `365` days)
+- `Database` shows match-level cache states, replay-parse backlog, recent sync-cycle history, cooldown state after 429s, and the contiguous date range that is already fully cached
+- `Database` can run one bounded cache-fill cycle per refresh and optionally auto-run while that page remains open
 - Time filter modes: `Days`, `Patches`, `Start Date`
 - Default time filter mode is `Patches`, preselected to patch family `7.41` (`7.41` plus any available `7.41x` letter patches)
 - Default baseline/start date is `2026-03-24`
@@ -30,7 +33,8 @@ The project includes two interfaces:
 - Default selected hero in the hero dropdown is `Spectre` when present in the loaded overview; otherwise the first available hero is used
 - If matching dashboard data already exists in local SQLite storage, the app restores Hero Overview automatically on page load for the current filters
 - `Refresh Turbo Dashboard` fetches/syncs the hero overview from OpenDota when you want newer matches
-- `Refresh Turbo Dashboard` is the only UI action that may talk to OpenDota; it performs an incremental new-match check and hydrates missing match details for the current snapshot exactly once
+- `Refresh Turbo Dashboard` and the dedicated `Database` page are the only UI actions that may talk to OpenDota
+- `Refresh Turbo Dashboard` performs an incremental new-match check and hydrates missing match details for the current snapshot exactly once
 - If the current cached snapshot still lacks required match details for some heroes, the app does not render that overview as valid data and tells you to rebuild the snapshot
 - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild the selected hero sections from the currently loaded dashboard snapshot
 - Selected-hero refresh actions are grouped into one shared action bar above the detail sections, including `Refresh Matchups`
@@ -90,9 +94,11 @@ The project includes two interfaces:
 - Supports player input as account id or OpenDota profile URL
 - Local `SQLite` storage for player match summaries
 - Separate persisted storage for fetched match details
+- Separate persisted storage for background sync state, sync-cycle history, and replay-parse request tracking
 - Incremental summary sync to avoid repeated full-history calls
 - Match details can be backfilled later without rebuilding summary history
 - Graceful handling of missing OpenDota fields and rate limits
+- Streamlit Community Cloud does not provide a real always-on worker in the app process. `Database` auto-run works only while that page stays open; a true 24/7 worker still needs an external runner plus shared storage.
 
 ## Project entry points
 
