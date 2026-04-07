@@ -19,9 +19,6 @@ from utils.helpers import format_duration, parse_player_id, unix_to_dt
 from webapp.app_runtime import build_service, get_app_version
 
 
-st.set_page_config(page_title="Turbo Buff Database", layout="wide")
-
-
 def _format_datetime(value: str | None) -> str:
     if not value:
         return "-"
