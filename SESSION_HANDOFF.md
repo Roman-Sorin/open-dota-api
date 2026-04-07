@@ -603,7 +603,7 @@ CLI remains available as a secondary interface.
 ## 2026-04-07 database page + cooperative background cache worker
 
 - Added a separate multipage Streamlit view:
-  - `webapp/pages/Database.py`
+  - `pages/Database.py`
   - page title: `Database`
 - Product purpose:
   - monitor Turbo cache progress for one player over a rolling window (default `365` days)
