@@ -702,26 +702,24 @@ CLI remains available as a secondary interface.
 - Root cause confirmed:
   - critical cache state was stored only in local `.cache/matches.sqlite3`
   - Streamlit Community Cloud local filesystem is not durable across reboot/redeploy/reset events
-- Implemented durable replica support for the SQLite match store:
-  - new module: `utils/persistent_store.py`
-  - new optional config:
-    - `MATCH_STORE_S3_BUCKET`
-    - `MATCH_STORE_S3_KEY`
-    - `MATCH_STORE_S3_ENDPOINT_URL`
-    - `MATCH_STORE_S3_REGION`
-  - on app/service startup:
-    - if configured, download remote `matches.sqlite3` before opening the store
-  - after every committed SQLite write:
-    - upload the latest `matches.sqlite3` back to S3-compatible storage
-- Integration points updated:
+- Follow-up architecture change:
+  - replaced the short-lived S3-replica approach with a Postgres-backed store selected by `DATABASE_URL`
+  - recommended provider is Neon free tier
+  - new modules:
+    - `utils/postgres_match_store.py`
+    - `utils/store_factory.py`
+- Runtime/service entrypoints now choose Postgres automatically when `DATABASE_URL` exists:
   - `webapp/app_runtime.py`
   - `cli/commands.py`
   - `scripts/backfill_item_timings.py`
-- Store hook added:
-  - `SQLiteMatchStore(..., after_commit=...)`
-- UI safety improvement:
-  - dashboard and `Database` page now show a warning when durable storage is not configured, instead of silently pretending the cache is safe across restarts
-- Regression coverage added:
-  - `tests/test_persistent_store.py`
-  - verifies after-commit sync hook execution
-  - verifies a cached match can be restored after deleting the local SQLite file and bootstrapping from the durable replica
+- Local SQLite remains the fallback for local development/tests.
+- Removed now-obsolete S3 replica path:
+  - deleted `utils/persistent_store.py`
+  - deleted `tests/test_persistent_store.py`
+- New regression coverage:
+  - `tests/test_store_factory.py`
+  - verifies SQLite fallback and Postgres backend selection
+- UI safety improvement remains:
+  - dashboard and `Database` page warn when `DATABASE_URL` is not configured, instead of silently pretending the cache is safe across restarts
+- Additional runtime safety:
+  - if `DATABASE_URL` is configured but connection fails, store factory now emits a visible warning and falls back to local SQLite instead of taking the whole Streamlit app down with a raw backend traceback

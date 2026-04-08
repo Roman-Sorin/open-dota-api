@@ -20,11 +20,10 @@ from clients.opendota_client import OpenDotaClient
 from models.dtos import MatchSummary, QueryFilters
 from services.analytics_service import DotaAnalyticsService
 from utils.cache import JsonFileCache
-from utils.config import get_cache_dir, get_match_store_path, get_settings, is_persistent_match_store_configured
+from utils.config import get_cache_dir, get_settings, is_persistent_match_store_configured
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError, ValidationError
 from utils.helpers import format_duration, parse_player_id
-from utils.match_store import SQLiteMatchStore
-from webapp.app_runtime import build_service, get_app_version
+from webapp.app_runtime import build_service, get_app_version, get_store_warning
 from webapp.dashboard_state import build_hero_snapshot_request_key
 from webapp.filter_defaults import default_patch_selection
 from webapp.hero_defaults import default_hero_id
@@ -610,10 +609,13 @@ app_version = get_app_version()
 st.caption(f"Build: `{app_version}`")
 
 service = build_service()
+store_warning = get_store_warning()
+if store_warning:
+    st.error(store_warning)
 if not is_persistent_match_store_configured():
     st.warning(
-        "Persistent match storage is not configured for this deployment yet. "
-        "Streamlit app reboots or redeploys can reset the local cache until external durable storage is connected."
+        "Persistent external match storage is not configured for this deployment yet. "
+        "Streamlit app reboots or redeploys can reset the local cache until DATABASE_URL is connected."
     )
 try:
     service_overview_sig = inspect.signature(service.get_turbo_hero_overview)

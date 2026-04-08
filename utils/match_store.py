@@ -5,17 +5,107 @@ import json
 from pathlib import Path
 import sqlite3
 from typing import Any
-from typing import Callable
+from typing import Protocol
+
+
+class MatchStoreProtocol(Protocol):
+    def close(self) -> None: ...
+    def get_existing_match_ids(self, account_id: int, match_ids: list[int]) -> set[int]: ...
+    def upsert_player_matches(self, account_id: int, rows: list[dict[str, Any]]) -> None: ...
+    def query_player_matches(
+        self,
+        account_id: int,
+        hero_id: int | None = None,
+        game_mode: int | None = None,
+        min_start_time: int | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]: ...
+    def query_player_match_status_rows(
+        self,
+        account_id: int,
+        hero_id: int | None = None,
+        game_mode: int | None = None,
+        min_start_time: int | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]: ...
+    def update_player_match_enrichment(
+        self,
+        account_id: int,
+        match_id: int,
+        *,
+        hero_damage: int | None = None,
+        net_worth: int | None = None,
+        lane_efficiency_pct: float | None = None,
+    ) -> None: ...
+    def get_match_detail(self, match_id: int) -> dict[str, Any] | None: ...
+    def get_match_ids_without_details(
+        self,
+        account_id: int,
+        game_mode: int | None = None,
+        limit: int | None = None,
+    ) -> list[int]: ...
+    def upsert_match_detail(self, match_id: int, payload: dict[str, Any]) -> None: ...
+    def get_sync_state(self, account_id: int, scope_key: str) -> dict[str, Any] | None: ...
+    def upsert_sync_state(
+        self,
+        account_id: int,
+        scope_key: str,
+        *,
+        last_incremental_sync_at: str | None = None,
+        last_full_sync_at: str | None = None,
+        known_match_count: int | None = None,
+    ) -> None: ...
+    def count_player_matches(self, account_id: int, game_mode: int | None = None) -> int: ...
+    def get_latest_player_match_update(self, account_id: int, game_mode: int | None = None) -> str | None: ...
+    def get_background_sync_state(
+        self,
+        account_id: int,
+        scope_key: str,
+        window_days: int,
+    ) -> dict[str, Any] | None: ...
+    def upsert_background_sync_state(
+        self,
+        account_id: int,
+        scope_key: str,
+        window_days: int,
+        **fields: Any,
+    ) -> None: ...
+    def insert_background_sync_run(self, **kwargs: Any) -> None: ...
+    def list_background_sync_runs(
+        self,
+        account_id: int,
+        scope_key: str,
+        window_days: int,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]: ...
+    def get_match_parse_request(self, match_id: int) -> dict[str, Any] | None: ...
+    def upsert_match_parse_request(
+        self,
+        match_id: int,
+        account_id: int,
+        *,
+        status: str,
+        requested_at: str | None = None,
+        last_polled_at: str | None = None,
+        completed_at: str | None = None,
+        last_error: str | None = None,
+    ) -> None: ...
+    def list_match_parse_requests(
+        self,
+        account_id: int,
+        *,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]: ...
 
 
 class SQLiteMatchStore:
-    def __init__(self, db_path: Path | str, *, after_commit: Callable[[], None] | None = None) -> None:
+    def __init__(self, db_path: Path | str) -> None:
         db_target = str(db_path)
         if db_target != ":memory:":
             Path(db_target).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(db_target, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
-        self._after_commit = after_commit
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -134,8 +224,6 @@ class SQLiteMatchStore:
 
     def _commit(self) -> None:
         self._conn.commit()
-        if self._after_commit is not None:
-            self._after_commit()
 
     def close(self) -> None:
         self._conn.close()

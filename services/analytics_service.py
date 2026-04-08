@@ -15,7 +15,7 @@ from utils.cache import JsonFileCache
 from utils.exceptions import OpenDotaNotFoundError, OpenDotaRateLimitError
 from utils.helpers import calculate_kda_ratio, format_duration, unix_to_dt, winrate_percent
 from utils.match_filters import is_excluded_match_id
-from utils.match_store import SQLiteMatchStore
+from utils.match_store import MatchStoreProtocol
 from utils.overview_validation import overview_looks_stale
 
 
@@ -180,7 +180,7 @@ class DotaAnalyticsService:
         self,
         client: OpenDotaClient,
         cache: JsonFileCache,
-        match_store: SQLiteMatchStore | None = None,
+        match_store: MatchStoreProtocol | None = None,
         stratz_client: StratzClient | None = None,
     ) -> None:
         self.client = client

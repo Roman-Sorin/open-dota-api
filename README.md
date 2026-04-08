@@ -118,13 +118,10 @@ Set keys only if needed:
 ```env
 OPENDOTA_API_KEY=
 STRATZ_API_TOKEN=
-MATCH_STORE_S3_BUCKET=
-MATCH_STORE_S3_KEY=
-MATCH_STORE_S3_ENDPOINT_URL=
-MATCH_STORE_S3_REGION=
+DATABASE_URL=
 ```
 
-`MATCH_STORE_S3_*` is optional but strongly recommended for Streamlit Cloud. When configured with valid S3-compatible credentials in environment/secrets, the app restores `matches.sqlite3` from durable storage on startup and uploads it again after each committed cache write. Without this external store, Streamlit Cloud reboots/redeploys can reset the local cache.
+`DATABASE_URL` is optional locally but strongly recommended for Streamlit Cloud. Recommended provider is free-tier Neon Postgres. When configured in environment/secrets, the app persists the critical match store in Postgres instead of local-only `matches.sqlite3`, so reboot/redeploy no longer wipes the cached match history. If `DATABASE_URL` is present but invalid, the app now shows a visible warning and falls back to local SQLite instead of crashing blindly.
 
 ## CLI (still available)
 
@@ -173,7 +170,7 @@ tests/
 - Match details are persisted separately and reused for enrichment-heavy sections.
 - The service performs incremental syncs instead of refetching whole history on each reload.
 - Background worker metadata is also persisted in local `SQLite` so the `Database` page can show cache progress and recent sync-cycle history.
-- For Streamlit Cloud durability, the SQLite match store can now be mirrored to S3-compatible object storage via `MATCH_STORE_S3_BUCKET` + `MATCH_STORE_S3_KEY`; this is the required setup if cache must survive reboot/redeploy/reset events.
+- For Streamlit Cloud durability, the critical match store can now live in Postgres via `DATABASE_URL` (recommended: Neon free tier); this is the required setup if cache must survive reboot/redeploy/reset events.
 - `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
 - If `STRATZ_API_TOKEN` is configured, cached matches that still miss item timings after OpenDota detail fetches can now recover those timings from STRATZ match purchase events.
 - STRATZ fallback does not replace OpenDota for summaries/details; it only fills missing timing fields (`purchase_log` / `first_purchase_time`) when OpenDota leaves them empty.

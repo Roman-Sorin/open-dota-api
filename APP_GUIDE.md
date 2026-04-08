@@ -100,7 +100,7 @@ The project includes two interfaces:
 - Local `SQLite` storage for player match summaries
 - Separate persisted storage for fetched match details
 - Separate persisted storage for background sync state, sync-cycle history, and replay-parse request tracking
-- Optional S3-compatible durable replica for the critical SQLite match store so cached matches/details survive app restarts and redeploys
+- Optional Postgres-backed durable store for the critical match cache so cached matches/details survive app restarts and redeploys
 - Incremental summary sync to avoid repeated full-history calls
 - Match details can be backfilled later without rebuilding summary history
 - Graceful handling of missing OpenDota fields and rate limits
@@ -135,7 +135,7 @@ copy .env.example .env
 
 `OPENDOTA_API_KEY` is optional. Without a key, rate limits may be hit more often.
 `STRATZ_API_TOKEN` is also optional and only needed for timing fallback when OpenDota lacks item timings for a match.
-`MATCH_STORE_S3_BUCKET` and `MATCH_STORE_S3_KEY` are optional locally, but they are the critical production settings if cache must survive Streamlit Cloud reboot/redeploy/reset events. When present with valid S3-compatible credentials, the app restores the SQLite match store on startup and syncs it back after every committed cache write.
+`DATABASE_URL` is optional locally, but it is the critical production setting if cache must survive Streamlit Cloud reboot/redeploy/reset events. Recommended provider is free-tier Neon Postgres. When present, the app stores the critical match cache in Postgres instead of local-only SQLite. If the value is invalid or unreachable, the UI now shows an explicit warning and the app falls back to local SQLite.
 
 ## Run the web dashboard (recommended)
 
@@ -164,7 +164,7 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
 - If `STRATZ_API_TOKEN` is configured, the app can recover missing match item timings from STRATZ when OpenDota detail payloads have no `purchase_log` / `first_purchase_time`.
 - STRATZ fallback is timing-only. Match summaries and main detail payloads still come from OpenDota.
-- Streamlit Community Cloud local files are not durable storage. If `MATCH_STORE_S3_*` is not configured, the app now warns in the UI because a reboot/redeploy can reset the local `.cache/matches.sqlite3` file.
+- Streamlit Community Cloud local files are not durable storage. If `DATABASE_URL` is not configured, the app now warns in the UI because a reboot/redeploy can reset the local `.cache/matches.sqlite3` file.
 
 ## Batch timing repair
 

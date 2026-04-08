@@ -68,10 +68,10 @@ Important limitation:
 ## Current persistence model
 
 - Critical cache state lives in `matches.sqlite3`.
-- The app now supports a durable S3-compatible replica for that SQLite file:
-  - on startup, download remote `matches.sqlite3` if configured
-  - after each committed cache write, upload the latest file back to remote storage
-- This is the minimum viable fix for Streamlit Cloud restarts because local `.cache` files alone are not durable.
+- Current runtime can now switch the critical match store to Postgres via `DATABASE_URL`.
+- Recommended provider is free-tier Neon Postgres because it avoids credit-card-first setup and fits the current cache size.
+- Local SQLite remains the fallback for local development and tests.
+- This is the required fix for Streamlit Cloud restarts because local `.cache` files alone are not durable.
 
 ## Still not implemented
 
@@ -82,7 +82,7 @@ Important limitation:
 
 ## Next reasonable upgrades
 
-1. Replace the SQLite replica approach with a first-class external database if multi-writer or higher durability guarantees become necessary.
+1. Add an optional one-time migration/import flow from local SQLite into Postgres for users who already built a large cache locally.
 2. Run `run_background_sync_cycle(...)` from an external scheduler/worker.
 3. Add richer backlog prioritization:
    - newest-first vs oldest-first modes
