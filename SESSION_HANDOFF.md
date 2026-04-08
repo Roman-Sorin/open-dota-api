@@ -738,3 +738,8 @@ CLI remains available as a secondary interface.
 - Mixed-runtime follow-up:
   - `utils/store_factory.py` now imports and reloads `utils.postgres_match_store` lazily inside `build_match_store(...)`
   - purpose: force Streamlit mixed deploy/runtime sessions to pick up the newest Postgres backend implementation instead of holding a stale module object across deploys
+- Browser-tab UX follow-up:
+  - moved `st.set_page_config(...)` from the shared navigation shell into each page script
+  - dashboard now sets `Turbo Buff - Dashboard`
+  - database now sets `Turbo Buff - Database`
+  - purpose: Chrome tabs for the two pages are now distinguishable instead of both showing the same shared title

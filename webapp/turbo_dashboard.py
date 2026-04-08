@@ -11,8 +11,6 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
-st.set_page_config(page_title="Turbo Buff", layout="wide")
-
 navigation = st.navigation(
     [
         st.Page(
