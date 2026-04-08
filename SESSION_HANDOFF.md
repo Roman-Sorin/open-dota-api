@@ -735,3 +735,6 @@ CLI remains available as a secondary interface.
 - Diagnostics follow-up:
   - store-factory warning now includes the full exception message, not only the exception class
   - reason: make cloud-only `DATABASE_URL` failures debuggable directly from the live UI when Streamlit Cloud logs are not immediately accessible
+- Mixed-runtime follow-up:
+  - `utils/store_factory.py` now imports and reloads `utils.postgres_match_store` lazily inside `build_match_store(...)`
+  - purpose: force Streamlit mixed deploy/runtime sessions to pick up the newest Postgres backend implementation instead of holding a stale module object across deploys

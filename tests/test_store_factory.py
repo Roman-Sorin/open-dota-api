@@ -46,7 +46,11 @@ def test_build_match_store_uses_postgres_when_database_url_present(monkeypatch) 
         def __init__(self, database_url: str) -> None:
             captured.append(database_url)
 
-    monkeypatch.setattr("utils.store_factory.PostgresMatchStore", _FakePostgresStore)
+    class _FakeModule:
+        PostgresMatchStore = _FakePostgresStore
+
+    monkeypatch.setattr("importlib.import_module", lambda name: _FakeModule())
+    monkeypatch.setattr("importlib.reload", lambda module: module)
 
     store = build_match_store(_Settings(database_url="postgresql://example"))
 
@@ -61,7 +65,11 @@ def test_build_match_store_falls_back_to_sqlite_when_postgres_connect_fails(tmp_
         def __init__(self, database_url: str) -> None:
             raise RuntimeError("boom")
 
-    monkeypatch.setattr("utils.store_factory.PostgresMatchStore", _BrokenPostgresStore)
+    class _FakeModule:
+        PostgresMatchStore = _BrokenPostgresStore
+
+    monkeypatch.setattr("importlib.import_module", lambda name: _FakeModule())
+    monkeypatch.setattr("importlib.reload", lambda module: module)
 
     store = build_match_store(_Settings(database_url="postgresql://broken"))
     try:

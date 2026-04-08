@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import importlib
+
 from utils.config import Settings, get_match_store_path
 from utils.match_store import MatchStoreProtocol, SQLiteMatchStore
-from utils.postgres_match_store import PostgresMatchStore
 
 _LAST_STORE_WARNING: str | None = None
 
@@ -11,8 +12,10 @@ def build_match_store(settings: Settings) -> MatchStoreProtocol:
     global _LAST_STORE_WARNING
     if settings.database_url:
         try:
+            postgres_module = importlib.import_module("utils.postgres_match_store")
+            postgres_module = importlib.reload(postgres_module)
             _LAST_STORE_WARNING = None
-            return PostgresMatchStore(settings.database_url)
+            return postgres_module.PostgresMatchStore(settings.database_url)
         except Exception as exc:  # noqa: BLE001
             _LAST_STORE_WARNING = (
                 "Failed to connect to DATABASE_URL; app is using local SQLite fallback for now. "
