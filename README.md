@@ -222,4 +222,5 @@ pytest -q
 ## Collaboration Rules
 
 - After completing any implementation change, update relevant Markdown docs (`README.md`, `APP_GUIDE.md`, etc.) when behavior, UX, setup, or workflows changed.
+- Follow the repository self-check checklist in [SELF_CHECK_WORKFLOW.md](/C:/development/projects/open-dota-api/SELF_CHECK_WORKFLOW.md) for validation, regression coverage, deploy verification, and documentation hygiene after every change.
 - After changes are complete and validated, commit and push to the remote branch in the same working session.
