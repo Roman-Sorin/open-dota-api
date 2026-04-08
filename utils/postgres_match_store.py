@@ -8,15 +8,27 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import pg8000.dbapi
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except Exception:  # noqa: BLE001
+    psycopg = None
+    dict_row = None
 
 
 class PostgresMatchStore:
     def __init__(self, database_url: str) -> None:
+        self._driver = "pg8000"
         self._conn = self._connect_from_url(database_url)
         self._init_schema()
 
-    @staticmethod
-    def _connect_from_url(database_url: str):
+    def _connect_from_url(self, database_url: str):
+        if psycopg is not None:
+            try:
+                self._driver = "psycopg"
+                return psycopg.connect(database_url, autocommit=False, row_factory=dict_row)
+            except Exception:  # noqa: BLE001
+                self._driver = "pg8000"
         parsed = urlparse(database_url)
         query = parse_qs(parsed.query)
         ssl_context: ssl.SSLContext | bool | None = None
@@ -183,19 +195,23 @@ class PostgresMatchStore:
         try:
             yield cur
         finally:
-            cur.close()
+            close = getattr(cur, "close", None)
+            if callable(close):
+                close()
 
-    @staticmethod
-    def _fetchall_dicts(cur) -> list[dict[str, Any]]:
+    def _fetchall_dicts(self, cur) -> list[dict[str, Any]]:
         rows = cur.fetchall()
+        if self._driver == "psycopg":
+            return [dict(row) for row in rows]
         columns = [item[0] for item in (cur.description or [])]
         return [dict(zip(columns, row, strict=False)) for row in rows]
 
-    @staticmethod
-    def _fetchone_dict(cur) -> dict[str, Any] | None:
+    def _fetchone_dict(self, cur) -> dict[str, Any] | None:
         row = cur.fetchone()
         if row is None:
             return None
+        if self._driver == "psycopg":
+            return dict(row)
         columns = [item[0] for item in (cur.description or [])]
         return dict(zip(columns, row, strict=False))
 

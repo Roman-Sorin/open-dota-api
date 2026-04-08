@@ -729,3 +729,6 @@ CLI remains available as a secondary interface.
 - Cloud-runtime compatibility follow-up:
   - changed `sslmode=require` handling in `utils/postgres_match_store.py` from a boolean placeholder to `ssl.create_default_context()`
   - purpose: avoid Linux/runtime-specific `TypeError` fallback failures on Streamlit Cloud while keeping Neon SSL required
+- Driver strategy follow-up:
+  - `utils/postgres_match_store.py` now tries `psycopg` first and falls back to `pg8000`
+  - local validation with the working Neon URL now selects `psycopg`, which is the preferred path for Streamlit Cloud runtime stability
