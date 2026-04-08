@@ -1733,6 +1733,9 @@ class DotaAnalyticsService:
             limit=limit,
             offset=offset,
         )
+        match_ids = [int(row.get("match_id") or 0) for row in status_rows if int(row.get("match_id") or 0) > 0]
+        parse_requests_by_id = self.match_store.get_match_parse_requests_for_ids(match_ids)
+        details_by_id = self.match_store.get_match_details_for_ids(match_ids)
         rows: list[BackgroundMatchStatusRow] = []
         for row in status_rows:
             payload = row.get("payload")
@@ -1741,11 +1744,11 @@ class DotaAnalyticsService:
             match = self._parse_match_summary_row(payload, min_start=self._min_start_time(filters))
             if match is None:
                 continue
-            parse_request = self.match_store.get_match_parse_request(match.match_id)
+            parse_request = parse_requests_by_id.get(match.match_id)
             parse_status = str(parse_request.get("status")) if isinstance(parse_request, dict) and parse_request.get("status") else None
             detail_updated_at = row.get("detail_updated_at")
             if detail_updated_at:
-                details = self.get_match_details_if_cached(match.match_id)
+                details = details_by_id.get(match.match_id)
                 player_row = self._extract_player_from_match_details(
                     details or {},
                     player_id=player_id,

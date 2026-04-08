@@ -344,8 +344,6 @@ if st.session_state.get(_ui_key("database_use_advanced_batches")):
     active_parse_batch = int(parse_batch)
     active_interval_seconds = int(auto_run_seconds)
 
-st.caption("debug-a")
-
 run_cycle_request_key = _ui_key("database_run_cycle_requested")
 force_cycle_request_key = _ui_key("database_force_cycle_requested")
 run_cycle = bool(st.session_state.pop(run_cycle_request_key, False))
@@ -358,7 +356,6 @@ except ValidationError as exc:
     st.stop()
 
 st.session_state["player_raw"] = player_raw
-st.caption("debug-b")
 
 auto_phase = str(st.session_state.get(auto_phase_key, "display") or "display")
 if not auto_run:
@@ -386,9 +383,7 @@ if run_cycle or force_cycle or should_run_auto_cycle:
         st.session_state[auto_phase_key] = "display"
 
 state = service.get_background_sync_state(player_id, game_mode=23, window_days=int(window_days))
-st.caption("debug-state")
 runs = service.list_background_sync_runs(player_id, game_mode=23, window_days=int(window_days), limit=20)
-st.caption("debug-runs")
 
 total_rows = int((state or {}).get("target_match_count") or 0)
 current_page_size = max(int(page_size), 1)
@@ -403,9 +398,7 @@ page_rows = service.list_background_match_status_rows(
     limit=current_page_size,
     offset=start_idx,
 )
-st.caption("debug-rows")
 coverage = _PageCoverage(state, page_rows)
-st.caption("debug-c")
 
 if run_result is not None:
     if run_result.status == "completed":

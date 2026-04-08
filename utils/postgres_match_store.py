@@ -435,6 +435,17 @@ class PostgresMatchStore:
             return None
         return self._json_loads(str(row["payload_json"]))
 
+    def get_match_details_for_ids(self, match_ids: list[int]) -> dict[int, dict[str, Any]]:
+        unique_ids = [int(match_id) for match_id in set(match_ids) if int(match_id) > 0]
+        if not unique_ids:
+            return {}
+        placeholders = ",".join("%s" for _ in unique_ids)
+        query = f"SELECT match_id, payload_json FROM match_details WHERE match_id IN ({placeholders})"
+        with self._cursor() as cur:
+            cur.execute(query, unique_ids)
+            rows = self._fetchall_dicts(cur)
+        return {int(row["match_id"]): self._json_loads(str(row["payload_json"])) for row in rows}
+
     def get_match_ids_without_details(
         self,
         account_id: int,
@@ -727,6 +738,17 @@ class PostgresMatchStore:
             cur.execute("SELECT * FROM match_parse_requests WHERE match_id = %s", (int(match_id),))
             row = self._fetchone_dict(cur)
         return row
+
+    def get_match_parse_requests_for_ids(self, match_ids: list[int]) -> dict[int, dict[str, Any]]:
+        unique_ids = [int(match_id) for match_id in set(match_ids) if int(match_id) > 0]
+        if not unique_ids:
+            return {}
+        placeholders = ",".join("%s" for _ in unique_ids)
+        query = f"SELECT * FROM match_parse_requests WHERE match_id IN ({placeholders})"
+        with self._cursor() as cur:
+            cur.execute(query, unique_ids)
+            rows = self._fetchall_dicts(cur)
+        return {int(row["match_id"]): row for row in rows}
 
     def upsert_match_parse_request(
         self,

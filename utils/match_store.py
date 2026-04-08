@@ -39,6 +39,7 @@ class MatchStoreProtocol(Protocol):
         lane_efficiency_pct: float | None = None,
     ) -> None: ...
     def get_match_detail(self, match_id: int) -> dict[str, Any] | None: ...
+    def get_match_details_for_ids(self, match_ids: list[int]) -> dict[int, dict[str, Any]]: ...
     def get_match_ids_without_details(
         self,
         account_id: int,
@@ -80,6 +81,7 @@ class MatchStoreProtocol(Protocol):
         limit: int = 20,
     ) -> list[dict[str, Any]]: ...
     def get_match_parse_request(self, match_id: int) -> dict[str, Any] | None: ...
+    def get_match_parse_requests_for_ids(self, match_ids: list[int]) -> dict[int, dict[str, Any]]: ...
     def upsert_match_parse_request(
         self,
         match_id: int,
@@ -451,6 +453,17 @@ class SQLiteMatchStore:
             return None
         return self._json_loads(str(row["payload_json"]))
 
+    def get_match_details_for_ids(self, match_ids: list[int]) -> dict[int, dict[str, Any]]:
+        unique_ids = [int(match_id) for match_id in set(match_ids) if int(match_id) > 0]
+        if not unique_ids:
+            return {}
+        placeholders = ",".join("?" for _ in unique_ids)
+        rows = self._conn.execute(
+            f"SELECT match_id, payload_json FROM match_details WHERE match_id IN ({placeholders})",
+            unique_ids,
+        ).fetchall()
+        return {int(row["match_id"]): self._json_loads(str(row["payload_json"])) for row in rows}
+
     def get_match_ids_without_details(
         self,
         account_id: int,
@@ -748,6 +761,17 @@ class SQLiteMatchStore:
             (int(match_id),),
         ).fetchone()
         return dict(row) if row is not None else None
+
+    def get_match_parse_requests_for_ids(self, match_ids: list[int]) -> dict[int, dict[str, Any]]:
+        unique_ids = [int(match_id) for match_id in set(match_ids) if int(match_id) > 0]
+        if not unique_ids:
+            return {}
+        placeholders = ",".join("?" for _ in unique_ids)
+        rows = self._conn.execute(
+            f"SELECT * FROM match_parse_requests WHERE match_id IN ({placeholders})",
+            unique_ids,
+        ).fetchall()
+        return {int(row["match_id"]): dict(row) for row in rows}
 
     def upsert_match_parse_request(
         self,
