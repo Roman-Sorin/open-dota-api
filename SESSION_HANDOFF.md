@@ -732,3 +732,6 @@ CLI remains available as a secondary interface.
 - Driver strategy follow-up:
   - `utils/postgres_match_store.py` now tries `psycopg` first and falls back to `pg8000`
   - local validation with the working Neon URL now selects `psycopg`, which is the preferred path for Streamlit Cloud runtime stability
+- Diagnostics follow-up:
+  - store-factory warning now includes the full exception message, not only the exception class
+  - reason: make cloud-only `DATABASE_URL` failures debuggable directly from the live UI when Streamlit Cloud logs are not immediately accessible

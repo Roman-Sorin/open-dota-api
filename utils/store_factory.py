@@ -16,7 +16,7 @@ def build_match_store(settings: Settings) -> MatchStoreProtocol:
         except Exception as exc:  # noqa: BLE001
             _LAST_STORE_WARNING = (
                 "Failed to connect to DATABASE_URL; app is using local SQLite fallback for now. "
-                f"Original error: {exc.__class__.__name__}"
+                f"Original error: {exc.__class__.__name__}: {exc}"
             )
     else:
         _LAST_STORE_WARNING = None
