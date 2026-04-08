@@ -26,7 +26,7 @@ class PostgresMatchStore:
         if psycopg is not None:
             try:
                 self._driver = "psycopg"
-                return psycopg.connect(database_url, autocommit=False, row_factory=dict_row)
+                return psycopg.connect(database_url, autocommit=True, row_factory=dict_row)
             except Exception:  # noqa: BLE001
                 self._driver = "pg8000"
         parsed = urlparse(database_url)
@@ -35,7 +35,7 @@ class PostgresMatchStore:
         if (query.get("sslmode", [""])[0] or "").lower() == "require":
             ssl_context = ssl.create_default_context()
         port = parsed.port or 5432
-        return pg8000.dbapi.connect(
+        conn = pg8000.dbapi.connect(
             user=parsed.username or "",
             password=parsed.password or "",
             host=parsed.hostname or "",
@@ -43,6 +43,11 @@ class PostgresMatchStore:
             database=(parsed.path or "/").lstrip("/"),
             ssl_context=ssl_context,
         )
+        try:
+            conn.autocommit = True
+        except Exception:  # noqa: BLE001
+            pass
+        return conn
 
     def _init_schema(self) -> None:
         with self._cursor() as cur:

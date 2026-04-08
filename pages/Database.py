@@ -23,11 +23,16 @@ from utils.helpers import format_duration, parse_player_id, unix_to_dt
 from webapp.app_runtime import build_service, get_app_version, get_store_warning
 
 ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
+DATABASE_UI_VERSION = "v2"
 SYNC_PRESETS: dict[str, dict[str, int]] = {
     "Safe": {"detail_batch": 4, "parse_batch": 1, "interval_seconds": 30},
-    "Balanced": {"detail_batch": 6, "parse_batch": 10, "interval_seconds": 30},
-    "Fast": {"detail_batch": 10, "parse_batch": 3, "interval_seconds": 15},
+    "Balanced": {"detail_batch": 5, "parse_batch": 5, "interval_seconds": 15},
+    "Fast": {"detail_batch": 10, "parse_batch": 10, "interval_seconds": 15},
 }
+
+
+def _ui_key(name: str) -> str:
+    return f"{name}_{DATABASE_UI_VERSION}"
 
 
 def _format_datetime(value: str | None) -> str:
@@ -218,36 +223,36 @@ with st.expander("How to use this page", expanded=True):
     st.caption(
         "Times on this page are shown in Israel time. During implementation I tested real OpenDota requests and observed "
         "rate-limit headers such as `X-Rate-Limit-Remaining-Minute` and `X-Rate-Limit-Remaining-Day`. "
-        "Based on that, the default auto mode is now `Balanced` at 30 seconds."
+        "Based on that, the default auto mode is now `Balanced` at 15 seconds."
     )
 
-player_default = st.session_state.get("database_player_raw", st.session_state.get("player_raw", "1233793238"))
-window_default = int(st.session_state.get("database_window_days", 365) or 365)
-detail_default = int(st.session_state.get("database_detail_batch", 6) or 6)
-parse_default = int(st.session_state.get("database_parse_batch", 10) or 10)
-cooldown_default = int(st.session_state.get("database_cooldown_seconds", 30) or 30)
-auto_default = bool(st.session_state.get("database_auto_run", True))
-interval_default = int(st.session_state.get("database_auto_run_seconds", 30) or 30)
-page_size_default = int(st.session_state.get("database_page_size", 100) or 100)
-preset_default = st.session_state.get("database_sync_preset", "Balanced")
+player_default = st.session_state.get(_ui_key("database_player_raw"), st.session_state.get("player_raw", "1233793238"))
+window_default = int(st.session_state.get(_ui_key("database_window_days"), 365) or 365)
+detail_default = int(st.session_state.get(_ui_key("database_detail_batch"), 5) or 5)
+parse_default = int(st.session_state.get(_ui_key("database_parse_batch"), 5) or 5)
+cooldown_default = int(st.session_state.get(_ui_key("database_cooldown_seconds"), 50) or 50)
+auto_default = bool(st.session_state.get(_ui_key("database_auto_run"), True))
+interval_default = int(st.session_state.get(_ui_key("database_auto_run_seconds"), 15) or 15)
+page_size_default = int(st.session_state.get(_ui_key("database_page_size"), 100) or 100)
+preset_default = st.session_state.get(_ui_key("database_sync_preset"), "Balanced")
 if preset_default not in SYNC_PRESETS:
     preset_default = "Balanced"
 
 controls = st.columns([1.2, 0.8, 1.0])
-player_raw = controls[0].text_input("Player ID or OpenDota URL", value=player_default, key="database_player_raw")
+player_raw = controls[0].text_input("Player ID or OpenDota URL", value=player_default, key=_ui_key("database_player_raw"))
 window_days = controls[1].number_input(
     "Window (days)",
     min_value=30,
     value=window_default,
     step=1,
-    key="database_window_days",
+    key=_ui_key("database_window_days"),
     help="How far back the background cache should cover. Default is 365 days, but you can set a larger window.",
 )
 sync_preset = controls[2].selectbox(
     "Sync Speed",
     options=list(SYNC_PRESETS.keys()),
     index=list(SYNC_PRESETS.keys()).index(preset_default),
-    key="database_sync_preset",
+    key=_ui_key("database_sync_preset"),
     help="Safe = slower but gentler on quota, Balanced = recommended, Fast = more aggressive.",
 )
 st.caption(_preset_help_text(sync_preset))
@@ -259,7 +264,7 @@ cooldown_seconds = secondary[0].number_input(
     max_value=3600,
     value=cooldown_default,
     step=10,
-    key="database_cooldown_seconds",
+    key=_ui_key("database_cooldown_seconds"),
     help="If OpenDota returns HTTP 429, auto-fill pauses for this many seconds before trying again.",
 )
 page_size = secondary[1].number_input(
@@ -268,10 +273,10 @@ page_size = secondary[1].number_input(
     max_value=500,
     value=page_size_default,
     step=10,
-    key="database_page_size",
+    key=_ui_key("database_page_size"),
     help="How many cached matches to display on one page. This does not limit the database job itself.",
 )
-auto_run = secondary[2].checkbox("Auto-fill while this page stays open", value=auto_default, key="database_auto_run")
+auto_run = secondary[2].checkbox("Auto-fill while this page stays open", value=auto_default, key=_ui_key("database_auto_run"))
 st.caption(
     f"If OpenDota returns HTTP 429, auto-fill pauses for {int(cooldown_seconds)} second(s) and then tries again."
 )
@@ -287,7 +292,7 @@ with st.expander("Advanced settings"):
         max_value=50,
         value=detail_default,
         step=1,
-        key="database_detail_batch",
+        key=_ui_key("database_detail_batch"),
         help="How many missing full match payloads the job may fetch in one cycle.",
     )
     parse_batch = st.number_input(
@@ -296,7 +301,7 @@ with st.expander("Advanced settings"):
         max_value=20,
         value=parse_default,
         step=1,
-        key="database_parse_batch",
+        key=_ui_key("database_parse_batch"),
         help="How many OpenDota replay-parse requests may be submitted in one cycle for missing item timings.",
     )
     auto_run_seconds = st.slider(
@@ -305,16 +310,16 @@ with st.expander("Advanced settings"):
         max_value=300,
         value=interval_default,
         step=15,
-        key="database_auto_run_seconds",
+        key=_ui_key("database_auto_run_seconds"),
         help="How often the page runs another cycle while this tab stays open.",
     )
     use_advanced_batches = st.checkbox(
         "Use advanced batch values instead of Sync Speed preset",
         value=False,
-        key="database_use_advanced_batches",
+        key=_ui_key("database_use_advanced_batches"),
     )
 
-if st.session_state.get("database_use_advanced_batches"):
+if st.session_state.get(_ui_key("database_use_advanced_batches")):
     active_detail_batch = int(detail_batch)
     active_parse_batch = int(parse_batch)
     active_interval_seconds = int(auto_run_seconds)
@@ -409,7 +414,7 @@ def _render_live_section() -> None:
         total_rows = len(coverage.rows)
         current_page_size = max(int(page_size), 1)
         total_pages = max((total_rows + current_page_size - 1) // current_page_size, 1)
-        current_page = int(st.session_state.get("database_page_number", 1) or 1)
+        current_page = int(st.session_state.get(_ui_key("database_page_number"), 1) or 1)
         current_page = max(1, min(current_page, total_pages))
 
         nav_cols = st.columns([1.1, 0.9, 0.8, 0.8, 0.8, 0.8, 1.8])
@@ -419,21 +424,21 @@ def _render_live_section() -> None:
             max_value=total_pages,
             value=current_page,
             step=1,
-            key="database_page_number_input",
+            key=_ui_key("database_page_number_input"),
         )
-        if nav_cols[1].button("First", key="database_page_first"):
+        if nav_cols[1].button("First", key=_ui_key("database_page_first")):
             current_page = 1
-        elif nav_cols[2].button("Prev", key="database_page_prev"):
+        elif nav_cols[2].button("Prev", key=_ui_key("database_page_prev")):
             current_page = max(1, current_page - 1)
-        elif nav_cols[3].button("Next", key="database_page_next"):
+        elif nav_cols[3].button("Next", key=_ui_key("database_page_next")):
             current_page = min(total_pages, current_page + 1)
-        elif nav_cols[4].button("Last", key="database_page_last"):
+        elif nav_cols[4].button("Last", key=_ui_key("database_page_last")):
             current_page = total_pages
         else:
             current_page = int(page_input)
 
         current_page = max(1, min(current_page, total_pages))
-        st.session_state["database_page_number"] = current_page
+        st.session_state[_ui_key("database_page_number")] = current_page
         start_idx = (current_page - 1) * current_page_size
         end_idx = min(start_idx + current_page_size, total_rows)
 

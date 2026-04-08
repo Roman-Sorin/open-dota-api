@@ -109,6 +109,20 @@ CLI remains available as a secondary interface.
   - avoid full page jumps every cycle
   - refresh only the live sync/history/table section while controls and surrounding layout stay stable
 
+## 2026-04-08 Database Neon freshness fix
+
+- User-reported bug:
+  - `Database` page could lag behind the actual Neon contents and fail to show the newest cached matches or newest sync runs even though the rows already existed in Postgres.
+- Root cause:
+  - `PostgresMatchStore` kept long-lived session connections with `autocommit=False`.
+  - In Streamlit, that allowed repeated `SELECT` queries to stay on an old transaction snapshot and miss newer rows inserted by later sync cycles.
+- Fix:
+  - `utils/postgres_match_store.py` now enables `autocommit=True` for both `psycopg` and `pg8000` connection paths.
+  - `pages/Database.py` defaults were realigned and widget keys were versioned so stale session state does not preserve old fetch defaults.
+- Current `Database` defaults:
+  - `Balanced` = `5` detail fetches, `5` replay parses, `15 sec`
+  - pause after `429` = `50 sec`
+
 ## 2026-04-02 research handoff: global hero item stats source feasibility
 
 - User request under investigation:

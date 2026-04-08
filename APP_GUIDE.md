@@ -27,10 +27,12 @@ The project includes two interfaces:
 - `Database` shows match-level cache states, replay-parse backlog, recent sync-cycle history, cooldown state after 429s, and the contiguous date range that is already fully cached
 - `Database` can run one bounded cache-fill cycle per refresh and optionally auto-run while that page remains open
 - `Database` auto-fill refreshes only its live sync fragment, so the full page no longer jumps on every cycle
-- Default `Database` `Balanced` mode now uses a `30` second interval and up to `10` parse requests per cycle
+- Default `Database` `Balanced` mode now uses `5` detail fetches, `5` parse requests, and a `15` second interval
+- Default `Database` cooldown after `HTTP 429` is now `50` seconds
 - `Cached Matches` now has real pagination: page size, page number, and `First/Prev/Next/Last` navigation
 - `Database` times are rendered in Israel time
 - `Database` exposes `Sync Speed` presets (`Safe`, `Balanced`, `Fast`) for normal use; raw detail/parse batch controls remain under `Advanced settings`
+- `Database` Postgres/Neon reads now run in autocommit mode so fresh sync runs and newly cached matches appear immediately instead of sticking to an older transaction snapshot inside a long-lived Streamlit session
 - Time filter modes: `Days`, `Patches`, `Start Date`
 - Default time filter mode is `Patches`, preselected to patch family `7.41` (`7.41` plus any available `7.41x` letter patches)
 - Default baseline/start date is `2026-03-24`
