@@ -723,3 +723,6 @@ CLI remains available as a secondary interface.
   - dashboard and `Database` page warn when `DATABASE_URL` is not configured, instead of silently pretending the cache is safe across restarts
 - Additional runtime safety:
   - if `DATABASE_URL` is configured but connection fails, store factory now emits a visible warning and falls back to local SQLite instead of taking the whole Streamlit app down with a raw backend traceback
+- Follow-up hotfix:
+  - `utils/postgres_match_store.py` was corrected for the actual `pg8000` cursor API
+  - live Neon smoke-check with the updated connection string succeeded and store factory selected `PostgresMatchStore` correctly

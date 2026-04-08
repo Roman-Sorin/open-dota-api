@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
 import ssl
@@ -32,7 +33,7 @@ class PostgresMatchStore:
         )
 
     def _init_schema(self) -> None:
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS player_matches (
@@ -176,6 +177,14 @@ class PostgresMatchStore:
         value = json.loads(payload)
         return value if isinstance(value, dict) else {}
 
+    @contextmanager
+    def _cursor(self):
+        cur = self._conn.cursor()
+        try:
+            yield cur
+        finally:
+            cur.close()
+
     @staticmethod
     def _fetchall_dicts(cur) -> list[dict[str, Any]]:
         rows = cur.fetchall()
@@ -196,7 +205,7 @@ class PostgresMatchStore:
             return set()
         placeholders = ",".join("%s" for _ in unique_ids)
         query = f"SELECT match_id FROM player_matches WHERE account_id = %s AND match_id IN ({placeholders})"
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(query, [int(account_id), *unique_ids])
             rows = self._fetchall_dicts(cur)
         return {int(row["match_id"]) for row in rows}
@@ -238,7 +247,7 @@ class PostgresMatchStore:
             )
         if not prepared:
             return
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.executemany(
                 """
                 INSERT INTO player_matches (
@@ -299,7 +308,7 @@ class PostgresMatchStore:
         if limit is not None:
             query += " LIMIT %s"
             params.append(int(limit))
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(query, params)
             rows = self._fetchall_dicts(cur)
         return [self._json_loads(str(row["payload_json"])) for row in rows]
@@ -334,7 +343,7 @@ class PostgresMatchStore:
         if limit is not None:
             query += " LIMIT %s"
             params.append(int(limit))
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(query, params)
             rows = self._fetchall_dicts(cur)
         return [
@@ -356,7 +365,7 @@ class PostgresMatchStore:
         net_worth: int | None = None,
         lane_efficiency_pct: float | None = None,
     ) -> None:
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 "SELECT payload_json FROM player_matches WHERE account_id = %s AND match_id = %s",
                 (int(account_id), int(match_id)),
@@ -394,7 +403,7 @@ class PostgresMatchStore:
         self._commit()
 
     def get_match_detail(self, match_id: int) -> dict[str, Any] | None:
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute("SELECT payload_json FROM match_details WHERE match_id = %s", (int(match_id),))
             row = self._fetchone_dict(cur)
         if row is None:
@@ -421,13 +430,13 @@ class PostgresMatchStore:
         if limit is not None:
             query += " LIMIT %s"
             params.append(int(limit))
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(query, params)
             rows = self._fetchall_dicts(cur)
         return [int(row["match_id"]) for row in rows]
 
     def upsert_match_detail(self, match_id: int, payload: dict[str, Any]) -> None:
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO match_details (match_id, payload_json, updated_at)
@@ -441,7 +450,7 @@ class PostgresMatchStore:
         self._commit()
 
     def get_sync_state(self, account_id: int, scope_key: str) -> dict[str, Any] | None:
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 SELECT account_id, scope_key, last_incremental_sync_at, last_full_sync_at, known_match_count
@@ -463,7 +472,7 @@ class PostgresMatchStore:
         known_match_count: int | None = None,
     ) -> None:
         current = self.get_sync_state(account_id, scope_key) or {}
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO sync_state (account_id, scope_key, last_incremental_sync_at, last_full_sync_at, known_match_count)
@@ -489,7 +498,7 @@ class PostgresMatchStore:
         if game_mode is not None:
             query += " AND (game_mode = %s OR game_mode IS NULL)"
             params.append(int(game_mode))
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(query, params)
             row = self._fetchone_dict(cur)
         return int(row["total"]) if row is not None else 0
@@ -500,7 +509,7 @@ class PostgresMatchStore:
         if game_mode is not None:
             query += " AND (game_mode = %s OR game_mode IS NULL)"
             params.append(int(game_mode))
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(query, params)
             row = self._fetchone_dict(cur)
         if row is None:
@@ -513,7 +522,7 @@ class PostgresMatchStore:
         scope_key: str,
         window_days: int,
     ) -> dict[str, Any] | None:
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 SELECT *
@@ -556,7 +565,7 @@ class PostgresMatchStore:
             "total_detail_fetches": int(fields.get("total_detail_fetches", current.get("total_detail_fetches", 0)) or 0),
             "total_parse_requests": int(fields.get("total_parse_requests", current.get("total_parse_requests", 0)) or 0),
         }
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO background_sync_state (
@@ -638,7 +647,7 @@ class PostgresMatchStore:
         next_retry_at: str | None,
         note: str | None,
     ) -> None:
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO background_sync_runs (
@@ -674,7 +683,7 @@ class PostgresMatchStore:
         window_days: int,
         limit: int = 20,
     ) -> list[dict[str, Any]]:
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 SELECT *
@@ -689,7 +698,7 @@ class PostgresMatchStore:
         return rows
 
     def get_match_parse_request(self, match_id: int) -> dict[str, Any] | None:
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute("SELECT * FROM match_parse_requests WHERE match_id = %s", (int(match_id),))
             row = self._fetchone_dict(cur)
         return row
@@ -710,7 +719,7 @@ class PostgresMatchStore:
         next_attempts = current_attempts + 1 if status == "pending" and not current.get("completed_at") else current_attempts
         if next_attempts <= 0:
             next_attempts = 1
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO match_parse_requests (
@@ -761,7 +770,7 @@ class PostgresMatchStore:
                 requested_at ASC
             LIMIT %s
         """
-        with self._conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(query, params)
             rows = self._fetchall_dicts(cur)
         return rows
