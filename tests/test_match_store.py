@@ -1275,3 +1275,176 @@ def test_background_sync_cycle_refreshes_oldest_pending_parse_requests_first() -
     assert result.coverage.pending_parse_count == 1
     assert first is not None and first["status"] == "completed"
     assert second is not None and second["status"] == "pending"
+
+
+def test_background_sync_cycle_fetches_four_new_matches_during_long_window_cooldown() -> None:
+    recent_sync_at = "2026-04-08T10:00:00+00:00"
+
+    class _RecentCooldownClient(_FakeClient):
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 9004,
+                    "start_time": 1775642400,
+                    "player_slot": 0,
+                    "radiant_win": False,
+                    "game_mode": 23,
+                    "kills": 19,
+                    "deaths": 9,
+                    "assists": 34,
+                    "duration": 2312,
+                    "hero_id": 67,
+                },
+                {
+                    "match_id": 9003,
+                    "start_time": 1775639400,
+                    "player_slot": 128,
+                    "radiant_win": False,
+                    "game_mode": 23,
+                    "kills": 11,
+                    "deaths": 4,
+                    "assists": 10,
+                    "duration": 1563,
+                    "hero_id": 44,
+                },
+                {
+                    "match_id": 9002,
+                    "start_time": 1775636100,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 2,
+                    "deaths": 5,
+                    "assists": 10,
+                    "duration": 1332,
+                    "hero_id": 93,
+                },
+                {
+                    "match_id": 9001,
+                    "start_time": 1775634900,
+                    "player_slot": 128,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 5,
+                    "deaths": 5,
+                    "assists": 6,
+                    "duration": 1280,
+                    "hero_id": 44,
+                },
+                {
+                    "match_id": 8760879094,
+                    "start_time": 1775482740,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 13,
+                    "deaths": 6,
+                    "assists": 17,
+                    "duration": 1645,
+                    "hero_id": 67,
+                },
+                {
+                    "match_id": 8760856204,
+                    "start_time": 1775481600,
+                    "player_slot": 128,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 0,
+                    "deaths": 4,
+                    "assists": 1,
+                    "duration": 905,
+                    "hero_id": 93,
+                },
+                {
+                    "match_id": 8760828457,
+                    "start_time": 1775480340,
+                    "player_slot": 128,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 1,
+                    "deaths": 5,
+                    "assists": 0,
+                    "duration": 1038,
+                    "hero_id": 93,
+                },
+            ]
+
+    client = _RecentCooldownClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+
+    store.upsert_player_matches(
+        1233793238,
+        [
+            {
+                "match_id": 8760879094,
+                "start_time": 1775482740,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 13,
+                "deaths": 6,
+                "assists": 17,
+                "duration": 1645,
+                "hero_id": 67,
+            },
+            {
+                "match_id": 8760856204,
+                "start_time": 1775481600,
+                "player_slot": 128,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 0,
+                "deaths": 4,
+                "assists": 1,
+                "duration": 905,
+                "hero_id": 93,
+            },
+            {
+                "match_id": 8760828457,
+                "start_time": 1775480340,
+                "player_slot": 128,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 1,
+                "deaths": 5,
+                "assists": 0,
+                "duration": 1038,
+                "hero_id": 93,
+            },
+        ],
+    )
+    store.upsert_sync_state(
+        1233793238,
+        "gm:23",
+        last_incremental_sync_at=recent_sync_at,
+        known_match_count=3,
+    )
+
+    result = service.run_background_sync_cycle(
+        player_id=1233793238,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=0,
+        force=False,
+    )
+
+    cached_matches = service.get_cached_matches(
+        QueryFilters(player_id=1233793238, game_mode=23, game_mode_name="Turbo", days=365)
+    )
+    background_rows = service.list_background_match_status_rows(
+        player_id=1233793238,
+        game_mode=23,
+        window_days=365,
+        limit=10,
+    )
+    state = service.match_store.get_sync_state(1233793238, "gm:23")
+
+    assert result.summary_new_matches == 4
+    assert result.coverage.total_matches == 7
+    assert client.calls == 1
+    assert [match.match_id for match in cached_matches[:4]] == [9004, 9003, 9002, 9001]
+    assert [row.match_id for row in background_rows[:4]] == [9004, 9003, 9002, 9001]
+    assert state is not None
+    assert state["last_incremental_sync_at"] == recent_sync_at

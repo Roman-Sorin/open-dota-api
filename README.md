@@ -33,6 +33,7 @@ Turbo-only dashboard for your account:
 - `Database` auto-fill now refreshes only the live sync section instead of reloading the whole page on each cycle
 - `Database` auto-fill phase now survives full browser reloads via query-string state, so the page continues alternating between display/run passes instead of getting stuck on `display`
 - `Database` auto-fill navigation now falls back across `parent`, `top`, and current window targets and uses a mounted 1px component frame, which fixes sessions where auto-fill never left the `display` phase
+- `Database` summary sync now still inspects the newest OpenDota page during long-window cooldowns, so fresh matches show up without waiting for the old 12-hour incremental throttle to expire
 - Default `Database` `Balanced` mode now uses `5` detail fetches, `5` parse requests, and a `15` second interval
 - `Cached Matches` now supports pagination with configurable page size and direct navigation to first/previous/next/last pages
 - `Database` times are shown in Israel time and the page now exposes user-facing `Sync Speed` presets (`Safe`, `Balanced`, `Fast`) instead of only raw batch knobs

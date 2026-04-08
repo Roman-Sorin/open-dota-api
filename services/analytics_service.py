@@ -423,7 +423,13 @@ class DotaAnalyticsService:
         )
         return match
 
-    def _sync_player_matches(self, filters: QueryFilters, *, force: bool = False) -> list[int]:
+    def _sync_player_matches(
+        self,
+        filters: QueryFilters,
+        *,
+        force: bool = False,
+        check_recent_head_page: bool = False,
+    ) -> list[int]:
         if self.match_store is None:
             return []
 
@@ -451,10 +457,12 @@ class DotaAnalyticsService:
                 significant=significant,
             )
 
+        within_incremental_cooldown = False
         if not force and state and state.get("last_incremental_sync_at"):
             try:
                 last_sync = datetime.fromisoformat(str(state["last_incremental_sync_at"]))
-                if datetime.now(tz=timezone.utc) - last_sync < min_sync_interval:
+                within_incremental_cooldown = datetime.now(tz=timezone.utc) - last_sync < min_sync_interval
+                if within_incremental_cooldown and not check_recent_head_page:
                     return []
             except ValueError:
                 pass
@@ -489,12 +497,12 @@ class DotaAnalyticsService:
 
         first_page = fetch_page(0)
         if not first_page:
-            self.match_store.upsert_sync_state(
-                filters.player_id,
-                scope_key,
-                last_incremental_sync_at=now_iso,
-                known_match_count=self.match_store.count_player_matches(filters.player_id, filters.game_mode),
-            )
+            update_fields: dict[str, Any] = {
+                "known_match_count": self.match_store.count_player_matches(filters.player_id, filters.game_mode),
+            }
+            if not within_incremental_cooldown:
+                update_fields["last_incremental_sync_at"] = now_iso
+            self.match_store.upsert_sync_state(filters.player_id, scope_key, **update_fields)
             self._flush_persistent_match_store()
             return []
 
@@ -513,16 +521,18 @@ class DotaAnalyticsService:
                 if match_id > 0 and match_id not in existing_ids
             )
             self.match_store.upsert_player_matches(filters.player_id, current_chunk)
-            if existing_ids or len(current_chunk) < batch_size:
+            # Even during the long-window cooldown, always inspect the newest page so
+            # newly played matches appear quickly on the Database page.
+            if (within_incremental_cooldown and existing_ids) or existing_ids or len(current_chunk) < batch_size:
                 break
             page_index += 1
 
-        self.match_store.upsert_sync_state(
-            filters.player_id,
-            scope_key,
-            last_incremental_sync_at=now_iso,
-            known_match_count=self.match_store.count_player_matches(filters.player_id, filters.game_mode),
-        )
+        update_fields = {
+            "known_match_count": self.match_store.count_player_matches(filters.player_id, filters.game_mode),
+        }
+        if not within_incremental_cooldown:
+            update_fields["last_incremental_sync_at"] = now_iso
+        self.match_store.upsert_sync_state(filters.player_id, scope_key, **update_fields)
         self._flush_persistent_match_store()
         return inserted_match_ids
 
@@ -1972,7 +1982,7 @@ class DotaAnalyticsService:
         status = "completed"
 
         try:
-            inserted_ids = self._sync_player_matches(filters, force=force)
+            inserted_ids = self._sync_player_matches(filters, force=force, check_recent_head_page=True)
             summary_new_matches = len(inserted_ids)
             matches = self.get_cached_matches(filters)
             matches_by_id = {int(match.match_id): match for match in matches}

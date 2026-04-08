@@ -124,6 +124,20 @@ CLI remains available as a secondary interface.
   - `pages/Database.py` now mounts the helper in a `1px` component frame instead of `0px` so the browser consistently instantiates the auto-fill component.
   - `tests/test_database_auto_fill.py` now covers the hardened navigation script shape.
 
+## 2026-04-08 Database new-match summary cooldown fix
+
+- User-reported bug:
+  - the `Database` page kept showing a newest cached match on `2026-04-06` even after the player finished `4` newer Turbo matches on `2026-04-08`.
+  - background auto-fill kept working on old cached rows, but new summaries were not entering the database window.
+- Root cause:
+  - `_sync_player_matches()` returned early during the long-window incremental cooldown (`12` hours for `365`-day windows), so it skipped even the lightweight first-page OpenDota summary check.
+  - that made fresh matches invisible until the cooldown expired or a forced/manual summary sync happened much later.
+- Fix:
+  - `services/analytics_service.py` now always inspects the newest OpenDota page, even inside the incremental cooldown window.
+  - during cooldown it stops after the first page once it reaches already-known matches, so the app still avoids unnecessary deep pagination.
+  - the stored incremental-sync timestamp is preserved during those cooldown head checks so regular deeper sync behavior is not postponed forever by the Database auto-fill loop.
+  - `tests/test_match_store.py` now covers the reported shape: `4` new Turbo matches arriving while a recent `365`-day sync state already exists, and verifies the matches appear through both cached-match and Database-status paths.
+
 ## 2026-04-08 Database Neon freshness fix
 
 - User-reported bug:
