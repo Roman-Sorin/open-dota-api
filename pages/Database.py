@@ -344,9 +344,10 @@ if st.session_state.get(_ui_key("database_use_advanced_batches")):
     active_parse_batch = int(parse_batch)
     active_interval_seconds = int(auto_run_seconds)
 
-button_cols = st.columns([0.9, 0.9, 2.2])
-run_cycle = button_cols[0].button("Run One Sync Cycle", type="primary")
-force_cycle = button_cols[1].button("Run Now Ignoring Cooldown")
+run_cycle_request_key = _ui_key("database_run_cycle_requested")
+force_cycle_request_key = _ui_key("database_force_cycle_requested")
+run_cycle = bool(st.session_state.pop(run_cycle_request_key, False))
+force_cycle = bool(st.session_state.pop(force_cycle_request_key, False))
 
 try:
     player_id = parse_player_id(player_raw)
@@ -412,6 +413,14 @@ st.caption(
     f"Current cycle settings: up to {active_detail_batch} detail fetch(es) and {active_parse_batch} parse request(s) per cycle. "
     f"Auto-fill interval: {active_interval_seconds} sec. Pause after 429: {int(cooldown_seconds)} sec."
 )
+
+button_cols = st.columns([0.9, 0.9, 2.2])
+if button_cols[0].button("Run One Sync Cycle", type="primary"):
+    st.session_state[run_cycle_request_key] = True
+    st.rerun()
+if button_cols[1].button("Run Now Ignoring Cooldown"):
+    st.session_state[force_cycle_request_key] = True
+    st.rerun()
 
 recent_runs_df = pd.DataFrame(
     [
