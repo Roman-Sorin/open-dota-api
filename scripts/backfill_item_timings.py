@@ -14,6 +14,7 @@ from services.analytics_service import DotaAnalyticsService
 from utils.cache import JsonFileCache
 from utils.config import get_cache_dir, get_match_store_path, get_settings
 from utils.match_store import SQLiteMatchStore
+from utils.persistent_store import bootstrap_match_store
 
 
 def main() -> int:
@@ -27,7 +28,8 @@ def main() -> int:
 
     settings = get_settings()
     cache = JsonFileCache(get_cache_dir(), ttl_hours=settings.cache_ttl_hours)
-    store = SQLiteMatchStore(get_match_store_path())
+    match_store_path, after_commit = bootstrap_match_store(settings, get_match_store_path())
+    store = SQLiteMatchStore(match_store_path, after_commit=after_commit)
     client = OpenDotaClient(settings.base_url, timeout_seconds=settings.timeout_seconds, api_key=settings.api_key)
     service = DotaAnalyticsService(client=client, cache=cache, match_store=store)
 

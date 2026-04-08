@@ -65,16 +65,24 @@ Important limitation:
   - timing status
   - summary/detail cache timestamps
 
-## Not implemented in v1
+## Current persistence model
+
+- Critical cache state lives in `matches.sqlite3`.
+- The app now supports a durable S3-compatible replica for that SQLite file:
+  - on startup, download remote `matches.sqlite3` if configured
+  - after each committed cache write, upload the latest file back to remote storage
+- This is the minimum viable fix for Streamlit Cloud restarts because local `.cache` files alone are not durable.
+
+## Still not implemented
 
 - True headless always-on worker on Streamlit Cloud
-- External durable database shared across deploy restarts
+- Full external relational database replacement for SQLite
 - Exact quota telemetry from OpenDota response headers
 - Per-match manual retry controls
 
 ## Next reasonable upgrades
 
-1. Move SQLite cache to external persistent storage if background work must survive app restarts.
+1. Replace the SQLite replica approach with a first-class external database if multi-writer or higher durability guarantees become necessary.
 2. Run `run_background_sync_cycle(...)` from an external scheduler/worker.
 3. Add richer backlog prioritization:
    - newest-first vs oldest-first modes

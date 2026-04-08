@@ -16,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils.exceptions import OpenDotaError, OpenDotaRateLimitError, ValidationError
+from utils.config import is_persistent_match_store_configured
 from utils.helpers import format_duration, parse_player_id, unix_to_dt
 from webapp.app_runtime import build_service, get_app_version
 
@@ -189,6 +190,11 @@ st.caption(
     "This page monitors the Turbo cache backlog for one player. It can auto-run one sync cycle per refresh while the page stays open. "
     "A true always-on background worker still requires an external runner; Streamlit pages do not keep running after the session is closed."
 )
+if not is_persistent_match_store_configured():
+    st.warning(
+        "Persistent match storage is not configured for this deployment yet. "
+        "App reboot or redeploy can reset the local cache until external durable storage is connected."
+    )
 with st.expander("How to use this page", expanded=True):
     st.markdown(
         """

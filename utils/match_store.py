@@ -5,15 +5,17 @@ import json
 from pathlib import Path
 import sqlite3
 from typing import Any
+from typing import Callable
 
 
 class SQLiteMatchStore:
-    def __init__(self, db_path: Path | str) -> None:
+    def __init__(self, db_path: Path | str, *, after_commit: Callable[[], None] | None = None) -> None:
         db_target = str(db_path)
         if db_target != ":memory:":
             Path(db_target).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(db_target, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._after_commit = after_commit
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -128,7 +130,15 @@ class SQLiteMatchStore:
             ON match_parse_requests (account_id, status, requested_at DESC);
             """
         )
+        self._commit()
+
+    def _commit(self) -> None:
         self._conn.commit()
+        if self._after_commit is not None:
+            self._after_commit()
+
+    def close(self) -> None:
+        self._conn.close()
 
     @staticmethod
     def _now_iso() -> str:
@@ -218,7 +228,7 @@ class SQLiteMatchStore:
             """,
             prepared,
         )
-        self._conn.commit()
+        self._commit()
 
     def query_player_matches(
         self,
@@ -337,7 +347,7 @@ class SQLiteMatchStore:
                 int(match_id),
             ),
         )
-        self._conn.commit()
+        self._commit()
 
     def get_match_detail(self, match_id: int) -> dict[str, Any] | None:
         row = self._conn.execute(
@@ -382,7 +392,7 @@ class SQLiteMatchStore:
             """,
             (int(match_id), json.dumps(payload, ensure_ascii=False), self._now_iso()),
         )
-        self._conn.commit()
+        self._commit()
 
     def get_sync_state(self, account_id: int, scope_key: str) -> dict[str, Any] | None:
         row = self._conn.execute(
@@ -424,7 +434,7 @@ class SQLiteMatchStore:
                 int(known_match_count if known_match_count is not None else current.get("known_match_count") or 0),
             ),
         )
-        self._conn.commit()
+        self._commit()
 
     def count_player_matches(self, account_id: int, game_mode: int | None = None) -> int:
         if game_mode is None:
@@ -571,7 +581,7 @@ class SQLiteMatchStore:
                 merged["total_parse_requests"],
             ),
         )
-        self._conn.commit()
+        self._commit()
 
     def insert_background_sync_run(
         self,
@@ -618,7 +628,7 @@ class SQLiteMatchStore:
                 note,
             ),
         )
-        self._conn.commit()
+        self._commit()
 
     def list_background_sync_runs(
         self,
@@ -687,7 +697,7 @@ class SQLiteMatchStore:
                 last_error,
             ),
         )
-        self._conn.commit()
+        self._commit()
 
     def list_match_parse_requests(
         self,

@@ -58,12 +58,19 @@ Use Streamlit Community Cloud:
    - Branch: `main`
    - Main file path: `webapp/turbo_dashboard.py`
 4. (Optional) add `OPENDOTA_API_KEY` in app Secrets.
+5. (Strongly recommended) add durable match-store secrets in app Secrets:
+   - `MATCH_STORE_S3_BUCKET`
+   - `MATCH_STORE_S3_KEY`
+   - `MATCH_STORE_S3_ENDPOINT_URL` if using non-AWS S3-compatible storage
+   - `MATCH_STORE_S3_REGION` if required by the provider
+   - matching S3 credentials such as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
 
 After deploy, you get a stable public HTTPS URL accessible from phone.
 
 Notes:
 - The app now includes a multipage `Database` view for cache coverage / backlog monitoring.
 - Streamlit Community Cloud still does not provide a true always-on background worker inside the app process. The `Database` page can advance the queue while open, but 24/7 cache filling still needs an external runner plus shared persistent storage.
+- Streamlit Community Cloud local files are ephemeral. If external durable storage is not configured, a reboot/redeploy can wipe the local SQLite cache and force the app to rebuild match history from OpenDota.
 
 Current deployed app:
 - https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/

@@ -12,6 +12,7 @@ from utils.config import get_cache_dir, get_match_store_path, get_settings
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError, ValidationError
 from utils.helpers import parse_player_id
 from utils.match_store import SQLiteMatchStore
+from utils.persistent_store import bootstrap_match_store
 
 
 app = typer.Typer(help="OpenDota CLI analyzer")
@@ -25,7 +26,8 @@ def _build_service() -> tuple[DotaAnalyticsService, TerminalFormatter]:
         api_key=settings.api_key,
     )
     cache = JsonFileCache(cache_dir=get_cache_dir(), ttl_hours=settings.cache_ttl_hours)
-    match_store = SQLiteMatchStore(get_match_store_path())
+    match_store_path, after_commit = bootstrap_match_store(settings, get_match_store_path())
+    match_store = SQLiteMatchStore(match_store_path, after_commit=after_commit)
     service = DotaAnalyticsService(client=client, cache=cache, match_store=match_store)
     formatter = TerminalFormatter()
     return service, formatter
