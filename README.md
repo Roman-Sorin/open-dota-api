@@ -32,6 +32,7 @@ Turbo-only dashboard for your account:
 - `Database` can run one bounded background-cache cycle per refresh and optionally auto-run while that page stays open
 - `Database` auto-fill now refreshes only the live sync section instead of reloading the whole page on each cycle
 - Default `Database` `Balanced` mode now runs every `30` seconds and allows up to `10` parse requests per cycle
+- `Cached Matches` now supports pagination with configurable page size and direct navigation to first/previous/next/last pages
 - `Database` times are shown in Israel time and the page now exposes user-facing `Sync Speed` presets (`Safe`, `Balanced`, `Fast`) instead of only raw batch knobs
 - Default selected hero is `Spectre` when that hero exists in the current overview snapshot; otherwise the first available hero is used
 - Dashboard loading is manual by section:

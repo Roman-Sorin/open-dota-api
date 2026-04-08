@@ -217,6 +217,7 @@ parse_default = int(st.session_state.get("database_parse_batch", 10) or 10)
 cooldown_default = int(st.session_state.get("database_cooldown_seconds", 30) or 30)
 auto_default = bool(st.session_state.get("database_auto_run", True))
 interval_default = int(st.session_state.get("database_auto_run_seconds", 30) or 30)
+page_size_default = int(st.session_state.get("database_page_size", 100) or 100)
 preset_default = st.session_state.get("database_sync_preset", "Balanced")
 if preset_default not in SYNC_PRESETS:
     preset_default = "Balanced"
@@ -250,13 +251,14 @@ cooldown_seconds = secondary[0].number_input(
     key="database_cooldown_seconds",
     help="If OpenDota returns HTTP 429, auto-fill pauses for this many seconds before trying again.",
 )
-table_limit = secondary[1].number_input(
-    "Newest matches shown",
+page_size = secondary[1].number_input(
+    "Matches per page",
     min_value=10,
-    max_value=200,
-    value=50,
+    max_value=500,
+    value=page_size_default,
     step=10,
-    help="How many of the newest cached matches to display below. This does not limit the database job itself.",
+    key="database_page_size",
+    help="How many cached matches to display on one page. This does not limit the database job itself.",
 )
 auto_run = secondary[2].checkbox("Auto-fill while this page stays open", value=auto_default, key="database_auto_run")
 st.caption(
@@ -393,11 +395,42 @@ def _render_live_section() -> None:
     if not coverage.rows:
         st.info("No cached Turbo matches for the selected window yet.")
     else:
-        st.caption(
-            f"Showing newest {min(int(table_limit), len(coverage.rows))} of {len(coverage.rows)} cached match(es). "
-            "This table is newest-first, so older cached matches may already exist below the visible slice."
+        total_rows = len(coverage.rows)
+        current_page_size = max(int(page_size), 1)
+        total_pages = max((total_rows + current_page_size - 1) // current_page_size, 1)
+        current_page = int(st.session_state.get("database_page_number", 1) or 1)
+        current_page = max(1, min(current_page, total_pages))
+
+        nav_cols = st.columns([1.1, 0.9, 0.8, 0.8, 0.8, 0.8, 1.8])
+        page_input = nav_cols[0].number_input(
+            "Page",
+            min_value=1,
+            max_value=total_pages,
+            value=current_page,
+            step=1,
+            key="database_page_number_input",
         )
-        _render_match_table(coverage.rows[: int(table_limit)], service)
+        if nav_cols[1].button("First", key="database_page_first"):
+            current_page = 1
+        elif nav_cols[2].button("Prev", key="database_page_prev"):
+            current_page = max(1, current_page - 1)
+        elif nav_cols[3].button("Next", key="database_page_next"):
+            current_page = min(total_pages, current_page + 1)
+        elif nav_cols[4].button("Last", key="database_page_last"):
+            current_page = total_pages
+        else:
+            current_page = int(page_input)
+
+        current_page = max(1, min(current_page, total_pages))
+        st.session_state["database_page_number"] = current_page
+        start_idx = (current_page - 1) * current_page_size
+        end_idx = min(start_idx + current_page_size, total_rows)
+
+        st.caption(
+            f"Showing matches {start_idx + 1}-{end_idx} of {total_rows} cached match(es). "
+            f"Page {current_page} of {total_pages}. This table is newest-first."
+        )
+        _render_match_table(coverage.rows[start_idx:end_idx], service)
 
     if auto_run:
         st.caption(

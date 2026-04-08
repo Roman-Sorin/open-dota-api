@@ -28,6 +28,7 @@ The project includes two interfaces:
 - `Database` can run one bounded cache-fill cycle per refresh and optionally auto-run while that page remains open
 - `Database` auto-fill refreshes only its live sync fragment, so the full page no longer jumps on every cycle
 - Default `Database` `Balanced` mode now uses a `30` second interval and up to `10` parse requests per cycle
+- `Cached Matches` now has real pagination: page size, page number, and `First/Prev/Next/Last` navigation
 - `Database` times are rendered in Israel time
 - `Database` exposes `Sync Speed` presets (`Safe`, `Balanced`, `Fast`) for normal use; raw detail/parse batch controls remain under `Advanced settings`
 - Time filter modes: `Days`, `Patches`, `Start Date`
