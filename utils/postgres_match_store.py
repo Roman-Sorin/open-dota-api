@@ -21,7 +21,7 @@ class PostgresMatchStore:
         query = parse_qs(parsed.query)
         ssl_context: ssl.SSLContext | bool | None = None
         if (query.get("sslmode", [""])[0] or "").lower() == "require":
-            ssl_context = True
+            ssl_context = ssl.create_default_context()
         port = parsed.port or 5432
         return pg8000.dbapi.connect(
             user=parsed.username or "",

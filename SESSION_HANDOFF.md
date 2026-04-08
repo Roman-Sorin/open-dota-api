@@ -726,3 +726,6 @@ CLI remains available as a secondary interface.
 - Follow-up hotfix:
   - `utils/postgres_match_store.py` was corrected for the actual `pg8000` cursor API
   - live Neon smoke-check with the updated connection string succeeded and store factory selected `PostgresMatchStore` correctly
+- Cloud-runtime compatibility follow-up:
+  - changed `sslmode=require` handling in `utils/postgres_match_store.py` from a boolean placeholder to `ssl.create_default_context()`
+  - purpose: avoid Linux/runtime-specific `TypeError` fallback failures on Streamlit Cloud while keeping Neon SSL required
