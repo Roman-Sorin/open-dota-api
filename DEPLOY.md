@@ -63,6 +63,7 @@ Use Streamlit Community Cloud:
    - `GOOGLE_DRIVE_FOLDER_ID`
    - optional: `GOOGLE_DRIVE_SNAPSHOT_NAME`
    - optional: `GOOGLE_DRIVE_MIN_UPLOAD_INTERVAL_SECONDS`
+   - `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` can be pasted as the full multiline service-account JSON blob inside triple quotes in Streamlit Secrets; the app now tolerates the literal newline formatting used by that UI
 6. (Optional) add `DATABASE_URL` only if you also want the secondary Postgres backend path.
 
 After deploy, you get a stable public HTTPS URL accessible from phone.

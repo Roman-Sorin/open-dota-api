@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import io
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 from google.oauth2.service_account import Credentials
@@ -21,7 +22,7 @@ class GoogleDriveSnapshotManager:
         local_db_path: Path,
         min_upload_interval_seconds: int = 60,
     ) -> None:
-        service_account_info = json.loads(service_account_json)
+        service_account_info = self._parse_service_account_json(service_account_json)
         credentials = Credentials.from_service_account_info(
             service_account_info,
             scopes=["https://www.googleapis.com/auth/drive"],
@@ -119,3 +120,33 @@ class GoogleDriveSnapshotManager:
     def _write_meta(self, payload: dict[str, Any]) -> None:
         self._meta_path.parent.mkdir(parents=True, exist_ok=True)
         self._meta_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    @staticmethod
+    def _parse_service_account_json(service_account_json: str) -> dict[str, Any]:
+        try:
+            parsed = json.loads(service_account_json)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+        normalized = service_account_json.strip()
+        key_match = re.search(
+            r'"private_key"\s*:\s*"(?P<value>.*?)"\s*,\s*"client_email"',
+            normalized,
+            re.DOTALL,
+        )
+        if not key_match:
+            raise
+
+        key_value = key_match.group("value")
+        repaired_key_value = key_value.replace("\r\n", "\n").replace("\n", "\\n")
+        repaired = (
+            normalized[: key_match.start("value")]
+            + repaired_key_value
+            + normalized[key_match.end("value") :]
+        )
+        parsed = json.loads(repaired)
+        if not isinstance(parsed, dict):
+            raise ValueError("Google Drive service-account secret did not parse to an object.")
+        return parsed
