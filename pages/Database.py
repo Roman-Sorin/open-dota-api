@@ -341,147 +341,143 @@ except ValidationError as exc:
 
 st.session_state["player_raw"] = player_raw
 
-def _render_live_section() -> None:
-    auto_phase = str(st.session_state.get(auto_phase_key, "display") or "display")
-    if not auto_run:
+auto_phase = str(st.session_state.get(auto_phase_key, "display") or "display")
+if not auto_run:
+    st.session_state[auto_phase_key] = "display"
+
+run_result = None
+should_run_auto_cycle = auto_run and auto_phase == "run"
+if run_cycle or force_cycle or should_run_auto_cycle:
+    try:
+        run_result = service.run_background_sync_cycle(
+            player_id=player_id,
+            game_mode=23,
+            window_days=int(window_days),
+            max_detail_fetches=int(active_detail_batch),
+            max_parse_requests=int(active_parse_batch),
+            rate_limit_cooldown_seconds=int(cooldown_seconds),
+            force=bool(force_cycle),
+        )
+        st.session_state[auto_phase_key] = "display"
+    except (OpenDotaError, OpenDotaRateLimitError) as exc:
+        st.error(str(exc))
+        st.session_state[auto_phase_key] = "display"
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"Background sync cycle failed: {exc}")
         st.session_state[auto_phase_key] = "display"
 
-    run_result = None
-    should_run_auto_cycle = auto_run and auto_phase == "run"
-    if run_cycle or force_cycle or should_run_auto_cycle:
-        try:
-            run_result = service.run_background_sync_cycle(
-                player_id=player_id,
-                game_mode=23,
-                window_days=int(window_days),
-                max_detail_fetches=int(active_detail_batch),
-                max_parse_requests=int(active_parse_batch),
-                rate_limit_cooldown_seconds=int(cooldown_seconds),
-                force=bool(force_cycle),
-            )
-            st.session_state[auto_phase_key] = "display"
-        except (OpenDotaError, OpenDotaRateLimitError) as exc:
-            st.error(str(exc))
-            st.session_state[auto_phase_key] = "display"
-        except Exception as exc:  # noqa: BLE001
-            st.error(f"Background sync cycle failed: {exc}")
-            st.session_state[auto_phase_key] = "display"
+state = service.get_background_sync_state(player_id, game_mode=23, window_days=int(window_days))
+coverage = service.get_background_sync_coverage(
+    player_id=player_id,
+    game_mode=23,
+    window_days=int(window_days),
+    limit=None,
+)
+runs = service.list_background_sync_runs(player_id, game_mode=23, window_days=int(window_days), limit=20)
 
-    state = service.get_background_sync_state(player_id, game_mode=23, window_days=int(window_days))
-    coverage = service.get_background_sync_coverage(
-        player_id=player_id,
-        game_mode=23,
-        window_days=int(window_days),
-        limit=None,
-    )
-    runs = service.list_background_sync_runs(player_id, game_mode=23, window_days=int(window_days), limit=20)
+if run_result is not None:
+    if run_result.status == "completed":
+        st.success(run_result.note)
+    elif run_result.status == "cooldown":
+        st.info(run_result.note)
+    elif run_result.status == "rate_limited":
+        st.warning(run_result.note)
 
-    if run_result is not None:
-        if run_result.status == "completed":
-            st.success(run_result.note)
-        elif run_result.status == "cooldown":
-            st.info(run_result.note)
-        elif run_result.status == "rate_limited":
-            st.warning(run_result.note)
+_render_metrics(coverage, state)
+st.caption(
+    f"Current cycle settings: up to {active_detail_batch} detail fetch(es) and {active_parse_batch} parse request(s) per cycle. "
+    f"Auto-fill interval: {active_interval_seconds} sec. Pause after 429: {int(cooldown_seconds)} sec."
+)
 
-    _render_metrics(coverage, state)
+recent_runs_df = pd.DataFrame(
+    [
+        {
+            "Started": _format_datetime(str(row.get("started_at")) if row.get("started_at") else None),
+            "Status": str(row.get("status") or ""),
+            "New summaries": int(row.get("summary_new_matches") or 0),
+            "Detail fetched": int(row.get("detail_completed") or 0),
+            "Parse requested": int(row.get("parse_requested") or 0),
+            "Pending parse": int(row.get("pending_parse_count") or 0),
+            "Rate limited": "Yes" if int(row.get("rate_limited") or 0) else "No",
+            "Next retry": _format_datetime(str(row.get("next_retry_at")) if row.get("next_retry_at") else None),
+            "Note": str(row.get("note") or ""),
+        }
+        for row in runs
+    ]
+)
+
+st.subheader("Sync History")
+if recent_runs_df.empty:
+    st.info("No sync cycles recorded yet.")
+else:
+    st.dataframe(recent_runs_df, use_container_width=True, hide_index=True)
+    rate_limited_runs = sum(1 for row in runs if int(row.get("rate_limited") or 0))
+    detail_total = sum(int(row.get("detail_completed") or 0) for row in runs)
+    parse_total = sum(int(row.get("parse_requested") or 0) for row in runs)
     st.caption(
-        f"Current cycle settings: up to {active_detail_batch} detail fetch(es) and {active_parse_batch} parse request(s) per cycle. "
-        f"Auto-fill interval: {active_interval_seconds} sec. Pause after 429: {int(cooldown_seconds)} sec."
+        f"Observed over last {len(runs)} cycle(s): {detail_total} detail payload(s) fetched, "
+        f"{parse_total} parse request(s) submitted, {rate_limited_runs} rate-limited cycle(s). "
+        f"Current pause-after-429 on this page is {int(cooldown_seconds)} second(s)."
     )
 
-    recent_runs_df = pd.DataFrame(
-        [
-            {
-                "Started": _format_datetime(str(row.get("started_at")) if row.get("started_at") else None),
-                "Status": str(row.get("status") or ""),
-                "New summaries": int(row.get("summary_new_matches") or 0),
-                "Detail fetched": int(row.get("detail_completed") or 0),
-                "Parse requested": int(row.get("parse_requested") or 0),
-                "Pending parse": int(row.get("pending_parse_count") or 0),
-                "Rate limited": "Yes" if int(row.get("rate_limited") or 0) else "No",
-                "Next retry": _format_datetime(str(row.get("next_retry_at")) if row.get("next_retry_at") else None),
-                "Note": str(row.get("note") or ""),
-            }
-            for row in runs
-        ]
+st.subheader("Cached Matches")
+if not coverage.rows:
+    st.info("No cached Turbo matches for the selected window yet.")
+else:
+    total_rows = len(coverage.rows)
+    current_page_size = max(int(page_size), 1)
+    total_pages = max((total_rows + current_page_size - 1) // current_page_size, 1)
+    current_page = int(st.session_state.get(_ui_key("database_page_number"), 1) or 1)
+    current_page = max(1, min(current_page, total_pages))
+
+    nav_cols = st.columns([1.1, 0.9, 0.8, 0.8, 0.8, 0.8, 1.8])
+    page_input = nav_cols[0].number_input(
+        "Page",
+        min_value=1,
+        max_value=total_pages,
+        value=current_page,
+        step=1,
+        key=_ui_key("database_page_number_input"),
     )
-
-    st.subheader("Sync History")
-    if recent_runs_df.empty:
-        st.info("No sync cycles recorded yet.")
+    if nav_cols[1].button("First", key=_ui_key("database_page_first")):
+        current_page = 1
+    elif nav_cols[2].button("Prev", key=_ui_key("database_page_prev")):
+        current_page = max(1, current_page - 1)
+    elif nav_cols[3].button("Next", key=_ui_key("database_page_next")):
+        current_page = min(total_pages, current_page + 1)
+    elif nav_cols[4].button("Last", key=_ui_key("database_page_last")):
+        current_page = total_pages
     else:
-        st.dataframe(recent_runs_df, use_container_width=True, hide_index=True)
-        rate_limited_runs = sum(1 for row in runs if int(row.get("rate_limited") or 0))
-        detail_total = sum(int(row.get("detail_completed") or 0) for row in runs)
-        parse_total = sum(int(row.get("parse_requested") or 0) for row in runs)
-        st.caption(
-            f"Observed over last {len(runs)} cycle(s): {detail_total} detail payload(s) fetched, "
-            f"{parse_total} parse request(s) submitted, {rate_limited_runs} rate-limited cycle(s). "
-            f"Current pause-after-429 on this page is {int(cooldown_seconds)} second(s)."
-        )
+        current_page = int(page_input)
 
-    st.subheader("Cached Matches")
-    if not coverage.rows:
-        st.info("No cached Turbo matches for the selected window yet.")
-    else:
-        total_rows = len(coverage.rows)
-        current_page_size = max(int(page_size), 1)
-        total_pages = max((total_rows + current_page_size - 1) // current_page_size, 1)
-        current_page = int(st.session_state.get(_ui_key("database_page_number"), 1) or 1)
-        current_page = max(1, min(current_page, total_pages))
+    current_page = max(1, min(current_page, total_pages))
+    st.session_state[_ui_key("database_page_number")] = current_page
+    start_idx = (current_page - 1) * current_page_size
+    end_idx = min(start_idx + current_page_size, total_rows)
 
-        nav_cols = st.columns([1.1, 0.9, 0.8, 0.8, 0.8, 0.8, 1.8])
-        page_input = nav_cols[0].number_input(
-            "Page",
-            min_value=1,
-            max_value=total_pages,
-            value=current_page,
-            step=1,
-            key=_ui_key("database_page_number_input"),
-        )
-        if nav_cols[1].button("First", key=_ui_key("database_page_first")):
-            current_page = 1
-        elif nav_cols[2].button("Prev", key=_ui_key("database_page_prev")):
-            current_page = max(1, current_page - 1)
-        elif nav_cols[3].button("Next", key=_ui_key("database_page_next")):
-            current_page = min(total_pages, current_page + 1)
-        elif nav_cols[4].button("Last", key=_ui_key("database_page_last")):
-            current_page = total_pages
-        else:
-            current_page = int(page_input)
+    st.caption(
+        f"Showing matches {start_idx + 1}-{end_idx} of {total_rows} cached match(es). "
+        f"Page {current_page} of {total_pages}. This table is newest-first."
+    )
+    _render_match_table(coverage.rows[start_idx:end_idx], service)
 
-        current_page = max(1, min(current_page, total_pages))
-        st.session_state[_ui_key("database_page_number")] = current_page
-        start_idx = (current_page - 1) * current_page_size
-        end_idx = min(start_idx + current_page_size, total_rows)
-
-        st.caption(
-            f"Showing matches {start_idx + 1}-{end_idx} of {total_rows} cached match(es). "
-            f"Page {current_page} of {total_pages}. This table is newest-first."
-        )
-        _render_match_table(coverage.rows[start_idx:end_idx], service)
-
-    if auto_run:
-        st.caption(
-            f"Auto-fill is active. Current browser phase: `{auto_phase}`. This page will rerun automatically while the tab stays open."
-        )
-        st.session_state[auto_phase_key] = _next_auto_phase(auto_phase)
-        components.html(
-            f"""
-            <script>
-            const delayMs = {int(active_interval_seconds) * 1000};
-            setTimeout(() => {{
-              try {{
-                window.parent.location.reload();
-              }} catch (err) {{
-                window.location.reload();
-              }}
-            }}, delayMs);
-            </script>
-            """,
-            height=0,
-        )
-
-
-_render_live_section()
+if auto_run:
+    st.caption(
+        f"Auto-fill is active. Current browser phase: `{auto_phase}`. This page will rerun automatically while the tab stays open."
+    )
+    st.session_state[auto_phase_key] = _next_auto_phase(auto_phase)
+    components.html(
+        f"""
+        <script>
+        const delayMs = {int(active_interval_seconds) * 1000};
+        setTimeout(() => {{
+          try {{
+            window.parent.location.reload();
+          }} catch (err) {{
+            window.location.reload();
+          }}
+        }}, delayMs);
+        </script>
+        """,
+        height=0,
+    )
