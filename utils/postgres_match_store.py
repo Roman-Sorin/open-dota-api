@@ -145,6 +145,7 @@ class PostgresMatchStore:
                     started_at TEXT NOT NULL,
                     finished_at TEXT,
                     status TEXT NOT NULL,
+                    run_source TEXT NOT NULL DEFAULT 'manual',
                     summary_new_matches INTEGER NOT NULL DEFAULT 0,
                     total_matches_in_window INTEGER NOT NULL DEFAULT 0,
                     detail_requested INTEGER NOT NULL DEFAULT 0,
@@ -160,6 +161,7 @@ class PostgresMatchStore:
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_background_sync_runs_lookup ON background_sync_runs (account_id, scope_key, window_days, started_at DESC)"
             )
+            cur.execute("ALTER TABLE background_sync_runs ADD COLUMN IF NOT EXISTS run_source TEXT NOT NULL DEFAULT 'manual'")
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS match_parse_requests (
@@ -676,6 +678,7 @@ class PostgresMatchStore:
         started_at: str,
         finished_at: str | None,
         status: str,
+        run_source: str,
         summary_new_matches: int,
         total_matches_in_window: int,
         detail_requested: int,
@@ -691,9 +694,10 @@ class PostgresMatchStore:
                 """
                 INSERT INTO background_sync_runs (
                     account_id, scope_key, window_days, started_at, finished_at, status,
+                    run_source,
                     summary_new_matches, total_matches_in_window, detail_requested, detail_completed,
                     parse_requested, pending_parse_count, rate_limited, next_retry_at, note
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     int(account_id),
@@ -702,6 +706,7 @@ class PostgresMatchStore:
                     started_at,
                     finished_at,
                     status,
+                    str(run_source or "manual"),
                     int(summary_new_matches),
                     int(total_matches_in_window),
                     int(detail_requested),
@@ -728,7 +733,7 @@ class PostgresMatchStore:
                 SELECT *
                 FROM background_sync_runs
                 WHERE account_id = %s AND scope_key = %s AND window_days = %s
-                ORDER BY started_at DESC
+                ORDER BY started_at DESC, id DESC
                 LIMIT %s
                 """,
                 (int(account_id), str(scope_key), int(window_days), int(limit)),

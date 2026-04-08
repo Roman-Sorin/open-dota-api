@@ -197,6 +197,7 @@ class SQLiteMatchStore:
                 started_at TEXT NOT NULL,
                 finished_at TEXT,
                 status TEXT NOT NULL,
+                run_source TEXT NOT NULL DEFAULT 'manual',
                 summary_new_matches INTEGER NOT NULL DEFAULT 0,
                 total_matches_in_window INTEGER NOT NULL DEFAULT 0,
                 detail_requested INTEGER NOT NULL DEFAULT 0,
@@ -226,6 +227,9 @@ class SQLiteMatchStore:
             ON match_parse_requests (account_id, status, requested_at DESC);
             """
         )
+        columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(background_sync_runs)").fetchall()}
+        if "run_source" not in columns:
+            self._conn.execute("ALTER TABLE background_sync_runs ADD COLUMN run_source TEXT NOT NULL DEFAULT 'manual'")
         self._commit()
 
     def _commit(self) -> None:
@@ -709,6 +713,7 @@ class SQLiteMatchStore:
         started_at: str,
         finished_at: str | None,
         status: str,
+        run_source: str,
         summary_new_matches: int,
         total_matches_in_window: int,
         detail_requested: int,
@@ -723,9 +728,10 @@ class SQLiteMatchStore:
             """
             INSERT INTO background_sync_runs (
                 account_id, scope_key, window_days, started_at, finished_at, status,
+                run_source,
                 summary_new_matches, total_matches_in_window, detail_requested, detail_completed,
                 parse_requested, pending_parse_count, rate_limited, next_retry_at, note
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 int(account_id),
@@ -734,6 +740,7 @@ class SQLiteMatchStore:
                 started_at,
                 finished_at,
                 status,
+                str(run_source or "manual"),
                 int(summary_new_matches),
                 int(total_matches_in_window),
                 int(detail_requested),
@@ -759,7 +766,7 @@ class SQLiteMatchStore:
             SELECT *
             FROM background_sync_runs
             WHERE account_id = ? AND scope_key = ? AND window_days = ?
-            ORDER BY started_at DESC
+            ORDER BY started_at DESC, id DESC
             LIMIT ?
             """,
             (int(account_id), str(scope_key), int(window_days), int(limit)),

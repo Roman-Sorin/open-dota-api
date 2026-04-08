@@ -112,17 +112,19 @@ CLI remains available as a secondary interface.
   - page reruns are less elegant than fragment-only refresh
   - but metrics, sync history, and cached-match rows render reliably again in production
 
-## 2026-04-08 Database auto-fill component timer fix
+## 2026-04-08 Database auto-fill fragment pulse fix
 
 - User-reported bug:
   - `Auto-fill while this page stays open` showed as active, but the page stayed on browser phase `display` and only manual `Run One Sync Cycle` clicks reduced `Pending Parse`.
 - Root cause:
-  - the previous implementation depended on a browser iframe trying to navigate the parent Streamlit window.
-  - in production that iframe path still failed silently, so the page remained on `display` and no automatic sync cycle was triggered.
+  - both browser-navigation and custom-component timer approaches proved unreliable in production for this page.
+  - the durable requirement is simpler: trigger a full app rerun on a timer, then let the normal page code execute the sync cycle.
 - Fix:
-  - added a real Streamlit custom component at `webapp/components/auto_fill_timer/index.html` that emits timed rerun events through Streamlit's `setComponentValue` channel.
-  - added `webapp/auto_fill_timer_component.py` and rewired `pages/Database.py` to drive the `display` / `run` phase machine from those timer events in session state.
-  - removed the brittle query-param / parent-window navigation helper; `webapp/database_auto_fill.py` now keeps only pure phase helpers.
+  - `pages/Database.py` now uses a tiny `@st.fragment(run_every=...)` pulse driver at the bottom of the page.
+  - fragment reruns set an auto-fill pulse timestamp in session state and immediately request `st.rerun()` for the full app.
+  - the next full page pass detects the new pulse and runs one sync cycle without any manual button click.
+  - sync run history now persists a `run_source` field and the `Database` page shows it in a new `Source` column (`Manual`, `Auto`, `Forced`).
+  - removed the unused browser/component timer files and simplified the user-facing auto-fill caption.
 
 ## 2026-04-08 Database new-match summary cooldown fix
 

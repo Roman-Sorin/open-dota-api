@@ -27,8 +27,8 @@ The project includes two interfaces:
 - `Database` shows match-level cache states, replay-parse backlog, recent sync-cycle history, cooldown state after 429s, and the contiguous date range that is already fully cached
 - `Database` can run one bounded cache-fill cycle per refresh and optionally auto-run while that page remains open
 - `Database` auto-fill now uses browser-bound page reruns for reliability on Streamlit Cloud, so the data section is always rendered even when fragment rendering is unstable
-- In auto mode, `Database` alternates between a display pass and a run pass so the page can keep showing current data instead of blocking the whole render on every sync cycle
-- `Database` auto-fill now uses a dedicated Streamlit component timer that sends rerun events through Streamlit's component channel instead of trying to navigate the parent browser window from an iframe
+- `Database` auto-fill is now driven by a tiny `st.fragment(run_every=...)` timer that requests a full app rerun; the next full page pass performs one sync cycle
+- `Database` `Sync History` now includes a `Source` column so you can distinguish `Manual`, `Auto`, and `Forced` runs
 - `Database` summary sync now still checks the newest OpenDota page during long-window incremental cooldowns, so newly played matches appear promptly instead of waiting up to 12 hours on a `365`-day window
 - Default `Database` `Balanced` mode now uses `5` detail fetches, `5` parse requests, and a `15` second interval
 - Default `Database` cooldown after `HTTP 429` is now `50` seconds

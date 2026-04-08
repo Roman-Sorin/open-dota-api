@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import html
 from pathlib import Path
 import sys
+import time
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -20,8 +21,6 @@ from utils.exceptions import OpenDotaError, OpenDotaRateLimitError, ValidationEr
 from utils.config import is_persistent_match_store_configured
 from utils.helpers import format_duration, parse_player_id, unix_to_dt
 from webapp.app_runtime import build_service, get_app_version, get_store_warning
-from webapp.auto_fill_timer_component import render_auto_fill_timer
-from webapp.database_auto_fill import next_auto_phase, normalize_auto_phase
 
 ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 DATABASE_UI_VERSION = "v3"
@@ -343,8 +342,8 @@ if st.session_state.get(_ui_key("database_use_advanced_batches")):
 
 run_cycle_request_key = _ui_key("database_run_cycle_requested")
 force_cycle_request_key = _ui_key("database_force_cycle_requested")
-auto_phase_state_key = _ui_key("database_auto_phase")
-auto_event_key = _ui_key("database_auto_event_fired_at")
+auto_pulse_key = _ui_key("database_auto_fill_pulse")
+auto_handled_pulse_key = _ui_key("database_auto_fill_handled_pulse")
 run_cycle = bool(st.session_state.pop(run_cycle_request_key, False))
 force_cycle = bool(st.session_state.pop(force_cycle_request_key, False))
 
@@ -356,36 +355,17 @@ except ValidationError as exc:
 
 st.session_state["player_raw"] = player_raw
 
+auto_pulse = float(st.session_state.get(auto_pulse_key, 0.0) or 0.0)
+handled_auto_pulse = float(st.session_state.get(auto_handled_pulse_key, 0.0) or 0.0)
 if not auto_run:
-    st.session_state[auto_phase_state_key] = "display"
-
-auto_phase = normalize_auto_phase(str(st.session_state.get(auto_phase_state_key)))
-cycle_token = (
-    f"{player_id}:{int(window_days)}:{int(active_detail_batch)}:{int(active_parse_batch)}:"
-    f"{int(active_interval_seconds)}:{int(cooldown_seconds)}:{auto_phase}"
-)
-auto_timer_event = render_auto_fill_timer(
-    enabled=bool(auto_run),
-    delay_seconds=int(active_interval_seconds),
-    next_phase=next_auto_phase(auto_phase),
-    cycle_token=cycle_token,
-    key=_ui_key("database_auto_fill_timer"),
-)
-if isinstance(auto_timer_event, dict):
-    fired_at_ms = int(auto_timer_event.get("fired_at_ms") or 0)
-    next_phase_value = normalize_auto_phase(str(auto_timer_event.get("next_phase") or None))
-    event_cycle_token = str(auto_timer_event.get("cycle_token") or "")
-    if (
-        fired_at_ms > 0
-        and fired_at_ms != int(st.session_state.get(auto_event_key, 0) or 0)
-        and event_cycle_token == cycle_token
-    ):
-        st.session_state[auto_event_key] = fired_at_ms
-        st.session_state[auto_phase_state_key] = next_phase_value
-        auto_phase = next_phase_value
+    st.session_state[auto_pulse_key] = 0.0
+    st.session_state[auto_handled_pulse_key] = 0.0
+    auto_pulse = 0.0
+    handled_auto_pulse = 0.0
 
 run_result = None
-should_run_auto_cycle = auto_run and auto_phase == "run"
+should_run_auto_cycle = auto_run and auto_pulse > handled_auto_pulse
+active_run_source = "auto" if should_run_auto_cycle else "forced" if force_cycle else "manual"
 if run_cycle or force_cycle or should_run_auto_cycle:
     try:
         run_result = service.run_background_sync_cycle(
@@ -396,11 +376,14 @@ if run_cycle or force_cycle or should_run_auto_cycle:
             max_parse_requests=int(active_parse_batch),
             rate_limit_cooldown_seconds=int(cooldown_seconds),
             force=bool(force_cycle),
+            run_source=active_run_source,
         )
     except (OpenDotaError, OpenDotaRateLimitError) as exc:
         st.error(str(exc))
     except Exception as exc:  # noqa: BLE001
         st.error(f"Background sync cycle failed: {exc}")
+    if should_run_auto_cycle:
+        st.session_state[auto_handled_pulse_key] = auto_pulse
 
 state = service.get_background_sync_state(player_id, game_mode=23, window_days=int(window_days))
 runs = service.list_background_sync_runs(player_id, game_mode=23, window_days=int(window_days), limit=20)
@@ -447,6 +430,7 @@ recent_runs_df = pd.DataFrame(
         {
             "Started": _format_datetime(str(row.get("started_at")) if row.get("started_at") else None),
             "Status": str(row.get("status") or ""),
+            "Source": str(row.get("run_source") or "manual").title(),
             "New summaries": int(row.get("summary_new_matches") or 0),
             "Detail fetched": int(row.get("detail_completed") or 0),
             "Parse requested": int(row.get("parse_requested") or 0),
@@ -510,5 +494,18 @@ else:
 
 if auto_run:
     st.caption(
-        f"Auto-fill is active. Current browser phase: `{auto_phase}`. This page will rerun automatically while the tab stays open."
+        "Auto-fill is active. Source should appear as `Auto` in Sync History when the timer-triggered cycles run."
     )
+
+    @st.fragment(run_every=float(active_interval_seconds))
+    def _database_auto_fill_driver() -> None:
+        from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx
+
+        ctx = get_script_run_ctx(suppress_warning=True)
+        is_fragment_rerun = bool(ctx and ctx.fragment_ids_this_run)
+        if not is_fragment_rerun:
+            return
+        st.session_state[auto_pulse_key] = time.time()
+        st.rerun()
+
+    _database_auto_fill_driver()

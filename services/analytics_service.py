@@ -152,6 +152,7 @@ class BackgroundSyncCycleResult:
     status: str
     started_at: str
     finished_at: str
+    run_source: str
     summary_new_matches: int
     total_matches_in_window: int
     detail_requested: int
@@ -1929,6 +1930,7 @@ class DotaAnalyticsService:
         max_parse_requests: int = 3,
         rate_limit_cooldown_seconds: int = 600,
         force: bool = False,
+        run_source: str = "manual",
     ) -> BackgroundSyncCycleResult:
         if self.match_store is None:
             raise RuntimeError("Background sync requires SQLite match storage")
@@ -1943,6 +1945,7 @@ class DotaAnalyticsService:
                 status="cooldown",
                 started_at=started_at,
                 finished_at=finished_at,
+                run_source=run_source,
                 summary_new_matches=0,
                 total_matches_in_window=coverage.total_matches,
                 detail_requested=0,
@@ -2121,6 +2124,7 @@ class DotaAnalyticsService:
                 started_at=started_at,
                 finished_at=finished_at,
                 status=status,
+                run_source=run_source,
                 summary_new_matches=summary_new_matches,
                 total_matches_in_window=coverage.total_matches,
                 detail_requested=detail_requested,
@@ -2136,6 +2140,7 @@ class DotaAnalyticsService:
                 status=status,
                 started_at=started_at,
                 finished_at=finished_at,
+                run_source=run_source,
                 summary_new_matches=summary_new_matches,
                 total_matches_in_window=coverage.total_matches,
                 detail_requested=detail_requested,
@@ -2166,6 +2171,7 @@ class DotaAnalyticsService:
                 started_at=started_at,
                 finished_at=finished_at,
                 status="error",
+                run_source=run_source,
                 summary_new_matches=summary_new_matches,
                 total_matches_in_window=0,
                 detail_requested=detail_requested,

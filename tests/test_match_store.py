@@ -1162,6 +1162,7 @@ def test_background_sync_cycle_updates_state_history_and_parse_queue() -> None:
     assert int(state["total_runs"]) == 1
     assert len(runs) == 1
     assert runs[0]["parse_requested"] == 1
+    assert runs[0]["run_source"] == "manual"
     assert parse_request is not None
     assert parse_request["status"] == "pending"
 
@@ -1448,3 +1449,37 @@ def test_background_sync_cycle_fetches_four_new_matches_during_long_window_coold
     assert [row.match_id for row in background_rows[:4]] == [9004, 9003, 9002, 9001]
     assert state is not None
     assert state["last_incremental_sync_at"] == recent_sync_at
+
+
+def test_background_sync_cycle_persists_manual_and_auto_run_source() -> None:
+    class _RunSourceClient(_FakeClient):
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 77,
+                    "start_time": 1771552800,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 8,
+                    "deaths": 3,
+                    "assists": 11,
+                    "duration": 1400,
+                    "hero_id": 1,
+                }
+            ]
+
+        def get_match_details(self, match_id: int) -> dict:
+            return {"match_id": match_id, "version": 22, "players": [{"account_id": 123, "player_slot": 0}]}
+
+    client = _RunSourceClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+
+    service.run_background_sync_cycle(player_id=123, window_days=365, max_detail_fetches=0, max_parse_requests=0, force=False, run_source="manual")
+    service.run_background_sync_cycle(player_id=123, window_days=365, max_detail_fetches=0, max_parse_requests=0, force=True, run_source="auto")
+
+    runs = service.list_background_sync_runs(123, window_days=365, limit=5)
+
+    assert [run["run_source"] for run in runs[:2]] == ["auto", "manual"]
