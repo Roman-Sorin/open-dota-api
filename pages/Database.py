@@ -386,7 +386,9 @@ if run_cycle or force_cycle or should_run_auto_cycle:
         st.session_state[auto_phase_key] = "display"
 
 state = service.get_background_sync_state(player_id, game_mode=23, window_days=int(window_days))
+st.caption("debug-state")
 runs = service.list_background_sync_runs(player_id, game_mode=23, window_days=int(window_days), limit=20)
+st.caption("debug-runs")
 
 total_rows = int((state or {}).get("target_match_count") or 0)
 current_page_size = max(int(page_size), 1)
@@ -401,6 +403,7 @@ page_rows = service.list_background_match_status_rows(
     limit=current_page_size,
     offset=start_idx,
 )
+st.caption("debug-rows")
 coverage = _PageCoverage(state, page_rows)
 st.caption("debug-c")
 
