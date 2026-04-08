@@ -1715,6 +1715,7 @@ class DotaAnalyticsService:
         game_mode: int,
         window_days: int,
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[BackgroundMatchStatusRow]:
         if self.match_store is None:
             return []
@@ -1730,6 +1731,7 @@ class DotaAnalyticsService:
             game_mode=game_mode,
             min_start_time=self._min_start_time(filters),
             limit=limit,
+            offset=offset,
         )
         rows: list[BackgroundMatchStatusRow] = []
         for row in status_rows:
@@ -1823,6 +1825,23 @@ class DotaAnalyticsService:
             newest_fully_cached_start_time=contiguous_rows[0].start_time if contiguous_rows else None,
             oldest_fully_cached_start_time=contiguous_rows[-1].start_time if contiguous_rows else None,
             rows=rows,
+        )
+
+    def list_background_match_status_rows(
+        self,
+        *,
+        player_id: int,
+        game_mode: int = 23,
+        window_days: int = 365,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[BackgroundMatchStatusRow]:
+        return self._background_match_status_rows(
+            player_id=player_id,
+            game_mode=game_mode,
+            window_days=window_days,
+            limit=limit,
+            offset=offset,
         )
 
     def _refresh_pending_parse_requests(

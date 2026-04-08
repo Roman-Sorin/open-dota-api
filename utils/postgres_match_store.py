@@ -341,6 +341,7 @@ class PostgresMatchStore:
         game_mode: int | None = None,
         min_start_time: int | None = None,
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         clauses = ["pm.account_id = %s"]
         params: list[Any] = [int(account_id)]
@@ -364,6 +365,9 @@ class PostgresMatchStore:
         if limit is not None:
             query += " LIMIT %s"
             params.append(int(limit))
+        if offset > 0:
+            query += " OFFSET %s"
+            params.append(int(offset))
         with self._cursor() as cur:
             cur.execute(query, params)
             rows = self._fetchall_dicts(cur)

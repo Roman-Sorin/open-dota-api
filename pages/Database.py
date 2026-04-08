@@ -131,6 +131,21 @@ def _render_metrics(coverage: Any, state: dict[str, object] | None) -> None:
     )
 
 
+class _PageCoverage:
+    def __init__(self, state: dict[str, object] | None, rows: list[Any]) -> None:
+        state = state or {}
+        self.total_matches = int(state.get("target_match_count") or len(rows))
+        self.detail_cached_count = int(state.get("detail_cached_count") or 0)
+        self.timing_ready_count = int(state.get("timing_ready_count") or 0)
+        self.missing_detail_count = int(state.get("missing_detail_count") or 0)
+        self.missing_timing_count = int(state.get("missing_timing_count") or 0)
+        self.pending_parse_count = int(state.get("pending_parse_count") or 0)
+        self.newest_match_start_time = state.get("newest_match_start_time")
+        self.oldest_match_start_time = state.get("oldest_match_start_time")
+        self.oldest_fully_cached_start_time = state.get("oldest_fully_cached_start_time")
+        self.rows = rows
+
+
 def _render_match_table(rows: list[Any], service) -> None:
     table_rows: list[str] = []
     for row in rows:
@@ -367,13 +382,22 @@ if run_cycle or force_cycle or should_run_auto_cycle:
         st.session_state[auto_phase_key] = "display"
 
 state = service.get_background_sync_state(player_id, game_mode=23, window_days=int(window_days))
-coverage = service.get_background_sync_coverage(
+runs = service.list_background_sync_runs(player_id, game_mode=23, window_days=int(window_days), limit=20)
+
+total_rows = int((state or {}).get("target_match_count") or 0)
+current_page_size = max(int(page_size), 1)
+total_pages = max((max(total_rows, 1) + current_page_size - 1) // current_page_size, 1)
+current_page = int(st.session_state.get(_ui_key("database_page_number"), 1) or 1)
+current_page = max(1, min(current_page, total_pages))
+start_idx = (current_page - 1) * current_page_size
+page_rows = service.list_background_match_status_rows(
     player_id=player_id,
     game_mode=23,
     window_days=int(window_days),
-    limit=None,
+    limit=current_page_size,
+    offset=start_idx,
 )
-runs = service.list_background_sync_runs(player_id, game_mode=23, window_days=int(window_days), limit=20)
+coverage = _PageCoverage(state, page_rows)
 
 if run_result is not None:
     if run_result.status == "completed":
@@ -424,12 +448,6 @@ st.subheader("Cached Matches")
 if not coverage.rows:
     st.info("No cached Turbo matches for the selected window yet.")
 else:
-    total_rows = len(coverage.rows)
-    current_page_size = max(int(page_size), 1)
-    total_pages = max((total_rows + current_page_size - 1) // current_page_size, 1)
-    current_page = int(st.session_state.get(_ui_key("database_page_number"), 1) or 1)
-    current_page = max(1, min(current_page, total_pages))
-
     nav_cols = st.columns([1.1, 0.9, 0.8, 0.8, 0.8, 0.8, 1.8])
     page_input = nav_cols[0].number_input(
         "Page",
@@ -459,7 +477,7 @@ else:
         f"Showing matches {start_idx + 1}-{end_idx} of {total_rows} cached match(es). "
         f"Page {current_page} of {total_pages}. This table is newest-first."
     )
-    _render_match_table(coverage.rows[start_idx:end_idx], service)
+    _render_match_table(coverage.rows, service)
 
 if auto_run:
     st.caption(

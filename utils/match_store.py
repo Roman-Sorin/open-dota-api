@@ -27,6 +27,7 @@ class MatchStoreProtocol(Protocol):
         game_mode: int | None = None,
         min_start_time: int | None = None,
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]: ...
     def update_player_match_enrichment(
         self,
@@ -355,6 +356,7 @@ class SQLiteMatchStore:
         game_mode: int | None = None,
         min_start_time: int | None = None,
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         clauses = ["pm.account_id = ?"]
         params: list[Any] = [int(account_id)]
@@ -379,6 +381,9 @@ class SQLiteMatchStore:
         if limit is not None:
             query += " LIMIT ?"
             params.append(int(limit))
+        if offset > 0:
+            query += " OFFSET ?"
+            params.append(int(offset))
 
         rows = self._conn.execute(query, params).fetchall()
         result: list[dict[str, Any]] = []
