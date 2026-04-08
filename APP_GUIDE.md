@@ -27,6 +27,7 @@ The project includes two interfaces:
 - `Database` shows match-level cache states, replay-parse backlog, recent sync-cycle history, cooldown state after 429s, and the contiguous date range that is already fully cached
 - `Database` can run one bounded cache-fill cycle per refresh and optionally auto-run while that page remains open
 - `Database` auto-fill now uses browser-bound page reruns for reliability on Streamlit Cloud, so the data section is always rendered even when fragment rendering is unstable
+- In auto mode, `Database` alternates between a display pass and a run pass so the page can keep showing current Neon data instead of blocking the whole render on every sync cycle
 - Default `Database` `Balanced` mode now uses `5` detail fetches, `5` parse requests, and a `15` second interval
 - Default `Database` cooldown after `HTTP 429` is now `50` seconds
 - `Cached Matches` now has real pagination: page size, page number, and `First/Prev/Next/Last` navigation

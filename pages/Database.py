@@ -35,6 +35,10 @@ def _ui_key(name: str) -> str:
     return f"{name}_{DATABASE_UI_VERSION}"
 
 
+def _next_auto_phase(current_phase: str) -> str:
+    return "run" if current_phase != "run" else "display"
+
+
 def _format_datetime(value: str | None) -> str:
     if not value:
         return "-"
@@ -235,6 +239,7 @@ auto_default = bool(st.session_state.get(_ui_key("database_auto_run"), True))
 interval_default = int(st.session_state.get(_ui_key("database_auto_run_seconds"), 15) or 15)
 page_size_default = int(st.session_state.get(_ui_key("database_page_size"), 100) or 100)
 preset_default = st.session_state.get(_ui_key("database_sync_preset"), "Balanced")
+auto_phase_key = _ui_key("database_auto_cycle_phase")
 if preset_default not in SYNC_PRESETS:
     preset_default = "Balanced"
 
@@ -337,8 +342,13 @@ except ValidationError as exc:
 st.session_state["player_raw"] = player_raw
 
 def _render_live_section() -> None:
+    auto_phase = str(st.session_state.get(auto_phase_key, "display") or "display")
+    if not auto_run:
+        st.session_state[auto_phase_key] = "display"
+
     run_result = None
-    if run_cycle or force_cycle or auto_run:
+    should_run_auto_cycle = auto_run and auto_phase == "run"
+    if run_cycle or force_cycle or should_run_auto_cycle:
         try:
             run_result = service.run_background_sync_cycle(
                 player_id=player_id,
@@ -349,10 +359,13 @@ def _render_live_section() -> None:
                 rate_limit_cooldown_seconds=int(cooldown_seconds),
                 force=bool(force_cycle),
             )
+            st.session_state[auto_phase_key] = "display"
         except (OpenDotaError, OpenDotaRateLimitError) as exc:
             st.error(str(exc))
+            st.session_state[auto_phase_key] = "display"
         except Exception as exc:  # noqa: BLE001
             st.error(f"Background sync cycle failed: {exc}")
+            st.session_state[auto_phase_key] = "display"
 
     state = service.get_background_sync_state(player_id, game_mode=23, window_days=int(window_days))
     coverage = service.get_background_sync_coverage(
@@ -451,8 +464,9 @@ def _render_live_section() -> None:
 
     if auto_run:
         st.caption(
-            "Auto-fill is active. This page will rerun automatically while the tab stays open."
+            f"Auto-fill is active. Current browser phase: `{auto_phase}`. This page will rerun automatically while the tab stays open."
         )
+        st.session_state[auto_phase_key] = _next_auto_phase(auto_phase)
         components.html(
             f"""
             <script>

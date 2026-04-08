@@ -105,6 +105,9 @@ CLI remains available as a secondary interface.
 
 - Initial fragment-based live refresh proved unreliable on Streamlit Cloud for this page: the live database section sometimes failed to render at all even though Neon data existed.
 - `pages/Database.py` now uses a browser-bound page rerun script for auto-fill instead of `st.fragment`.
+- Auto-fill now alternates `display` and `run` passes. Reason:
+  - if every page load starts with a sync cycle, a slow cycle can block the render and make metrics/history/match rows appear blank
+  - alternating passes guarantees a visible render pass between background sync cycles
 - Tradeoff:
   - page reruns are less elegant than fragment-only refresh
   - but metrics, sync history, and cached-match rows render reliably again in production
