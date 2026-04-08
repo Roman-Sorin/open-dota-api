@@ -35,6 +35,12 @@ This workflow is based on public engineering guidance:
 
 ## Mandatory workflow after any change
 
+0. Before answering about current app behavior, inspect the current code path first.
+   - Do not answer runtime questions from memory.
+   - Read the relevant code path that is active today in the repository.
+   - If the question is about current state, validate against current runtime evidence as well (database rows, logs, API response, deployed UI, or direct service call).
+   - This rule is mandatory for questions about caching, persistence, background jobs, parsing, sync state, and deployment behavior.
+
 1. Define the exact runtime path that changed.
    - Example: local-only code path, Streamlit page path, cloud secrets path, external API path, deploy path.
    - Do not stop at unit tests if the bug lived in config, secrets, or deployment behavior.
