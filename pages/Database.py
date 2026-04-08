@@ -23,7 +23,7 @@ from utils.helpers import format_duration, parse_player_id, unix_to_dt
 from webapp.app_runtime import build_service, get_app_version, get_store_warning
 
 ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
-DATABASE_UI_VERSION = "v2"
+DATABASE_UI_VERSION = "v3"
 SYNC_PRESETS: dict[str, dict[str, int]] = {
     "Safe": {"detail_batch": 4, "parse_batch": 1, "interval_seconds": 30},
     "Balanced": {"detail_batch": 5, "parse_batch": 5, "interval_seconds": 15},
