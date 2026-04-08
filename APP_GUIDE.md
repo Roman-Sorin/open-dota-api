@@ -28,8 +28,7 @@ The project includes two interfaces:
 - `Database` can run one bounded cache-fill cycle per refresh and optionally auto-run while that page remains open
 - `Database` auto-fill now uses browser-bound page reruns for reliability on Streamlit Cloud, so the data section is always rendered even when fragment rendering is unstable
 - In auto mode, `Database` alternates between a display pass and a run pass so the page can keep showing current data instead of blocking the whole render on every sync cycle
-- `Database` auto-fill phase is now carried in the page URL/query string rather than only in Streamlit session state, so full browser reloads no longer reset the cycle back to `display` forever
-- `Database` auto-fill navigation now tries `parent`, `top`, and current window targets and uses a mounted 1px component frame instead of a zero-height frame, which fixes Cloud sessions that stayed stuck on `display` and never advanced automatically
+- `Database` auto-fill now uses a dedicated Streamlit component timer that sends rerun events through Streamlit's component channel instead of trying to navigate the parent browser window from an iframe
 - `Database` summary sync now still checks the newest OpenDota page during long-window incremental cooldowns, so newly played matches appear promptly instead of waiting up to 12 hours on a `365`-day window
 - Default `Database` `Balanced` mode now uses `5` detail fetches, `5` parse requests, and a `15` second interval
 - Default `Database` cooldown after `HTTP 429` is now `50` seconds

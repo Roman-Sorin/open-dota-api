@@ -112,17 +112,17 @@ CLI remains available as a secondary interface.
   - page reruns are less elegant than fragment-only refresh
   - but metrics, sync history, and cached-match rows render reliably again in production
 
-## 2026-04-08 Database auto-fill rerun hardening
+## 2026-04-08 Database auto-fill component timer fix
 
 - User-reported bug:
   - `Auto-fill while this page stays open` showed as active, but the page stayed on browser phase `display` and only manual `Run One Sync Cycle` clicks reduced `Pending Parse`.
 - Root cause:
-  - the browser rerun helper depended on a zero-height `components.html` mount and a single `window.parent.location.replace(...)` navigation path.
-  - on some Streamlit Cloud sessions that combination failed to re-enter the app reliably, so the `run` phase never fired.
+  - the previous implementation depended on a browser iframe trying to navigate the parent Streamlit window.
+  - in production that iframe path still failed silently, so the page remained on `display` and no automatic sync cycle was triggered.
 - Fix:
-  - `webapp/database_auto_fill.py` now tries navigation through `window.parent`, `window.top`, and the current window, and falls back to `reload()` when the target URL is already current.
-  - `pages/Database.py` now mounts the helper in a `1px` component frame instead of `0px` so the browser consistently instantiates the auto-fill component.
-  - `tests/test_database_auto_fill.py` now covers the hardened navigation script shape.
+  - added a real Streamlit custom component at `webapp/components/auto_fill_timer/index.html` that emits timed rerun events through Streamlit's `setComponentValue` channel.
+  - added `webapp/auto_fill_timer_component.py` and rewired `pages/Database.py` to drive the `display` / `run` phase machine from those timer events in session state.
+  - removed the brittle query-param / parent-window navigation helper; `webapp/database_auto_fill.py` now keeps only pure phase helpers.
 
 ## 2026-04-08 Database new-match summary cooldown fix
 

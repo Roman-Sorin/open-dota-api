@@ -9,7 +9,6 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Turbo Buff - Database", layout="wide")
 
@@ -21,7 +20,8 @@ from utils.exceptions import OpenDotaError, OpenDotaRateLimitError, ValidationEr
 from utils.config import is_persistent_match_store_configured
 from utils.helpers import format_duration, parse_player_id, unix_to_dt
 from webapp.app_runtime import build_service, get_app_version, get_store_warning
-from webapp.database_auto_fill import AUTO_PHASE_QUERY_PARAM, build_auto_reload_script, next_auto_phase, normalize_auto_phase
+from webapp.auto_fill_timer_component import render_auto_fill_timer
+from webapp.database_auto_fill import next_auto_phase, normalize_auto_phase
 
 ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 DATABASE_UI_VERSION = "v3"
@@ -343,6 +343,8 @@ if st.session_state.get(_ui_key("database_use_advanced_batches")):
 
 run_cycle_request_key = _ui_key("database_run_cycle_requested")
 force_cycle_request_key = _ui_key("database_force_cycle_requested")
+auto_phase_state_key = _ui_key("database_auto_phase")
+auto_event_key = _ui_key("database_auto_event_fired_at")
 run_cycle = bool(st.session_state.pop(run_cycle_request_key, False))
 force_cycle = bool(st.session_state.pop(force_cycle_request_key, False))
 
@@ -354,8 +356,33 @@ except ValidationError as exc:
 
 st.session_state["player_raw"] = player_raw
 
-auto_phase_raw = st.query_params.get(AUTO_PHASE_QUERY_PARAM)
-auto_phase = normalize_auto_phase(str(auto_phase_raw) if auto_phase_raw is not None else None)
+if not auto_run:
+    st.session_state[auto_phase_state_key] = "display"
+
+auto_phase = normalize_auto_phase(str(st.session_state.get(auto_phase_state_key)))
+cycle_token = (
+    f"{player_id}:{int(window_days)}:{int(active_detail_batch)}:{int(active_parse_batch)}:"
+    f"{int(active_interval_seconds)}:{int(cooldown_seconds)}:{auto_phase}"
+)
+auto_timer_event = render_auto_fill_timer(
+    enabled=bool(auto_run),
+    delay_seconds=int(active_interval_seconds),
+    next_phase=next_auto_phase(auto_phase),
+    cycle_token=cycle_token,
+    key=_ui_key("database_auto_fill_timer"),
+)
+if isinstance(auto_timer_event, dict):
+    fired_at_ms = int(auto_timer_event.get("fired_at_ms") or 0)
+    next_phase_value = normalize_auto_phase(str(auto_timer_event.get("next_phase") or None))
+    event_cycle_token = str(auto_timer_event.get("cycle_token") or "")
+    if (
+        fired_at_ms > 0
+        and fired_at_ms != int(st.session_state.get(auto_event_key, 0) or 0)
+        and event_cycle_token == cycle_token
+    ):
+        st.session_state[auto_event_key] = fired_at_ms
+        st.session_state[auto_phase_state_key] = next_phase_value
+        auto_phase = next_phase_value
 
 run_result = None
 should_run_auto_cycle = auto_run and auto_phase == "run"
@@ -485,13 +512,3 @@ if auto_run:
     st.caption(
         f"Auto-fill is active. Current browser phase: `{auto_phase}`. This page will rerun automatically while the tab stays open."
     )
-    components.html(
-        build_auto_reload_script(
-            delay_seconds=int(active_interval_seconds),
-            next_phase_value=next_auto_phase(auto_phase),
-        ),
-        height=1,
-    )
-else:
-    if AUTO_PHASE_QUERY_PARAM in st.query_params:
-        del st.query_params[AUTO_PHASE_QUERY_PARAM]
