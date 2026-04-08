@@ -180,6 +180,8 @@ tests/
 - `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
 - If `STRATZ_API_TOKEN` is configured, cached matches that still miss item timings after OpenDota detail fetches can now recover those timings from STRATZ match purchase events.
 - STRATZ fallback does not replace OpenDota for summaries/details; it only fills missing timing fields (`purchase_log` / `first_purchase_time`) when OpenDota leaves them empty.
+- If STRATZ successfully fills timings for a match that had an outstanding OpenDota parse request, the app now completes that pending parse row so `Pending Parse` reflects only matches still blocked on external timing data.
+- The background sync cycle now stops enqueueing new OpenDota parse jobs while an older pending parse backlog still exists, so the queue is drained before it is expanded further.
 - Streamlit Community Cloud does not provide a true always-on worker inside the page process. The `Database` page can keep advancing the backlog while it stays open, but a real 24/7 worker still requires an external runner with shared persistent storage.
 
 ## Timing backfill job

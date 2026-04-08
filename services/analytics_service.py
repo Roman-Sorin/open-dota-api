@@ -2007,45 +2007,55 @@ class DotaAnalyticsService:
 
             if not rate_limited:
                 matches = self.get_cached_matches(filters)
-                parse_candidates: list[int] = []
-                for match in matches:
-                    details = self.get_match_details_if_cached(match.match_id)
-                    if not isinstance(details, dict):
-                        continue
-                    player_row = self._extract_player_from_match_details(
-                        details,
-                        player_id=player_id,
-                        player_slot=match.player_slot,
-                    )
-                    if not self._player_row_has_tracked_final_items(player_row):
-                        continue
-                    if self._player_row_has_timing_data(player_row):
-                        continue
-                    if details.get("version") is not None:
-                        continue
-                    parse_request = self.match_store.get_match_parse_request(match.match_id) or {}
-                    if str(parse_request.get("status") or "") == "pending":
-                        continue
-                    parse_candidates.append(int(match.match_id))
-                    if len(parse_candidates) >= max_parse_requests:
-                        break
+                pending_request_count = self.get_background_sync_coverage(
+                    player_id=player_id,
+                    game_mode=game_mode,
+                    window_days=window_days,
+                ).pending_parse_count
+                if pending_request_count == 0:
+                    parse_candidates: list[int] = []
+                    for match in matches:
+                        details = self.get_match_details_if_cached(match.match_id)
+                        if not isinstance(details, dict):
+                            continue
+                        player_row = self._extract_player_from_match_details(
+                            details,
+                            player_id=player_id,
+                            player_slot=match.player_slot,
+                        )
+                        if not self._player_row_has_tracked_final_items(player_row):
+                            continue
+                        if self._player_row_has_timing_data(player_row):
+                            continue
+                        if details.get("version") is not None:
+                            continue
+                        parse_request = self.match_store.get_match_parse_request(match.match_id) or {}
+                        if str(parse_request.get("status") or "") == "pending":
+                            continue
+                        parse_candidates.append(int(match.match_id))
+                        if len(parse_candidates) >= max_parse_requests:
+                            break
 
-                for match_id in parse_candidates:
-                    try:
-                        self.client.request_match_parse(match_id)
-                    except OpenDotaRateLimitError:
-                        rate_limited = True
-                        status = "rate_limited"
-                        next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
-                        note_parts.append("OpenDota rate limit was hit while requesting replay parses.")
-                        break
-                    self.match_store.upsert_match_parse_request(
-                        match_id,
-                        player_id,
-                        status="pending",
-                        requested_at=self._utcnow_iso(),
+                    for match_id in parse_candidates:
+                        try:
+                            self.client.request_match_parse(match_id)
+                        except OpenDotaRateLimitError:
+                            rate_limited = True
+                            status = "rate_limited"
+                            next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
+                            note_parts.append("OpenDota rate limit was hit while requesting replay parses.")
+                            break
+                        self.match_store.upsert_match_parse_request(
+                            match_id,
+                            player_id,
+                            status="pending",
+                            requested_at=self._utcnow_iso(),
+                        )
+                        parse_requested += 1
+                else:
+                    note_parts.append(
+                        f"Skipped new replay parse requests while {pending_request_count} pending parse job(s) remain."
                     )
-                    parse_requested += 1
 
             coverage = self.get_background_sync_coverage(
                 player_id=player_id,
@@ -2440,14 +2450,43 @@ class DotaAnalyticsService:
                 by_account_id[int(steam_account_id)] = stratz_player
 
         changed = False
+        detail_players_by_slot: dict[int, dict[str, Any]] = {}
+        detail_players_by_account_id: dict[int, dict[str, Any]] = {}
         for player_row in players:
+            if not isinstance(player_row, dict):
+                continue
+            account_id = int(player_row.get("account_id") or 0)
+            player_slot = int(player_row.get("player_slot") or -1)
+            if account_id > 0:
+                detail_players_by_account_id[account_id] = player_row
+            if player_slot >= 0:
+                detail_players_by_slot[player_slot] = player_row
+
+        matched_player_rows: list[dict[str, Any]] = []
+        for stratz_player in stratz_players:
+            if not isinstance(stratz_player, dict):
+                continue
+            steam_account_id = int(stratz_player.get("steamAccountId") or 0)
+            player_slot = int(stratz_player.get("playerSlot") or -1)
+            player_row = None
+            if steam_account_id > 0:
+                player_row = detail_players_by_account_id.get(steam_account_id)
+            if player_row is None and player_slot >= 0:
+                player_row = detail_players_by_slot.get(player_slot)
+            if isinstance(player_row, dict):
+                player_row["_matched_stratz_player"] = stratz_player
+                matched_player_rows.append(player_row)
+
+        for player_row in matched_player_rows:
             if not isinstance(player_row, dict):
                 continue
             if self._player_row_has_timing_data(player_row):
                 continue
             account_id = int(player_row.get("account_id") or 0)
             player_slot = int(player_row.get("player_slot") or -1)
-            stratz_player = by_account_id.get(account_id) or by_slot.get(player_slot)
+            stratz_player = player_row.pop("_matched_stratz_player", None)
+            if not isinstance(stratz_player, dict):
+                stratz_player = by_account_id.get(account_id) or by_slot.get(player_slot)
             if not isinstance(stratz_player, dict):
                 continue
             stats = stratz_player.get("stats")
@@ -2473,6 +2512,24 @@ class DotaAnalyticsService:
         if changed:
             details["timing_source"] = "stratz_fallback"
             self._store_match_details(match_id, details)
+            if self.match_store is not None:
+                for player_row in players:
+                    if not isinstance(player_row, dict):
+                        continue
+                    if self._player_row_has_timing_data(player_row):
+                        account_id = int(player_row.get("account_id") or 0)
+                        if account_id == 0:
+                            continue
+                        parse_request = self.match_store.get_match_parse_request(match_id)
+                        if parse_request and str(parse_request.get("status") or "") == "pending":
+                            self.match_store.upsert_match_parse_request(
+                                match_id,
+                                account_id,
+                                status="completed",
+                                last_polled_at=self._utcnow_iso(),
+                                completed_at=self._utcnow_iso(),
+                            )
+                        break
         return changed
 
     def _fetch_match_details(self, match_id: int) -> dict[str, Any]:

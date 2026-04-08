@@ -169,6 +169,8 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
 - If `STRATZ_API_TOKEN` is configured, the app can recover missing match item timings from STRATZ when OpenDota detail payloads have no `purchase_log` / `first_purchase_time`.
 - STRATZ fallback is timing-only. Match summaries and main detail payloads still come from OpenDota.
+- When STRATZ timing recovery succeeds for a match that was previously marked `Pending Parse`, the app now marks that pending OpenDota parse request as completed so the `Pending Parse` count can drop instead of staying artificially inflated.
+- The background sync cycle now prioritizes resolving existing pending parse jobs before enqueueing new OpenDota parse requests, so `Pending Parse` no longer grows forever while old jobs are still outstanding.
 - Streamlit Community Cloud local files are not durable storage. If neither Google Drive snapshot storage nor `DATABASE_URL` is configured, the app warns in the UI because a reboot/redeploy can reset the local `.cache/matches.sqlite3` file.
 
 ## Batch timing repair
