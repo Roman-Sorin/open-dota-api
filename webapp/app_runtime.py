@@ -11,6 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 def build_service():
     config_module = importlib.import_module("utils.config")
     cache_module = importlib.import_module("utils.cache")
+    exceptions_module = importlib.import_module("utils.exceptions")
     client_module = importlib.import_module("clients.opendota_client")
     stratz_client_module = importlib.import_module("clients.stratz_client")
     match_store_module = importlib.import_module("utils.match_store")
@@ -18,6 +19,7 @@ def build_service():
 
     config_module = importlib.reload(config_module)
     cache_module = importlib.reload(cache_module)
+    exceptions_module = importlib.reload(exceptions_module)
     client_module = importlib.reload(client_module)
     stratz_client_module = importlib.reload(stratz_client_module)
     match_store_module = importlib.reload(match_store_module)
