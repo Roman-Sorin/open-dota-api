@@ -119,6 +119,7 @@ CLI remains available as a secondary interface.
 - Fix:
   - `utils/postgres_match_store.py` now enables `autocommit=True` for both `psycopg` and `pg8000` connection paths.
   - `pages/Database.py` defaults were realigned and widget keys were versioned so stale session state does not preserve old fetch defaults.
+  - `requirements.txt` now pins `psycopg[binary]==3.2.12` so Streamlit Cloud can use the same stable Neon driver path that already works locally, instead of relying on `pg8000` only.
 - Current `Database` defaults:
   - `Balanced` = `5` detail fetches, `5` replay parses, `15 sec`
   - pause after `429` = `50 sec`

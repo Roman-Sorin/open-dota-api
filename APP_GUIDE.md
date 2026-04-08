@@ -103,6 +103,7 @@ The project includes two interfaces:
 - Separate persisted storage for fetched match details
 - Separate persisted storage for background sync state, sync-cycle history, and replay-parse request tracking
 - Optional Postgres-backed durable store for the critical match cache so cached matches/details survive app restarts and redeploys
+- Production Postgres/Neon path prefers `psycopg`; `pg8000` remains as fallback
 - Incremental summary sync to avoid repeated full-history calls
 - Match details can be backfilled later without rebuilding summary history
 - Graceful handling of missing OpenDota fields and rate limits
