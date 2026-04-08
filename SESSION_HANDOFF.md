@@ -103,11 +103,11 @@ CLI remains available as a secondary interface.
 
 ## 2026-04-08 Database live-refresh UX
 
-- `pages/Database.py` was moved from whole-page timed reload to a Streamlit fragment-based live section.
-- Goal:
-  - keep auto-fill running
-  - avoid full page jumps every cycle
-  - refresh only the live sync/history/table section while controls and surrounding layout stay stable
+- Initial fragment-based live refresh proved unreliable on Streamlit Cloud for this page: the live database section sometimes failed to render at all even though Neon data existed.
+- `pages/Database.py` now uses a browser-bound page rerun script for auto-fill instead of `st.fragment`.
+- Tradeoff:
+  - page reruns are less elegant than fragment-only refresh
+  - but metrics, sync history, and cached-match rows render reliably again in production
 
 ## 2026-04-08 Database Neon freshness fix
 

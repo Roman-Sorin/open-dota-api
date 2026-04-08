@@ -26,7 +26,7 @@ The project includes two interfaces:
 - Separate multipage `Database` view tracks cache coverage for one player's Turbo matches over a rolling window (default `365` days)
 - `Database` shows match-level cache states, replay-parse backlog, recent sync-cycle history, cooldown state after 429s, and the contiguous date range that is already fully cached
 - `Database` can run one bounded cache-fill cycle per refresh and optionally auto-run while that page remains open
-- `Database` auto-fill refreshes only its live sync fragment, so the full page no longer jumps on every cycle
+- `Database` auto-fill now uses browser-bound page reruns for reliability on Streamlit Cloud, so the data section is always rendered even when fragment rendering is unstable
 - Default `Database` `Balanced` mode now uses `5` detail fetches, `5` parse requests, and a `15` second interval
 - Default `Database` cooldown after `HTTP 429` is now `50` seconds
 - `Cached Matches` now has real pagination: page size, page number, and `First/Prev/Next/Last` navigation

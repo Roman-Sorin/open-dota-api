@@ -336,7 +336,6 @@ except ValidationError as exc:
 
 st.session_state["player_raw"] = player_raw
 
-@st.fragment(run_every=active_interval_seconds if auto_run else None)
 def _render_live_section() -> None:
     run_result = None
     if run_cycle or force_cycle or auto_run:
@@ -452,7 +451,22 @@ def _render_live_section() -> None:
 
     if auto_run:
         st.caption(
-            "Auto-fill is active. Only this live section refreshes automatically; the rest of the page stays in place."
+            "Auto-fill is active. This page will rerun automatically while the tab stays open."
+        )
+        components.html(
+            f"""
+            <script>
+            const delayMs = {int(active_interval_seconds) * 1000};
+            setTimeout(() => {{
+              try {{
+                window.parent.location.reload();
+              }} catch (err) {{
+                window.location.reload();
+              }}
+            }}, delayMs);
+            </script>
+            """,
+            height=0,
         )
 
 
