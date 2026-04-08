@@ -185,6 +185,9 @@ class PostgresMatchStore:
     def close(self) -> None:
         self._conn.close()
 
+    def flush_persistent_snapshot(self, *, force: bool = False) -> None:
+        return None
+
     @staticmethod
     def _now_iso() -> str:
         return datetime.now(tz=timezone.utc).isoformat()

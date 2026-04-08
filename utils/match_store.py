@@ -10,6 +10,7 @@ from typing import Protocol
 
 class MatchStoreProtocol(Protocol):
     def close(self) -> None: ...
+    def flush_persistent_snapshot(self, *, force: bool = False) -> None: ...
     def get_existing_match_ids(self, account_id: int, match_ids: list[int]) -> set[int]: ...
     def upsert_player_matches(self, account_id: int, rows: list[dict[str, Any]]) -> None: ...
     def query_player_matches(
@@ -103,12 +104,14 @@ class MatchStoreProtocol(Protocol):
 
 
 class SQLiteMatchStore:
-    def __init__(self, db_path: Path | str) -> None:
+    def __init__(self, db_path: Path | str, *, commit_hook=None, close_hook=None) -> None:
         db_target = str(db_path)
         if db_target != ":memory:":
             Path(db_target).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(db_target, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._commit_hook = commit_hook
+        self._close_hook = close_hook
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -227,9 +230,17 @@ class SQLiteMatchStore:
 
     def _commit(self) -> None:
         self._conn.commit()
+        if callable(self._commit_hook):
+            self._commit_hook()
 
     def close(self) -> None:
+        if callable(self._close_hook):
+            self._close_hook(force=True)
         self._conn.close()
+
+    def flush_persistent_snapshot(self, *, force: bool = False) -> None:
+        if callable(self._close_hook):
+            self._close_hook(force=force)
 
     @staticmethod
     def _now_iso() -> str:

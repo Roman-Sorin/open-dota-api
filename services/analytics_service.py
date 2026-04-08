@@ -484,6 +484,7 @@ class DotaAnalyticsService:
                 last_full_sync_at=now_iso,
                 known_match_count=self.match_store.count_player_matches(filters.player_id, filters.game_mode),
             )
+            self._flush_persistent_match_store()
             return inserted_match_ids
 
         first_page = fetch_page(0)
@@ -494,6 +495,7 @@ class DotaAnalyticsService:
                 last_incremental_sync_at=now_iso,
                 known_match_count=self.match_store.count_player_matches(filters.player_id, filters.game_mode),
             )
+            self._flush_persistent_match_store()
             return []
 
         page_index = 0
@@ -521,6 +523,7 @@ class DotaAnalyticsService:
             last_incremental_sync_at=now_iso,
             known_match_count=self.match_store.count_player_matches(filters.player_id, filters.game_mode),
         )
+        self._flush_persistent_match_store()
         return inserted_match_ids
 
     @staticmethod
@@ -734,6 +737,13 @@ class DotaAnalyticsService:
             return datetime.fromisoformat(value) > datetime.now(tz=timezone.utc)
         except ValueError:
             return False
+
+    def _flush_persistent_match_store(self, *, force: bool = False) -> None:
+        if self.match_store is None:
+            return
+        flush = getattr(self.match_store, "flush_persistent_snapshot", None)
+        if callable(flush):
+            flush(force=force)
 
     def build_stats(self, matches: list[MatchSummary]) -> StatsResult:
         total = len(matches)
@@ -1088,6 +1098,8 @@ class DotaAnalyticsService:
                 rate_limited = True
                 break
         remaining = sum(1 for match_id in requested_ids if not self._has_match_details_cached(match_id))
+        if completed > 0:
+            self._flush_persistent_match_store()
         return MatchDetailHydrationStatus(
             requested=requested,
             completed=completed,
@@ -1645,6 +1657,9 @@ class DotaAnalyticsService:
                     pending_ids.remove(match_id)
                     completed += 1
 
+        if submitted > 0 or completed > 0 or stratz_completed > 0:
+            self._flush_persistent_match_store()
+
         return RecentItemTimingRepairStatus(
             requested=len(requested_ids),
             submitted=submitted,
@@ -2096,6 +2111,7 @@ class DotaAnalyticsService:
                 next_retry_at=next_retry_at,
                 note=note,
             )
+            self._flush_persistent_match_store(force=True)
             return BackgroundSyncCycleResult(
                 status=status,
                 started_at=started_at,
@@ -2140,6 +2156,7 @@ class DotaAnalyticsService:
                 next_retry_at=None,
                 note=str(exc),
             )
+            self._flush_persistent_match_store(force=True)
             raise
 
     def get_turbo_hero_overview(

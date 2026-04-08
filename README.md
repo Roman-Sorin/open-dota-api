@@ -119,9 +119,13 @@ Set keys only if needed:
 OPENDOTA_API_KEY=
 STRATZ_API_TOKEN=
 DATABASE_URL=
+GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON=
+GOOGLE_DRIVE_FOLDER_ID=
+GOOGLE_DRIVE_SNAPSHOT_NAME=matches.sqlite3
+GOOGLE_DRIVE_MIN_UPLOAD_INTERVAL_SECONDS=60
 ```
 
-`DATABASE_URL` is optional locally but strongly recommended for Streamlit Cloud. Recommended provider is free-tier Neon Postgres. When configured in environment/secrets, the app persists the critical match store in Postgres instead of local-only `matches.sqlite3`, so reboot/redeploy no longer wipes the cached match history. If `DATABASE_URL` is present but invalid, the app now shows a visible warning and falls back to local SQLite instead of crashing blindly.
+Recommended production persistence is Google Drive snapshot storage. When `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` and `GOOGLE_DRIVE_FOLDER_ID` are configured, the app restores `.cache/matches.sqlite3` from Google Drive at startup and uploads the updated snapshot back after sync/write activity. This keeps the hosted Streamlit app on fast local SQLite while still surviving reboot/redeploy. `DATABASE_URL` remains optional as a secondary backend path. If external persistence is configured but invalid, the app now shows a visible warning and falls back to local SQLite instead of crashing blindly.
 
 ## CLI (still available)
 
@@ -170,7 +174,8 @@ tests/
 - Match details are persisted separately and reused for enrichment-heavy sections.
 - The service performs incremental syncs instead of refetching whole history on each reload.
 - Background worker metadata is also persisted in local `SQLite` so the `Database` page can show cache progress and recent sync-cycle history.
-- For Streamlit Cloud durability, the critical match store can now live in Postgres via `DATABASE_URL` (recommended: Neon free tier); this is the required setup if cache must survive reboot/redeploy/reset events.
+- For Streamlit Cloud durability, the recommended setup is Google Drive snapshot storage via `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` + `GOOGLE_DRIVE_FOLDER_ID`. The app restores the SQLite file from Drive on startup and uploads fresh snapshots after cache writes, so normal page reads stay local and cheap.
+- `DATABASE_URL` is still supported as a secondary backend path, but a live remote database is no longer the recommended default for this app's cache pattern.
 - `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
 - If `STRATZ_API_TOKEN` is configured, cached matches that still miss item timings after OpenDota detail fetches can now recover those timings from STRATZ match purchase events.
 - STRATZ fallback does not replace OpenDota for summaries/details; it only fills missing timing fields (`purchase_log` / `first_purchase_time`) when OpenDota leaves them empty.

@@ -222,7 +222,8 @@ if store_warning:
 if not is_persistent_match_store_configured():
     st.warning(
         "Persistent external match storage is not configured for this deployment yet. "
-        "App reboot or redeploy can reset the local cache until DATABASE_URL is connected."
+        "App reboot or redeploy can reset the local cache until Google Drive snapshot storage "
+        "or DATABASE_URL is connected."
     )
 with st.expander("How to use this page", expanded=True):
     st.markdown(

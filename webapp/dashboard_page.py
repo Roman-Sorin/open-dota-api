@@ -617,7 +617,8 @@ if store_warning:
 if not is_persistent_match_store_configured():
     st.warning(
         "Persistent external match storage is not configured for this deployment yet. "
-        "Streamlit app reboots or redeploys can reset the local cache until DATABASE_URL is connected."
+        "Streamlit app reboots or redeploys can reset the local cache until Google Drive snapshot storage "
+        "or DATABASE_URL is connected."
     )
 try:
     service_overview_sig = inspect.signature(service.get_turbo_hero_overview)

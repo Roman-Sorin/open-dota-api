@@ -58,17 +58,19 @@ Use Streamlit Community Cloud:
    - Branch: `main`
    - Main file path: `webapp/turbo_dashboard.py`
 4. (Optional) add `OPENDOTA_API_KEY` in app Secrets.
-5. (Strongly recommended) add `DATABASE_URL` in app Secrets.
-   - Recommended provider: free-tier Neon Postgres
-   - Paste the full Neon connection string as one secret value
-   - If the secret is invalid, the app will now show a visible fallback warning and continue on local SQLite
+5. (Strongly recommended) add Google Drive snapshot secrets in app Secrets:
+   - `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`
+   - `GOOGLE_DRIVE_FOLDER_ID`
+   - optional: `GOOGLE_DRIVE_SNAPSHOT_NAME`
+   - optional: `GOOGLE_DRIVE_MIN_UPLOAD_INTERVAL_SECONDS`
+6. (Optional) add `DATABASE_URL` only if you also want the secondary Postgres backend path.
 
 After deploy, you get a stable public HTTPS URL accessible from phone.
 
 Notes:
 - The app now includes a multipage `Database` view for cache coverage / backlog monitoring.
 - Streamlit Community Cloud still does not provide a true always-on background worker inside the app process. The `Database` page can advance the queue while open, but 24/7 cache filling still needs an external runner plus shared persistent storage.
-- Streamlit Community Cloud local files are ephemeral. If `DATABASE_URL` is not configured, a reboot/redeploy can wipe the local SQLite cache and force the app to rebuild match history from OpenDota.
+- Streamlit Community Cloud local files are ephemeral. Without Google Drive snapshot storage or another external backend, a reboot/redeploy can wipe the local SQLite cache and force the app to rebuild match history from OpenDota.
 
 Current deployed app:
 - https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/

@@ -103,7 +103,8 @@ The project includes two interfaces:
 - Local `SQLite` storage for player match summaries
 - Separate persisted storage for fetched match details
 - Separate persisted storage for background sync state, sync-cycle history, and replay-parse request tracking
-- Optional Postgres-backed durable store for the critical match cache so cached matches/details survive app restarts and redeploys
+- Optional Google Drive snapshot persistence for the critical match cache so cached matches/details survive app restarts and redeploys while the app still reads from local SQLite
+- Optional Postgres-backed durable store remains supported as a secondary backend path
 - Incremental summary sync to avoid repeated full-history calls
 - Match details can be backfilled later without rebuilding summary history
 - Graceful handling of missing OpenDota fields and rate limits
@@ -138,7 +139,7 @@ copy .env.example .env
 
 `OPENDOTA_API_KEY` is optional. Without a key, rate limits may be hit more often.
 `STRATZ_API_TOKEN` is also optional and only needed for timing fallback when OpenDota lacks item timings for a match.
-`DATABASE_URL` is optional locally, but it is the critical production setting if cache must survive Streamlit Cloud reboot/redeploy/reset events. Recommended provider is free-tier Neon Postgres. When present, the app stores the critical match cache in Postgres instead of local-only SQLite. If the value is invalid or unreachable, the UI now shows an explicit warning and the app falls back to local SQLite.
+Recommended production persistence is Google Drive snapshot storage. Configure `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` and `GOOGLE_DRIVE_FOLDER_ID` so the app can restore `.cache/matches.sqlite3` from Drive at startup and upload fresh snapshots after cache writes. `DATABASE_URL` remains optional as a secondary backend path. If external persistence is invalid or unreachable, the UI shows an explicit warning and the app falls back to local SQLite.
 
 ## Run the web dashboard (recommended)
 
@@ -167,7 +168,7 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
 - If `STRATZ_API_TOKEN` is configured, the app can recover missing match item timings from STRATZ when OpenDota detail payloads have no `purchase_log` / `first_purchase_time`.
 - STRATZ fallback is timing-only. Match summaries and main detail payloads still come from OpenDota.
-- Streamlit Community Cloud local files are not durable storage. If `DATABASE_URL` is not configured, the app now warns in the UI because a reboot/redeploy can reset the local `.cache/matches.sqlite3` file.
+- Streamlit Community Cloud local files are not durable storage. If neither Google Drive snapshot storage nor `DATABASE_URL` is configured, the app warns in the UI because a reboot/redeploy can reset the local `.cache/matches.sqlite3` file.
 
 ## Batch timing repair
 
