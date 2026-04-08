@@ -8,11 +8,11 @@ import time as time_module
 from typing import Any
 
 from clients.opendota_client import OpenDotaClient
-from clients.stratz_client import StratzClient
+from clients.stratz_client import StratzClient, StratzError, StratzRateLimitError
 from models.dtos import ItemStat, ItemsResult, MatchRow, MatchSummary, QueryFilters, StatsResult
 from parsers.input_parser import HeroParser
 from utils.cache import JsonFileCache
-from utils.exceptions import OpenDotaNotFoundError, OpenDotaRateLimitError, StratzError, StratzRateLimitError
+from utils.exceptions import OpenDotaNotFoundError, OpenDotaRateLimitError
 from utils.helpers import calculate_kda_ratio, format_duration, unix_to_dt, winrate_percent
 from utils.match_filters import is_excluded_match_id
 from utils.match_store import SQLiteMatchStore

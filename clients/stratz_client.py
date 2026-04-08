@@ -4,7 +4,13 @@ from typing import Any
 
 import requests
 
-from utils.exceptions import StratzError, StratzRateLimitError
+
+class StratzError(Exception):
+    """Base exception for STRATZ client and enrichment failures."""
+
+
+class StratzRateLimitError(StratzError):
+    """Raised when STRATZ rate limits the request."""
 
 
 class StratzClient:
