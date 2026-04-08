@@ -19,10 +19,32 @@ def build_auto_reload_script(delay_seconds: int, next_phase_value: str) -> str:
         <script>
         const delayMs = {safe_delay_ms};
         const nextPhase = {safe_next_phase!r};
+        const phaseQueryParam = {AUTO_PHASE_QUERY_PARAM!r};
+
+        function navigateForAutoFill() {{
+          const candidateWindows = [window.parent, window.top, window];
+          for (const candidate of candidateWindows) {{
+            if (!candidate) {{
+              continue;
+            }}
+            try {{
+              const target = new URL(candidate.location.href);
+              target.searchParams.set(phaseQueryParam, nextPhase);
+              const targetHref = target.toString();
+              if (candidate.location.href === targetHref) {{
+                candidate.location.reload();
+              }} else {{
+                candidate.location.assign(targetHref);
+              }}
+              return;
+            }} catch (error) {{
+              // Keep trying fallbacks until one can navigate the app shell.
+            }}
+          }}
+        }}
+
         setTimeout(() => {{
-          const target = new URL(window.parent.location.href);
-          target.searchParams.set({AUTO_PHASE_QUERY_PARAM!r}, nextPhase);
-          window.parent.location.replace(target.toString());
+          navigateForAutoFill();
         }}, delayMs);
         </script>
     """

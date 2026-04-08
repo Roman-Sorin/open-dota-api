@@ -112,6 +112,18 @@ CLI remains available as a secondary interface.
   - page reruns are less elegant than fragment-only refresh
   - but metrics, sync history, and cached-match rows render reliably again in production
 
+## 2026-04-08 Database auto-fill rerun hardening
+
+- User-reported bug:
+  - `Auto-fill while this page stays open` showed as active, but the page stayed on browser phase `display` and only manual `Run One Sync Cycle` clicks reduced `Pending Parse`.
+- Root cause:
+  - the browser rerun helper depended on a zero-height `components.html` mount and a single `window.parent.location.replace(...)` navigation path.
+  - on some Streamlit Cloud sessions that combination failed to re-enter the app reliably, so the `run` phase never fired.
+- Fix:
+  - `webapp/database_auto_fill.py` now tries navigation through `window.parent`, `window.top`, and the current window, and falls back to `reload()` when the target URL is already current.
+  - `pages/Database.py` now mounts the helper in a `1px` component frame instead of `0px` so the browser consistently instantiates the auto-fill component.
+  - `tests/test_database_auto_fill.py` now covers the hardened navigation script shape.
+
 ## 2026-04-08 Database Neon freshness fix
 
 - User-reported bug:

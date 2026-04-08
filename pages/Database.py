@@ -490,7 +490,7 @@ if auto_run:
             delay_seconds=int(active_interval_seconds),
             next_phase_value=next_auto_phase(auto_phase),
         ),
-        height=0,
+        height=1,
     )
 else:
     if AUTO_PHASE_QUERY_PARAM in st.query_params:

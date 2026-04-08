@@ -20,3 +20,6 @@ def test_build_auto_reload_script_preserves_query_param_name_and_next_phase() ->
     assert AUTO_PHASE_QUERY_PARAM in script
     assert "nextPhase = 'run'" in script
     assert "15000" in script
+    assert "window.parent, window.top, window" in script
+    assert "candidate.location.assign" in script
+    assert "candidate.location.reload" in script
