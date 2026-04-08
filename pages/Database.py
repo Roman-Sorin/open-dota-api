@@ -180,18 +180,6 @@ def _render_match_table(rows: list[Any], service) -> None:
     )
 
 
-def _schedule_autorefresh(seconds: int) -> None:
-    components.html(
-        f"""
-        <script>
-        const target = window.parent;
-        setTimeout(() => target.location.reload(), {max(seconds, 15) * 1000});
-        </script>
-        """,
-        height=0,
-    )
-
-
 service = build_service()
 app_version = get_app_version()
 
@@ -330,87 +318,91 @@ except ValidationError as exc:
 
 st.session_state["player_raw"] = player_raw
 
-run_result = None
-if run_cycle or force_cycle or auto_run:
-    try:
-        run_result = service.run_background_sync_cycle(
-            player_id=player_id,
-            game_mode=23,
-            window_days=int(window_days),
-            max_detail_fetches=int(active_detail_batch),
-            max_parse_requests=int(active_parse_batch),
-            rate_limit_cooldown_seconds=int(cooldown_seconds),
-            force=bool(force_cycle),
+@st.fragment(run_every=active_interval_seconds if auto_run else None)
+def _render_live_section() -> None:
+    run_result = None
+    if run_cycle or force_cycle or auto_run:
+        try:
+            run_result = service.run_background_sync_cycle(
+                player_id=player_id,
+                game_mode=23,
+                window_days=int(window_days),
+                max_detail_fetches=int(active_detail_batch),
+                max_parse_requests=int(active_parse_batch),
+                rate_limit_cooldown_seconds=int(cooldown_seconds),
+                force=bool(force_cycle),
+            )
+        except (OpenDotaError, OpenDotaRateLimitError) as exc:
+            st.error(str(exc))
+
+    state = service.get_background_sync_state(player_id, game_mode=23, window_days=int(window_days))
+    coverage = service.get_background_sync_coverage(
+        player_id=player_id,
+        game_mode=23,
+        window_days=int(window_days),
+        limit=None,
+    )
+    runs = service.list_background_sync_runs(player_id, game_mode=23, window_days=int(window_days), limit=20)
+
+    if run_result is not None:
+        if run_result.status == "completed":
+            st.success(run_result.note)
+        elif run_result.status == "cooldown":
+            st.info(run_result.note)
+        elif run_result.status == "rate_limited":
+            st.warning(run_result.note)
+
+    _render_metrics(coverage, state)
+    st.caption(
+        f"Current cycle settings: up to {active_detail_batch} detail fetch(es) and {active_parse_batch} parse request(s) per cycle. "
+        f"Auto-fill interval: {active_interval_seconds} sec. Pause after 429: {int(cooldown_seconds)} sec."
+    )
+
+    recent_runs_df = pd.DataFrame(
+        [
+            {
+                "Started": _format_datetime(str(row.get("started_at")) if row.get("started_at") else None),
+                "Status": str(row.get("status") or ""),
+                "New summaries": int(row.get("summary_new_matches") or 0),
+                "Detail fetched": int(row.get("detail_completed") or 0),
+                "Parse requested": int(row.get("parse_requested") or 0),
+                "Pending parse": int(row.get("pending_parse_count") or 0),
+                "Rate limited": "Yes" if int(row.get("rate_limited") or 0) else "No",
+                "Next retry": _format_datetime(str(row.get("next_retry_at")) if row.get("next_retry_at") else None),
+                "Note": str(row.get("note") or ""),
+            }
+            for row in runs
+        ]
+    )
+
+    st.subheader("Sync History")
+    if recent_runs_df.empty:
+        st.info("No sync cycles recorded yet.")
+    else:
+        st.dataframe(recent_runs_df, use_container_width=True, hide_index=True)
+        rate_limited_runs = sum(1 for row in runs if int(row.get("rate_limited") or 0))
+        detail_total = sum(int(row.get("detail_completed") or 0) for row in runs)
+        parse_total = sum(int(row.get("parse_requested") or 0) for row in runs)
+        st.caption(
+            f"Observed over last {len(runs)} cycle(s): {detail_total} detail payload(s) fetched, "
+            f"{parse_total} parse request(s) submitted, {rate_limited_runs} rate-limited cycle(s). "
+            f"Current pause-after-429 on this page is {int(cooldown_seconds)} second(s)."
         )
-    except (OpenDotaError, OpenDotaRateLimitError) as exc:
-        st.error(str(exc))
 
-state = service.get_background_sync_state(player_id, game_mode=23, window_days=int(window_days))
-coverage = service.get_background_sync_coverage(
-    player_id=player_id,
-    game_mode=23,
-    window_days=int(window_days),
-    limit=None,
-)
-runs = service.list_background_sync_runs(player_id, game_mode=23, window_days=int(window_days), limit=20)
+    st.subheader("Cached Matches")
+    if not coverage.rows:
+        st.info("No cached Turbo matches for the selected window yet.")
+    else:
+        st.caption(
+            f"Showing newest {min(int(table_limit), len(coverage.rows))} of {len(coverage.rows)} cached match(es). "
+            "This table is newest-first, so older cached matches may already exist below the visible slice."
+        )
+        _render_match_table(coverage.rows[: int(table_limit)], service)
 
-if run_result is not None:
-    if run_result.status == "completed":
-        st.success(run_result.note)
-    elif run_result.status == "cooldown":
-        st.info(run_result.note)
-    elif run_result.status == "rate_limited":
-        st.warning(run_result.note)
+    if auto_run:
+        st.caption(
+            "Auto-fill is active. Only this live section refreshes automatically; the rest of the page stays in place."
+        )
 
-_render_metrics(coverage, state)
-st.caption(
-    f"Current cycle settings: up to {active_detail_batch} detail fetch(es) and {active_parse_batch} parse request(s) per cycle. "
-    f"Auto-fill interval: {active_interval_seconds} sec. Pause after 429: {int(cooldown_seconds)} sec."
-)
 
-recent_runs_df = pd.DataFrame(
-    [
-        {
-            "Started": _format_datetime(str(row.get("started_at")) if row.get("started_at") else None),
-            "Status": str(row.get("status") or ""),
-            "New summaries": int(row.get("summary_new_matches") or 0),
-            "Detail fetched": int(row.get("detail_completed") or 0),
-            "Parse requested": int(row.get("parse_requested") or 0),
-            "Pending parse": int(row.get("pending_parse_count") or 0),
-            "Rate limited": "Yes" if int(row.get("rate_limited") or 0) else "No",
-            "Next retry": _format_datetime(str(row.get("next_retry_at")) if row.get("next_retry_at") else None),
-            "Note": str(row.get("note") or ""),
-        }
-        for row in runs
-    ]
-)
-
-st.subheader("Sync History")
-if recent_runs_df.empty:
-    st.info("No sync cycles recorded yet.")
-else:
-    st.dataframe(recent_runs_df, use_container_width=True, hide_index=True)
-    rate_limited_runs = sum(1 for row in runs if int(row.get("rate_limited") or 0))
-    detail_total = sum(int(row.get("detail_completed") or 0) for row in runs)
-    parse_total = sum(int(row.get("parse_requested") or 0) for row in runs)
-    st.caption(
-        f"Observed over last {len(runs)} cycle(s): {detail_total} detail payload(s) fetched, "
-        f"{parse_total} parse request(s) submitted, {rate_limited_runs} rate-limited cycle(s). "
-        f"Current pause-after-429 on this page is {int(cooldown_seconds)} second(s)."
-    )
-
-st.subheader("Cached Matches")
-if not coverage.rows:
-    st.info("No cached Turbo matches for the selected window yet.")
-else:
-    st.caption(
-        f"Showing newest {min(int(table_limit), len(coverage.rows))} of {len(coverage.rows)} cached match(es). "
-        "This table is newest-first, so older cached matches may already exist below the visible slice."
-    )
-    _render_match_table(coverage.rows[: int(table_limit)], service)
-
-if auto_run:
-    st.caption(
-        "Auto-fill is enabled for this browser session. The page will refresh and run another cycle while it remains open."
-    )
-    _schedule_autorefresh(int(active_interval_seconds))
+_render_live_section()

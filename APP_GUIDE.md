@@ -26,6 +26,7 @@ The project includes two interfaces:
 - Separate multipage `Database` view tracks cache coverage for one player's Turbo matches over a rolling window (default `365` days)
 - `Database` shows match-level cache states, replay-parse backlog, recent sync-cycle history, cooldown state after 429s, and the contiguous date range that is already fully cached
 - `Database` can run one bounded cache-fill cycle per refresh and optionally auto-run while that page remains open
+- `Database` auto-fill refreshes only its live sync fragment, so the full page no longer jumps on every cycle
 - `Database` times are rendered in Israel time
 - `Database` exposes `Sync Speed` presets (`Safe`, `Balanced`, `Fast`) for normal use; raw detail/parse batch controls remain under `Advanced settings`
 - Time filter modes: `Days`, `Patches`, `Start Date`
@@ -130,6 +131,7 @@ copy .env.example .env
 ```
 
 `OPENDOTA_API_KEY` is optional. Without a key, rate limits may be hit more often.
+`STRATZ_API_TOKEN` is also optional and only needed for timing fallback when OpenDota lacks item timings for a match.
 
 ## Run the web dashboard (recommended)
 
@@ -156,6 +158,8 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - Match-detail-heavy fields are hydrated during the main dashboard refresh and then reused from local storage by all sections.
 - Some requested metrics may depend on detail payload fields that are not guaranteed in every parsed match. Lane-derived values are currently not shown in the UI until the data source is made reliable.
 - `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
+- If `STRATZ_API_TOKEN` is configured, the app can recover missing match item timings from STRATZ when OpenDota detail payloads have no `purchase_log` / `first_purchase_time`.
+- STRATZ fallback is timing-only. Match summaries and main detail payloads still come from OpenDota.
 
 ## Batch timing repair
 
@@ -186,5 +190,6 @@ Use `--once` if you want exactly one cycle and then exit.
 
 - `ModuleNotFoundError`: activate `.venv` and reinstall requirements.
 - `OpenDotaRateLimitError`: wait and retry, reduce period, or use `OPENDOTA_API_KEY`.
+- Missing timings on a match that already has timings on Dotabuff can happen because Dotabuff and OpenDota use different data pipelines. With `STRATZ_API_TOKEN`, the app now tries STRATZ before leaving those timings as missing.
 - Empty/partial item data: this can happen due to OpenDota coverage limits; app will still show available data.
 - After app updates, dashboard data schema is auto-refreshed; if values still look stale, click `Refresh Turbo Dashboard` again.

@@ -81,6 +81,34 @@ CLI remains available as a secondary interface.
 - From now on, every code/config/deploy change must be recorded in this file (`SESSION_HANDOFF.md`) in the same session.
 - Purpose: allow any next agent session to recover project state by reading this file first.
 
+## 2026-04-08 STRATZ timing fallback
+
+- User-reported bug:
+  - matches such as `8622417925` showed full item timings on Dotabuff but still appeared under missing timings in this app.
+- Root cause confirmed live:
+  - OpenDota returned detail payload without `purchase_log` / `first_purchase_time` for that match.
+  - STRATZ GraphQL returned `match(id) -> players -> stats -> itemPurchases` for the same match.
+- Implemented optional STRATZ fallback:
+  - new client: `clients/stratz_client.py`
+  - new config: `STRATZ_API_TOKEN`, optional `STRATZ_BASE_URL`
+  - service wiring in `webapp/app_runtime.py`
+  - `services/analytics_service.py` now converts STRATZ `itemPurchases` into OpenDota-shaped `purchase_log` and `first_purchase_time`
+  - fallback runs after fresh OpenDota detail fetch and during timing backfill/background sync passes
+- Important constraint:
+  - fallback only works when `STRATZ_API_TOKEN` is present in environment/secrets
+  - token was intentionally not hardcoded into the repository
+- Regression coverage added:
+  - `tests/test_stratz_fallback.py`
+  - exact reported match id covered: `8622417925`
+
+## 2026-04-08 Database live-refresh UX
+
+- `pages/Database.py` was moved from whole-page timed reload to a Streamlit fragment-based live section.
+- Goal:
+  - keep auto-fill running
+  - avoid full page jumps every cycle
+  - refresh only the live sync/history/table section while controls and surrounding layout stay stable
+
 ## 2026-04-02 research handoff: global hero item stats source feasibility
 
 - User request under investigation:

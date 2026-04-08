@@ -8,10 +8,11 @@ import time as time_module
 from typing import Any
 
 from clients.opendota_client import OpenDotaClient
+from clients.stratz_client import StratzClient
 from models.dtos import ItemStat, ItemsResult, MatchRow, MatchSummary, QueryFilters, StatsResult
 from parsers.input_parser import HeroParser
 from utils.cache import JsonFileCache
-from utils.exceptions import OpenDotaNotFoundError, OpenDotaRateLimitError
+from utils.exceptions import OpenDotaNotFoundError, OpenDotaRateLimitError, StratzError, StratzRateLimitError
 from utils.helpers import calculate_kda_ratio, format_duration, unix_to_dt, winrate_percent
 from utils.match_filters import is_excluded_match_id
 from utils.match_store import SQLiteMatchStore
@@ -26,6 +27,7 @@ class ReferenceData:
     item_names_by_id: dict[int, str]
     item_images_by_id: dict[int, str]
     item_ids_by_key: dict[str, int]
+    item_keys_by_id: dict[int, str]
 
 
 @dataclass(slots=True)
@@ -174,10 +176,17 @@ class DotaAnalyticsService:
         12: "aghanims_shard",
     }
 
-    def __init__(self, client: OpenDotaClient, cache: JsonFileCache, match_store: SQLiteMatchStore | None = None) -> None:
+    def __init__(
+        self,
+        client: OpenDotaClient,
+        cache: JsonFileCache,
+        match_store: SQLiteMatchStore | None = None,
+        stratz_client: StratzClient | None = None,
+    ) -> None:
         self.client = client
         self.cache = cache
         self.match_store = match_store
+        self.stratz_client = stratz_client
         self.references = self._load_references()
         self._match_details_memory_cache: dict[int, dict[str, Any]] = {}
         self._patch_starts, self._patch_names = self._load_patch_timeline()
@@ -211,6 +220,7 @@ class DotaAnalyticsService:
         item_names_by_id: dict[int, str] = {}
         item_images_by_id: dict[int, str] = {}
         item_ids_by_key: dict[str, int] = {}
+        item_keys_by_id: dict[int, str] = {}
         for key, value in items.items():
             item_id = int(value.get("id", 0))
             if item_id <= 0:
@@ -219,6 +229,7 @@ class DotaAnalyticsService:
             item_names_by_id[item_id] = display_name
             item_images_by_id[item_id] = to_asset_url(str(value.get("img") or ""))
             item_ids_by_key[str(key)] = item_id
+            item_keys_by_id[item_id] = str(key)
 
         return ReferenceData(
             hero_parser=hero_parser,
@@ -227,6 +238,7 @@ class DotaAnalyticsService:
             item_names_by_id=item_names_by_id,
             item_images_by_id=item_images_by_id,
             item_ids_by_key=item_ids_by_key,
+            item_keys_by_id=item_keys_by_id,
         )
 
     def _load_patch_timeline(self) -> tuple[list[int], list[str]]:
@@ -1534,6 +1546,36 @@ class DotaAnalyticsService:
             poll_interval_seconds=poll_interval_seconds,
         )
 
+    def backfill_item_timing_details_from_stratz(
+        self,
+        *,
+        player_id: int,
+        matches: list[MatchSummary],
+        batch_size: int = 20,
+    ) -> int:
+        if self.stratz_client is None or batch_size <= 0:
+            return 0
+
+        completed = 0
+        for match in matches:
+            if completed >= batch_size:
+                break
+            details = self.get_match_details_if_cached(match.match_id)
+            if not isinstance(details, dict):
+                continue
+            player_row = self._extract_player_from_match_details(
+                details,
+                player_id=player_id,
+                player_slot=match.player_slot,
+            )
+            if not self._player_row_has_tracked_final_items(player_row):
+                continue
+            if self._player_row_has_timing_data(player_row):
+                continue
+            if self._enrich_match_details_with_stratz_timings(match.match_id, details):
+                completed += 1
+        return completed
+
     def backfill_item_timing_details(
         self,
         *,
@@ -1549,6 +1591,11 @@ class DotaAnalyticsService:
 
         requested_ids: list[int] = []
         already_available = 0
+        stratz_completed = self.backfill_item_timing_details_from_stratz(
+            player_id=player_id,
+            matches=target_matches,
+            batch_size=len(target_matches),
+        )
         for match in target_matches:
             try:
                 details = self.get_match_details_if_cached(match.match_id)
@@ -1601,7 +1648,7 @@ class DotaAnalyticsService:
         return RecentItemTimingRepairStatus(
             requested=len(requested_ids),
             submitted=submitted,
-            completed=completed,
+            completed=completed + stratz_completed,
             pending=len(pending_ids),
             already_available=already_available,
         )
@@ -1881,6 +1928,7 @@ class DotaAnalyticsService:
         detail_requested = 0
         detail_completed = 0
         parse_requested = 0
+        stratz_completed = 0
         rate_limited = False
         next_retry_at: str | None = None
         note_parts: list[str] = []
@@ -1912,6 +1960,13 @@ class DotaAnalyticsService:
                     status = "rate_limited"
                     next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
                     note_parts.append("OpenDota rate limit was hit during detail hydration.")
+
+            if not rate_limited:
+                stratz_completed = self.backfill_item_timing_details_from_stratz(
+                    player_id=player_id,
+                    matches=matches,
+                    batch_size=max(max_parse_requests, max_detail_fetches),
+                )
 
             if not rate_limited:
                 matches = self.get_cached_matches(filters)
@@ -1968,6 +2023,8 @@ class DotaAnalyticsService:
                 note_parts.append(f"Synced {summary_new_matches} new summary match(es).")
             if detail_completed > 0:
                 note_parts.append(f"Fetched {detail_completed} missing detail payload(s).")
+            if stratz_completed > 0:
+                note_parts.append(f"Recovered timings for {stratz_completed} match(es) from STRATZ.")
             if parse_requested > 0:
                 note_parts.append(f"Requested {parse_requested} replay parse job(s).")
             if not note_parts:
@@ -2293,6 +2350,92 @@ class DotaAnalyticsService:
             self.match_store.upsert_match_detail(match_id, details)
         self.cache.set(cache_key, details)
 
+    def _build_timing_payload_from_stratz_events(
+        self,
+        purchases: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], dict[str, int]]:
+        purchase_log: list[dict[str, Any]] = []
+        first_purchase_time: dict[str, int] = {}
+        sorted_events = sorted(
+            (event for event in purchases if isinstance(event, dict)),
+            key=lambda event: (int(event.get("time") or 0), int(event.get("itemId") or 0)),
+        )
+        for event in sorted_events:
+            item_id = int(event.get("itemId") or 0)
+            item_key = self.references.item_keys_by_id.get(item_id)
+            if not item_key:
+                continue
+            event_time = int(event.get("time") or 0)
+            purchase_log.append({"key": item_key, "time": event_time})
+            current = first_purchase_time.get(item_key)
+            if current is None or event_time < current:
+                first_purchase_time[item_key] = event_time
+        return purchase_log, first_purchase_time
+
+    def _enrich_match_details_with_stratz_timings(self, match_id: int, details: dict[str, Any]) -> bool:
+        if self.stratz_client is None or not isinstance(details, dict):
+            return False
+
+        players = details.get("players")
+        if not isinstance(players, list) or not players:
+            return False
+
+        try:
+            stratz_players = self.stratz_client.get_match_item_purchases(match_id)
+        except (StratzError, StratzRateLimitError):
+            return False
+
+        if not stratz_players:
+            return False
+
+        by_slot: dict[int, dict[str, Any]] = {}
+        by_account_id: dict[int, dict[str, Any]] = {}
+        for stratz_player in stratz_players:
+            if not isinstance(stratz_player, dict):
+                continue
+            player_slot = stratz_player.get("playerSlot")
+            steam_account_id = stratz_player.get("steamAccountId")
+            if player_slot is not None:
+                by_slot[int(player_slot)] = stratz_player
+            if steam_account_id is not None:
+                by_account_id[int(steam_account_id)] = stratz_player
+
+        changed = False
+        for player_row in players:
+            if not isinstance(player_row, dict):
+                continue
+            if self._player_row_has_timing_data(player_row):
+                continue
+            account_id = int(player_row.get("account_id") or 0)
+            player_slot = int(player_row.get("player_slot") or -1)
+            stratz_player = by_account_id.get(account_id) or by_slot.get(player_slot)
+            if not isinstance(stratz_player, dict):
+                continue
+            stats = stratz_player.get("stats")
+            purchases = stats.get("itemPurchases") if isinstance(stats, dict) else None
+            if not isinstance(purchases, list) or not purchases:
+                continue
+
+            purchase_log, first_purchase_time = self._build_timing_payload_from_stratz_events(purchases)
+            if not purchase_log and not first_purchase_time:
+                continue
+
+            player_row["purchase_log"] = purchase_log
+            existing_first_purchase = player_row.get("first_purchase_time")
+            merged_first_purchase = dict(existing_first_purchase) if isinstance(existing_first_purchase, dict) else {}
+            for key, value in first_purchase_time.items():
+                previous = merged_first_purchase.get(key)
+                if previous is None or int(value) < int(previous):
+                    merged_first_purchase[key] = int(value)
+            if merged_first_purchase:
+                player_row["first_purchase_time"] = merged_first_purchase
+            changed = True
+
+        if changed:
+            details["timing_source"] = "stratz_fallback"
+            self._store_match_details(match_id, details)
+        return changed
+
     def _fetch_match_details(self, match_id: int) -> dict[str, Any]:
         custom_detail_loader = self.__dict__.get("_get_match_details_cached")
         if callable(custom_detail_loader):
@@ -2300,4 +2443,5 @@ class DotaAnalyticsService:
         else:
             details = self.client.get_match_details(match_id)
         self._store_match_details(match_id, details)
+        self._enrich_match_details_with_stratz_timings(match_id, details)
         return details

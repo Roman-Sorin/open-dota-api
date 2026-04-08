@@ -8,7 +8,9 @@ from dotenv import load_dotenv
 @dataclass(slots=True)
 class Settings:
     api_key: str | None
+    stratz_token: str | None
     base_url: str = "https://api.opendota.com/api"
+    stratz_base_url: str = "https://api.stratz.com/graphql"
     timeout_seconds: float = 20.0
     cache_ttl_hours: int = 24
 
@@ -19,6 +21,8 @@ load_dotenv()
 def get_settings() -> Settings:
     return Settings(
         api_key=os.getenv("OPENDOTA_API_KEY"),
+        stratz_token=os.getenv("STRATZ_API_TOKEN"),
+        stratz_base_url=os.getenv("STRATZ_BASE_URL", "https://api.stratz.com/graphql"),
         timeout_seconds=float(os.getenv("OPENDOTA_TIMEOUT", "20")),
         cache_ttl_hours=int(os.getenv("CACHE_TTL_HOURS", "24")),
     )

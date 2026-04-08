@@ -30,6 +30,7 @@ Turbo-only dashboard for your account:
 - Separate multipage `Database` view monitors Turbo cache coverage for the selected player over a rolling window (default `365` days)
 - `Database` shows match-level cache status (`detail cached`, `timings ready`, `parse pending`) plus cycle history, cooldown state, and contiguous full-coverage range
 - `Database` can run one bounded background-cache cycle per refresh and optionally auto-run while that page stays open
+- `Database` auto-fill now refreshes only the live sync section instead of reloading the whole page on each cycle
 - `Database` times are shown in Israel time and the page now exposes user-facing `Sync Speed` presets (`Safe`, `Balanced`, `Fast`) instead of only raw batch knobs
 - Default selected hero is `Spectre` when that hero exists in the current overview snapshot; otherwise the first available hero is used
 - Dashboard loading is manual by section:
@@ -110,10 +111,11 @@ OpenDota key is optional.
 copy .env.example .env
 ```
 
-Set key only if needed:
+Set keys only if needed:
 
 ```env
 OPENDOTA_API_KEY=
+STRATZ_API_TOKEN=
 ```
 
 ## CLI (still available)
@@ -164,6 +166,8 @@ tests/
 - The service performs incremental syncs instead of refetching whole history on each reload.
 - Background worker metadata is also persisted in local `SQLite` so the `Database` page can show cache progress and recent sync-cycle history.
 - `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
+- If `STRATZ_API_TOKEN` is configured, cached matches that still miss item timings after OpenDota detail fetches can now recover those timings from STRATZ match purchase events.
+- STRATZ fallback does not replace OpenDota for summaries/details; it only fills missing timing fields (`purchase_log` / `first_purchase_time`) when OpenDota leaves them empty.
 - Streamlit Community Cloud does not provide a true always-on worker inside the page process. The `Database` page can keep advancing the backlog while it stays open, but a real 24/7 worker still requires an external runner with shared persistent storage.
 
 ## Timing backfill job

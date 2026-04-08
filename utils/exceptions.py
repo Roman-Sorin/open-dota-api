@@ -12,3 +12,11 @@ class OpenDotaNotFoundError(OpenDotaError):
 
 class ValidationError(OpenDotaError):
     """Raised for user input validation issues."""
+
+
+class StratzError(Exception):
+    """Base exception for STRATZ client and enrichment failures."""
+
+
+class StratzRateLimitError(StratzError):
+    """Raised when STRATZ rate limits the request."""
