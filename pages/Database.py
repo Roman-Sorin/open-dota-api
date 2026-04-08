@@ -352,6 +352,8 @@ def _render_live_section() -> None:
             )
         except (OpenDotaError, OpenDotaRateLimitError) as exc:
             st.error(str(exc))
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Background sync cycle failed: {exc}")
 
     state = service.get_background_sync_state(player_id, game_mode=23, window_days=int(window_days))
     coverage = service.get_background_sync_coverage(
