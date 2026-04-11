@@ -156,3 +156,115 @@ def test_background_sync_coverage_counts_reported_match_as_ready_after_stratz_ba
     assert completed == 1
     assert coverage.timing_ready_count == 1
     assert coverage.missing_timing_count == 0
+
+
+def test_stratz_backfill_prioritizes_pending_matches_outside_newest_head() -> None:
+    store = SQLiteMatchStore(":memory:")
+    recent_matches = []
+    for offset in range(5):
+        recent_matches.append(
+            {
+                "match_id": 900000 + offset,
+                "start_time": 1766000000 - offset,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 5,
+                "deaths": 1,
+                "assists": 11,
+                "duration": 1221,
+                "hero_id": 44,
+                "item_0": 63,
+                "item_1": 135,
+                "item_2": 116,
+                "item_3": 149,
+                "item_4": 168,
+                "item_5": 0,
+            }
+        )
+    old_pending_match = {
+        "match_id": 8622417925,
+        "start_time": 1765000000,
+        "player_slot": 0,
+        "radiant_win": True,
+        "game_mode": 23,
+        "kills": 5,
+        "deaths": 1,
+        "assists": 11,
+        "duration": 1221,
+        "hero_id": 44,
+        "item_0": 63,
+        "item_1": 135,
+        "item_2": 116,
+        "item_3": 149,
+        "item_4": 168,
+        "item_5": 0,
+    }
+    store.upsert_player_matches(1233793238, [*recent_matches, old_pending_match])
+    for match in recent_matches:
+        store.upsert_match_detail(
+            int(match["match_id"]),
+            {
+                "match_id": int(match["match_id"]),
+                "version": 22,
+                "players": [
+                    {
+                        "account_id": 1233793238,
+                        "player_slot": 0,
+                        "item_0": 63,
+                        "item_1": 135,
+                        "item_2": 116,
+                        "item_3": 149,
+                        "item_4": 168,
+                        "item_5": 0,
+                        "purchase_log": [{"key": "power_treads", "time": 240}],
+                    }
+                ],
+            },
+        )
+    store.upsert_match_detail(
+        8622417925,
+        {
+            "match_id": 8622417925,
+            "version": None,
+            "players": [
+                {
+                    "account_id": 1233793238,
+                    "player_slot": 0,
+                    "item_0": 63,
+                    "item_1": 135,
+                    "item_2": 116,
+                    "item_3": 149,
+                    "item_4": 168,
+                    "item_5": 0,
+                }
+            ],
+        },
+    )
+    store.upsert_match_parse_request(
+        8622417925,
+        1233793238,
+        status="pending",
+        requested_at="2026-04-08T00:00:00+00:00",
+    )
+
+    service = DotaAnalyticsService(
+        client=_FakeClient(),
+        cache=_FakeCache(),
+        match_store=store,
+        stratz_client=_FakeStratzClient(),
+    )
+
+    matches = service.get_cached_matches(
+        QueryFilters(player_id=1233793238, game_mode=23, game_mode_name="Turbo")
+    )
+    completed = service.backfill_item_timing_details_from_stratz(
+        player_id=1233793238,
+        matches=matches,
+        batch_size=1,
+    )
+    parse_request = store.get_match_parse_request(8622417925)
+
+    assert completed == 1
+    assert parse_request is not None
+    assert parse_request["status"] == "completed"

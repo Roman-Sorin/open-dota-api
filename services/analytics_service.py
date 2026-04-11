@@ -1628,8 +1628,29 @@ class DotaAnalyticsService:
         if self.stratz_client is None or batch_size <= 0:
             return 0
 
-        completed = 0
+        prioritized_matches: list[MatchSummary] = []
+        fallback_matches: list[MatchSummary] = []
         for match in matches:
+            details = self.get_match_details_if_cached(match.match_id)
+            if not isinstance(details, dict):
+                continue
+            player_row = self._extract_player_from_match_details(
+                details,
+                player_id=player_id,
+                player_slot=match.player_slot,
+            )
+            if not self._player_row_has_tracked_final_items(player_row):
+                continue
+            if self._player_row_has_timing_data(player_row):
+                continue
+            parse_request = self.match_store.get_match_parse_request(match.match_id) if self.match_store is not None else None
+            if isinstance(parse_request, dict) and str(parse_request.get("status") or "") == "pending":
+                prioritized_matches.append(match)
+            else:
+                fallback_matches.append(match)
+
+        completed = 0
+        for match in [*prioritized_matches, *fallback_matches]:
             if completed >= batch_size:
                 break
             details = self.get_match_details_if_cached(match.match_id)

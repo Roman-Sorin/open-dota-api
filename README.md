@@ -189,6 +189,7 @@ tests/
 - Recently retried pending parses are now rechecked before the rest of the older backlog, so `Pending Parse` drops as soon as OpenDota finishes those jobs instead of staying flat for many cycles.
 - Fresh pending parses are no longer re-polled from OpenDota on every 15-second auto cycle. The app now waits before polling, prefers cached/STRATZ timing recovery first, and only then rechecks OpenDota so the background page does not create self-inflicted rate limits.
 - Pending parse requests now store the OpenDota `jobId` and poll the lighter `request/{jobId}` status path before fetching `matches/{id}` again. This keeps the background queue aligned with OpenDota's async parse flow and cuts down needless detail polling.
+- STRATZ timing fallback now targets the actual `pending` / missing-timing backlog first instead of only walking the newest cached matches. Older unresolved matches are no longer starved just because recent rows already have ready timings.
 - Streamlit Community Cloud does not provide a true always-on worker inside the page process. The `Database` page can keep advancing the backlog while it stays open, but a real 24/7 worker still requires an external runner with shared persistent storage.
 
 ## Timing backfill job
