@@ -179,6 +179,7 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - Pending OpenDota parse rows now persist the returned `jobId` and poll `request/{jobId}` before refreshing `matches/{id}`. This follows the async job flow more closely, reduces unnecessary detail calls, and avoids self-inflicted rate-limit loops on the `Database` page.
 - STRATZ timing fallback now prioritizes cached matches that are actually `pending` / missing timings, even when those matches are far down the window and the newest rows are already `Ready`. This prevents old timing backlogs from being starved forever by the newest match ordering.
 - After a cycle already spent OpenDota quota on summary sync, detail hydration, or parse requests, the app now enters a short quiet period before the next pending-parse check. This prevents the immediate follow-up auto cycle from hitting `429` just because the previous cycle already did real work.
+- OpenDota transient upstream failures such as Cloudflare `522` are now retried once in the client and then treated like a temporary cooldown condition instead of a hard background-sync `error` state.
 - Streamlit Community Cloud local files are not durable storage. If neither Google Drive snapshot storage nor `DATABASE_URL` is configured, the app warns in the UI because a reboot/redeploy can reset the local `.cache/matches.sqlite3` file.
 
 ## Batch timing repair

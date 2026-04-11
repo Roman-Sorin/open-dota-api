@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import requests
@@ -8,6 +9,8 @@ from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateL
 
 
 class OpenDotaClient:
+    TRANSIENT_STATUS_CODES = {408, 502, 503, 504, 520, 521, 522, 523, 524}
+
     def __init__(self, base_url: str, timeout_seconds: float = 20.0, api_key: str | None = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
@@ -19,25 +22,41 @@ class OpenDotaClient:
         query = dict(params or {})
         if self.api_key:
             query["api_key"] = self.api_key
+        last_request_error: requests.RequestException | None = None
 
-        try:
-            response = self.session.request(method=method, url=url, params=query, timeout=self.timeout_seconds)
-        except requests.RequestException as exc:
-            raise OpenDotaError(f"Network error while calling OpenDota: {exc}") from exc
+        for attempt in range(2):
+            try:
+                response = self.session.request(method=method, url=url, params=query, timeout=self.timeout_seconds)
+            except requests.RequestException as exc:
+                last_request_error = exc
+                if attempt == 0:
+                    time.sleep(1.0)
+                    continue
+                raise OpenDotaError(f"Network error while calling OpenDota: {exc}") from exc
 
-        if response.status_code == 404:
-            raise OpenDotaNotFoundError("Requested entity was not found in OpenDota")
+            if response.status_code == 404:
+                raise OpenDotaNotFoundError("Requested entity was not found in OpenDota")
 
-        if response.status_code == 429:
-            raise OpenDotaRateLimitError("OpenDota API rate limit reached")
+            if response.status_code == 429:
+                raise OpenDotaRateLimitError("OpenDota API rate limit reached")
 
-        if response.status_code >= 400:
-            raise OpenDotaError(f"OpenDota API error {response.status_code}: {response.text[:300]}")
+            if response.status_code in self.TRANSIENT_STATUS_CODES:
+                if attempt == 0:
+                    time.sleep(1.0)
+                    continue
+                raise OpenDotaRateLimitError(f"OpenDota temporarily unavailable (HTTP {response.status_code})")
 
-        try:
-            return response.json()
-        except ValueError as exc:
-            raise OpenDotaError("OpenDota returned non-JSON response") from exc
+            if response.status_code >= 400:
+                raise OpenDotaError(f"OpenDota API error {response.status_code}: {response.text[:300]}")
+
+            try:
+                return response.json()
+            except ValueError as exc:
+                raise OpenDotaError("OpenDota returned non-JSON response") from exc
+
+        if last_request_error is not None:
+            raise OpenDotaError(f"Network error while calling OpenDota: {last_request_error}") from last_request_error
+        raise OpenDotaError("OpenDota request failed unexpectedly")
 
     def get_player_profile(self, account_id: int) -> dict[str, Any]:
         return self._request("GET", f"players/{account_id}")
