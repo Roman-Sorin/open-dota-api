@@ -768,10 +768,15 @@ class PostgresMatchStore:
         last_polled_at: str | None = None,
         completed_at: str | None = None,
         last_error: str | None = None,
+        increment_attempts: bool = True,
     ) -> None:
         current = self.get_match_parse_request(match_id) or {}
         current_attempts = int(current.get("attempts") or 0)
-        next_attempts = current_attempts + 1 if status == "pending" and not current.get("completed_at") else current_attempts
+        next_attempts = (
+            current_attempts + 1
+            if increment_attempts and status == "pending" and not current.get("completed_at")
+            else current_attempts
+        )
         if next_attempts <= 0:
             next_attempts = 1
         with self._cursor() as cur:

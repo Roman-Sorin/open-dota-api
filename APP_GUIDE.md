@@ -172,6 +172,8 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - STRATZ fallback is timing-only. Match summaries and main detail payloads still come from OpenDota.
 - When STRATZ timing recovery succeeds for a match that was previously marked `Pending Parse`, the app now marks that pending OpenDota parse request as completed so the `Pending Parse` count can drop instead of staying artificially inflated.
 - The background sync cycle now prioritizes resolving existing pending parse jobs before enqueueing new OpenDota parse requests, so `Pending Parse` no longer grows forever while old jobs are still outstanding.
+- If old OpenDota parse jobs stay stuck for too long, the background sync cycle now re-submits a bounded batch of stale pending parses instead of logging another `0 requested / 150 pending` cycle forever.
+- `Sync History` notes now distinguish between actively waiting on existing parse jobs and retrying stale ones, so backlog runs explain what the app actually did.
 - Streamlit Community Cloud local files are not durable storage. If neither Google Drive snapshot storage nor `DATABASE_URL` is configured, the app warns in the UI because a reboot/redeploy can reset the local `.cache/matches.sqlite3` file.
 
 ## Batch timing repair

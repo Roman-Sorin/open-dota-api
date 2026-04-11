@@ -133,6 +133,14 @@ class BackgroundMatchStatusRow:
 
 
 @dataclass(slots=True)
+class PendingParseRefreshResult:
+    completed: int = 0
+    retried: int = 0
+    still_pending: int = 0
+    rate_limited: bool = False
+
+
+@dataclass(slots=True)
 class BackgroundSyncCoverage:
     total_matches: int
     detail_cached_count: int
@@ -748,6 +756,24 @@ class DotaAnalyticsService:
             return datetime.fromisoformat(value) > datetime.now(tz=timezone.utc)
         except ValueError:
             return False
+
+    @staticmethod
+    def _iso_elapsed_seconds(value: str | None) -> float | None:
+        if not value:
+            return None
+        try:
+            return max((datetime.now(tz=timezone.utc) - datetime.fromisoformat(value)).total_seconds(), 0.0)
+        except ValueError:
+            return None
+
+    def _pending_parse_retry_due(self, request: dict[str, Any], *, retry_after_seconds: int) -> bool:
+        if retry_after_seconds <= 0:
+            return True
+        last_activity = str(request.get("last_polled_at") or request.get("requested_at") or "")
+        elapsed_seconds = self._iso_elapsed_seconds(last_activity)
+        if elapsed_seconds is None:
+            return False
+        return elapsed_seconds >= retry_after_seconds
 
     def _flush_persistent_match_store(self, *, force: bool = False) -> None:
         if self.match_store is None:
@@ -1879,9 +1905,11 @@ class DotaAnalyticsService:
         player_id: int,
         matches_by_id: dict[int, MatchSummary],
         limit: int,
-    ) -> None:
+        retry_after_seconds: int,
+    ) -> PendingParseRefreshResult:
+        result = PendingParseRefreshResult()
         if self.match_store is None or limit <= 0:
-            return
+            return result
 
         pending_rows = self.match_store.list_match_parse_requests(player_id, status="pending", limit=limit)
         for request in pending_rows:
@@ -1889,6 +1917,7 @@ class DotaAnalyticsService:
             match = matches_by_id.get(match_id)
             if match is None:
                 continue
+            now_iso = self._utcnow_iso()
             try:
                 details = self.get_or_fetch_match_details(match_id, force_refresh=True)
             except OpenDotaRateLimitError:
@@ -1896,8 +1925,10 @@ class DotaAnalyticsService:
                     match_id,
                     player_id,
                     status="pending",
-                    last_polled_at=self._utcnow_iso(),
+                    last_polled_at=now_iso,
+                    increment_attempts=False,
                 )
+                result.rate_limited = True
                 break
             player_row = self._extract_player_from_match_details(
                 details,
@@ -1909,16 +1940,44 @@ class DotaAnalyticsService:
                     match_id,
                     player_id,
                     status="completed",
-                    last_polled_at=self._utcnow_iso(),
-                    completed_at=self._utcnow_iso(),
+                    last_polled_at=now_iso,
+                    completed_at=now_iso,
+                    increment_attempts=False,
                 )
+                result.completed += 1
             else:
-                self.match_store.upsert_match_parse_request(
-                    match_id,
-                    player_id,
-                    status="pending",
-                    last_polled_at=self._utcnow_iso(),
-                )
+                if self._pending_parse_retry_due(request, retry_after_seconds=retry_after_seconds):
+                    try:
+                        self.client.request_match_parse(match_id)
+                    except OpenDotaRateLimitError:
+                        self.match_store.upsert_match_parse_request(
+                            match_id,
+                            player_id,
+                            status="pending",
+                            last_polled_at=now_iso,
+                            increment_attempts=False,
+                        )
+                        result.rate_limited = True
+                        break
+                    self.match_store.upsert_match_parse_request(
+                        match_id,
+                        player_id,
+                        status="pending",
+                        requested_at=now_iso,
+                        last_polled_at=now_iso,
+                        last_error=None,
+                    )
+                    result.retried += 1
+                else:
+                    self.match_store.upsert_match_parse_request(
+                        match_id,
+                        player_id,
+                        status="pending",
+                        last_polled_at=now_iso,
+                        increment_attempts=False,
+                    )
+                result.still_pending += 1
+        return result
 
     def run_background_sync_cycle(
         self,
@@ -1929,6 +1988,7 @@ class DotaAnalyticsService:
         max_detail_fetches: int = 8,
         max_parse_requests: int = 3,
         rate_limit_cooldown_seconds: int = 600,
+        pending_parse_retry_after_seconds: int = 3600,
         force: bool = False,
         run_source: str = "manual",
     ) -> BackgroundSyncCycleResult:
@@ -1989,27 +2049,35 @@ class DotaAnalyticsService:
             summary_new_matches = len(inserted_ids)
             matches = self.get_cached_matches(filters)
             matches_by_id = {int(match.match_id): match for match in matches}
-            self._refresh_pending_parse_requests(
+            pending_refresh = self._refresh_pending_parse_requests(
                 player_id=player_id,
                 matches_by_id=matches_by_id,
                 limit=max_parse_requests,
+                retry_after_seconds=pending_parse_retry_after_seconds,
             )
+            parse_requested += pending_refresh.retried
+            if pending_refresh.rate_limited:
+                rate_limited = True
+                status = "rate_limited"
+                next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
+                note_parts.append("OpenDota rate limit was hit while checking pending replay parses.")
 
-            missing_detail_ids = self.get_match_ids_requiring_detail_hydration(
-                matches,
-                player_id=player_id,
-                require_purchase_log=False,
-                limit=max_detail_fetches,
-            )
-            detail_requested = len(missing_detail_ids)
-            if missing_detail_ids:
-                detail_status = self.hydrate_match_details_for_match_ids(missing_detail_ids)
-                detail_completed = detail_status.completed
-                if detail_status.rate_limited:
-                    rate_limited = True
-                    status = "rate_limited"
-                    next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
-                    note_parts.append("OpenDota rate limit was hit during detail hydration.")
+            if not rate_limited:
+                missing_detail_ids = self.get_match_ids_requiring_detail_hydration(
+                    matches,
+                    player_id=player_id,
+                    require_purchase_log=False,
+                    limit=max_detail_fetches,
+                )
+                detail_requested = len(missing_detail_ids)
+                if missing_detail_ids:
+                    detail_status = self.hydrate_match_details_for_match_ids(missing_detail_ids)
+                    detail_completed = detail_status.completed
+                    if detail_status.rate_limited:
+                        rate_limited = True
+                        status = "rate_limited"
+                        next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
+                        note_parts.append("OpenDota rate limit was hit during detail hydration.")
 
             if not rate_limited:
                 stratz_completed = self.backfill_item_timing_details_from_stratz(
@@ -2066,9 +2134,16 @@ class DotaAnalyticsService:
                         )
                         parse_requested += 1
                 else:
-                    note_parts.append(
-                        f"Skipped new replay parse requests while {pending_request_count} pending parse job(s) remain."
-                    )
+                    if pending_refresh.retried > 0:
+                        note_parts.append(
+                            f"Retried {pending_refresh.retried} stale replay parse job(s); "
+                            f"{pending_request_count} pending parse job(s) still remain."
+                        )
+                    else:
+                        note_parts.append(
+                            f"Waiting on {pending_request_count} existing replay parse job(s); "
+                            "no additional parse requests were sent this cycle."
+                        )
 
             coverage = self.get_background_sync_coverage(
                 player_id=player_id,

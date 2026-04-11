@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from models.dtos import QueryFilters
 from services.analytics_service import DotaAnalyticsService
 from utils.match_store import SQLiteMatchStore
@@ -1276,6 +1278,109 @@ def test_background_sync_cycle_refreshes_oldest_pending_parse_requests_first() -
     assert result.coverage.pending_parse_count == 1
     assert first is not None and first["status"] == "completed"
     assert second is not None and second["status"] == "pending"
+
+
+def test_background_sync_cycle_retries_stale_pending_parse_backlog_with_reported_150_count() -> None:
+    class _StalePendingClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.parse_requested: list[int] = []
+
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            base_start = 1771552800
+            rows = [
+                {
+                    "match_id": 700000 + offset,
+                    "start_time": base_start - (offset * 3600),
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 8,
+                    "deaths": 3,
+                    "assists": 11,
+                    "duration": 1400,
+                    "hero_id": 1,
+                    "item_0": 1,
+                }
+                for offset in range(150)
+            ]
+            offset = int(kwargs.get("offset") or 0)
+            limit = int(kwargs.get("limit") or 100)
+            return rows[offset : offset + limit]
+
+        def get_match_details(self, match_id: int) -> dict:
+            return {
+                "match_id": match_id,
+                "version": None,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0,
+                        "item_0": 1,
+                    }
+                ],
+            }
+
+        def request_match_parse(self, match_id: int) -> int | None:
+            self.parse_requested.append(match_id)
+            return 1
+
+    client = _StalePendingClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+
+    now = datetime.now(tz=timezone.utc)
+    matches = client.get_player_matches(limit=150, offset=0)
+    store.upsert_player_matches(123, matches)
+    for offset, match in enumerate(matches):
+        match_id = int(match["match_id"])
+        stale_requested_at = (now - timedelta(hours=3 + offset)).isoformat()
+        stale_polled_at = (now - timedelta(hours=2 + offset)).isoformat()
+        store.upsert_match_detail(
+            match_id,
+            {
+                "match_id": match_id,
+                "version": None,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0,
+                        "item_0": 1,
+                    }
+                ],
+            },
+        )
+        store.upsert_match_parse_request(
+            match_id,
+            123,
+            status="pending",
+            requested_at=stale_requested_at,
+            last_polled_at=stale_polled_at,
+        )
+
+    result = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=5,
+        pending_parse_retry_after_seconds=3600,
+        force=True,
+    )
+
+    first_request = store.get_match_parse_request(700149)
+    sixth_request = store.get_match_parse_request(700144)
+
+    assert result.status == "completed"
+    assert result.parse_requested == 5
+    assert result.coverage.pending_parse_count == 150
+    assert "Retried 5 stale replay parse job(s); 150 pending parse job(s) still remain." in result.note
+    assert client.parse_requested == [700149, 700148, 700147, 700146, 700145]
+    assert first_request is not None
+    assert int(first_request["attempts"]) == 2
+    assert first_request["last_polled_at"] is not None
+    assert sixth_request is not None
+    assert int(sixth_request["attempts"]) == 1
 
 
 def test_background_sync_cycle_fetches_four_new_matches_during_long_window_cooldown() -> None:

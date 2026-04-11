@@ -184,6 +184,8 @@ tests/
 - STRATZ fallback does not replace OpenDota for summaries/details; it only fills missing timing fields (`purchase_log` / `first_purchase_time`) when OpenDota leaves them empty.
 - If STRATZ successfully fills timings for a match that had an outstanding OpenDota parse request, the app now completes that pending parse row so `Pending Parse` reflects only matches still blocked on external timing data.
 - The background sync cycle now stops enqueueing new OpenDota parse jobs while an older pending parse backlog still exists, so the queue is drained before it is expanded further.
+- If an older parse backlog stays stuck, the sync cycle now re-requests a bounded batch of stale pending parses so the app does not sit on `150 pending` forever without submitting anything new.
+- `Database` `Sync History` notes now say whether the cycle was waiting on active parse jobs or retrying stale ones.
 - Streamlit Community Cloud does not provide a true always-on worker inside the page process. The `Database` page can keep advancing the backlog while it stays open, but a real 24/7 worker still requires an external runner with shared persistent storage.
 
 ## Timing backfill job

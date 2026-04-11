@@ -232,7 +232,7 @@ with st.expander("How to use this page", expanded=True):
         Terms:
         - `Detail Cached`: full OpenDota match payload is already stored locally.
         - `Timings Ready`: item timings are already usable for that match.
-        - `Pending Parse`: OpenDota replay parse was requested, but timing data is not ready yet.
+        - `Pending Parse`: OpenDota replay parse was requested, but timing data is not ready yet. Old stuck pending jobs are retried automatically in small batches.
         - `Fully Cached Through`: newest continuous part of the window that is already complete without gaps.
         """
     )
