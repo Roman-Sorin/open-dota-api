@@ -186,6 +186,7 @@ tests/
 - The background sync cycle now stops enqueueing new OpenDota parse jobs while an older pending parse backlog still exists, so the queue is drained before it is expanded further.
 - If an older parse backlog stays stuck, the sync cycle now re-requests a bounded batch of stale pending parses so the app does not sit on `150 pending` forever without submitting anything new.
 - `Database` `Sync History` notes now say whether the cycle was waiting on active parse jobs or retrying stale ones.
+- Recently retried pending parses are now rechecked before the rest of the older backlog, so `Pending Parse` drops as soon as OpenDota finishes those jobs instead of staying flat for many cycles.
 - Streamlit Community Cloud does not provide a true always-on worker inside the page process. The `Database` page can keep advancing the backlog while it stays open, but a real 24/7 worker still requires an external runner with shared persistent storage.
 
 ## Timing backfill job

@@ -174,6 +174,7 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - The background sync cycle now prioritizes resolving existing pending parse jobs before enqueueing new OpenDota parse requests, so `Pending Parse` no longer grows forever while old jobs are still outstanding.
 - If old OpenDota parse jobs stay stuck for too long, the background sync cycle now re-submits a bounded batch of stale pending parses instead of logging another `0 requested / 150 pending` cycle forever.
 - `Sync History` notes now distinguish between actively waiting on existing parse jobs and retrying stale ones, so backlog runs explain what the app actually did.
+- Recently retried pending parse jobs are now checked first on later cycles, so completed OpenDota parses clear out of `Pending Parse` promptly instead of waiting behind the entire older backlog.
 - Streamlit Community Cloud local files are not durable storage. If neither Google Drive snapshot storage nor `DATABASE_URL` is configured, the app warns in the UI because a reboot/redeploy can reset the local `.cache/matches.sqlite3` file.
 
 ## Batch timing repair

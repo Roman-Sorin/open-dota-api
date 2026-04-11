@@ -775,6 +775,16 @@ class DotaAnalyticsService:
             return False
         return elapsed_seconds >= retry_after_seconds
 
+    @staticmethod
+    def _pending_parse_activity_key(request: dict[str, Any]) -> tuple[float, int]:
+        last_activity = str(request.get("last_polled_at") or request.get("requested_at") or "")
+        if not last_activity:
+            return (0.0, 0)
+        try:
+            return (datetime.fromisoformat(last_activity).timestamp(), int(request.get("match_id") or 0))
+        except ValueError:
+            return (0.0, int(request.get("match_id") or 0))
+
     def _flush_persistent_match_store(self, *, force: bool = False) -> None:
         if self.match_store is None:
             return
@@ -1911,12 +1921,19 @@ class DotaAnalyticsService:
         if self.match_store is None or limit <= 0:
             return result
 
-        pending_rows = self.match_store.list_match_parse_requests(player_id, status="pending", limit=limit)
-        for request in pending_rows:
+        scan_limit = max(limit * 25, 200)
+        pending_rows = self.match_store.list_match_parse_requests(player_id, status="pending", limit=scan_limit)
+        if not pending_rows:
+            return result
+
+        recent_poll_limit = min(max(limit * 2, 10), max(len(pending_rows) - limit, limit))
+        processed_match_ids: set[int] = set()
+
+        def poll_request(request: dict[str, Any], *, allow_retry: bool) -> bool:
             match_id = int(request.get("match_id") or 0)
             match = matches_by_id.get(match_id)
             if match is None:
-                continue
+                return True
             now_iso = self._utcnow_iso()
             try:
                 details = self.get_or_fetch_match_details(match_id, force_refresh=True)
@@ -1929,7 +1946,7 @@ class DotaAnalyticsService:
                     increment_attempts=False,
                 )
                 result.rate_limited = True
-                break
+                return False
             player_row = self._extract_player_from_match_details(
                 details,
                 player_id=player_id,
@@ -1945,30 +1962,12 @@ class DotaAnalyticsService:
                     increment_attempts=False,
                 )
                 result.completed += 1
-            else:
-                if self._pending_parse_retry_due(request, retry_after_seconds=retry_after_seconds):
-                    try:
-                        self.client.request_match_parse(match_id)
-                    except OpenDotaRateLimitError:
-                        self.match_store.upsert_match_parse_request(
-                            match_id,
-                            player_id,
-                            status="pending",
-                            last_polled_at=now_iso,
-                            increment_attempts=False,
-                        )
-                        result.rate_limited = True
-                        break
-                    self.match_store.upsert_match_parse_request(
-                        match_id,
-                        player_id,
-                        status="pending",
-                        requested_at=now_iso,
-                        last_polled_at=now_iso,
-                        last_error=None,
-                    )
-                    result.retried += 1
-                else:
+                return True
+
+            if allow_retry and self._pending_parse_retry_due(request, retry_after_seconds=retry_after_seconds):
+                try:
+                    self.client.request_match_parse(match_id)
+                except OpenDotaRateLimitError:
                     self.match_store.upsert_match_parse_request(
                         match_id,
                         player_id,
@@ -1976,7 +1975,59 @@ class DotaAnalyticsService:
                         last_polled_at=now_iso,
                         increment_attempts=False,
                     )
+                    result.rate_limited = True
+                    return False
+                self.match_store.upsert_match_parse_request(
+                    match_id,
+                    player_id,
+                    status="pending",
+                    requested_at=now_iso,
+                    last_polled_at=now_iso,
+                    last_error=None,
+                )
+                result.retried += 1
                 result.still_pending += 1
+                return True
+
+            self.match_store.upsert_match_parse_request(
+                match_id,
+                player_id,
+                status="pending",
+                last_polled_at=now_iso,
+                increment_attempts=False,
+            )
+            result.still_pending += 1
+            return True
+
+        recent_candidates = sorted(
+            pending_rows,
+            key=self._pending_parse_activity_key,
+            reverse=True,
+        )[:recent_poll_limit]
+        for request in recent_candidates:
+            match_id = int(request.get("match_id") or 0)
+            if match_id <= 0 or match_id in processed_match_ids:
+                continue
+            processed_match_ids.add(match_id)
+            if not poll_request(request, allow_retry=False):
+                break
+
+        if result.rate_limited:
+            return result
+
+        retry_candidates = sorted(
+            pending_rows,
+            key=self._pending_parse_activity_key,
+        )
+        for request in retry_candidates:
+            if result.retried >= limit:
+                break
+            match_id = int(request.get("match_id") or 0)
+            if match_id <= 0 or match_id in processed_match_ids:
+                continue
+            processed_match_ids.add(match_id)
+            if not poll_request(request, allow_retry=True):
+                break
         return result
 
     def run_background_sync_cycle(
@@ -2093,6 +2144,8 @@ class DotaAnalyticsService:
                     game_mode=game_mode,
                     window_days=window_days,
                 ).pending_parse_count
+                if pending_refresh.completed > 0:
+                    note_parts.append(f"Resolved {pending_refresh.completed} pending replay parse job(s).")
                 if pending_request_count == 0:
                     parse_candidates: list[int] = []
                     for match in matches:

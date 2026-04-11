@@ -1275,9 +1275,9 @@ def test_background_sync_cycle_refreshes_oldest_pending_parse_requests_first() -
     first = store.get_match_parse_request(51)
     second = store.get_match_parse_request(52)
 
-    assert result.coverage.pending_parse_count == 1
+    assert result.coverage.pending_parse_count == 0
     assert first is not None and first["status"] == "completed"
-    assert second is not None and second["status"] == "pending"
+    assert second is not None and second["status"] == "completed"
 
 
 def test_background_sync_cycle_retries_stale_pending_parse_backlog_with_reported_150_count() -> None:
@@ -1381,6 +1381,97 @@ def test_background_sync_cycle_retries_stale_pending_parse_backlog_with_reported
     assert first_request["last_polled_at"] is not None
     assert sixth_request is not None
     assert int(sixth_request["attempts"]) == 1
+
+
+def test_background_sync_cycle_prioritizes_recently_retried_pending_jobs_for_completion() -> None:
+    class _PendingCompletionClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.retried_match_ids: set[int] = set()
+
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 901 + offset,
+                    "start_time": 1771552800 - (offset * 3600),
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 8,
+                    "deaths": 3,
+                    "assists": 11,
+                    "duration": 1400,
+                    "hero_id": 1,
+                    "item_0": 1,
+                }
+                for offset in range(12)
+            ]
+
+        def get_match_details(self, match_id: int) -> dict:
+            player = {
+                "account_id": 123,
+                "player_slot": 0,
+                "item_0": 1,
+            }
+            if match_id in self.retried_match_ids:
+                player["purchase_log"] = [{"key": "blink", "time": 600}]
+            return {
+                "match_id": match_id,
+                "version": 22 if match_id in self.retried_match_ids else None,
+                "players": [player],
+            }
+
+        def request_match_parse(self, match_id: int) -> int | None:
+            self.retried_match_ids.add(match_id)
+            return 1
+
+    client = _PendingCompletionClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    service.references.item_ids_by_key["blink"] = 1
+    service.references.item_names_by_id[1] = "Blink Dagger"
+
+    now = datetime.now(tz=timezone.utc)
+    matches = client.get_player_matches()
+    store.upsert_player_matches(123, matches)
+    for offset, match in enumerate(matches):
+        match_id = int(match["match_id"])
+        activity_at = (now - timedelta(hours=4 + offset)).isoformat()
+        store.upsert_match_detail(
+            match_id,
+            {"match_id": match_id, "version": None, "players": [{"account_id": 123, "player_slot": 0, "item_0": 1}]},
+        )
+        store.upsert_match_parse_request(
+            match_id,
+            123,
+            status="pending",
+            requested_at=activity_at,
+            last_polled_at=activity_at,
+        )
+
+    first_cycle = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=5,
+        pending_parse_retry_after_seconds=3600,
+        force=True,
+    )
+    second_cycle = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=5,
+        pending_parse_retry_after_seconds=3600,
+        force=True,
+    )
+
+    assert first_cycle.parse_requested == 5
+    assert first_cycle.coverage.pending_parse_count == 12
+    assert second_cycle.parse_requested == 0
+    assert second_cycle.coverage.pending_parse_count == 7
+    assert "Resolved 5 pending replay parse job(s)." in second_cycle.note
 
 
 def test_background_sync_cycle_fetches_four_new_matches_during_long_window_cooldown() -> None:
