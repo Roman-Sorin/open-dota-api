@@ -811,6 +811,16 @@ class DotaAnalyticsService:
         except ValueError:
             return (0.0, int(request.get("match_id") or 0))
 
+    @staticmethod
+    def _background_summary_sync_interval_seconds(window_days: int) -> int:
+        if window_days <= 7:
+            return 300
+        if window_days <= 30:
+            return 900
+        if window_days <= 90:
+            return 1800
+        return 3600
+
     def _flush_persistent_match_store(self, *, force: bool = False) -> None:
         if self.match_store is None:
             return
@@ -2344,22 +2354,38 @@ class DotaAnalyticsService:
         try:
             matches: list[MatchSummary] = []
             matches_by_id: dict[int, MatchSummary] = {}
-            try:
-                request_targets_used.add("OpenDota")
-                inserted_ids = self._sync_player_matches(filters, force=force, check_recent_head_page=True)
-                summary_new_matches = len(inserted_ids)
-                if summary_new_matches > 0:
-                    data_sources_used.add("OpenDota")
-                matches = self.get_cached_matches(filters)
+            summary_sync_due = force
+            if not summary_sync_due:
+                cached_matches = self.get_cached_matches(filters)
+                matches = cached_matches
                 matches_by_id = {int(match.match_id): match for match in matches}
-            except OpenDotaRateLimitError:
-                request_targets_used.add("OpenDota")
-                rate_limited = True
-                status = "rate_limited"
-                next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
-                note_parts.append("OpenDota rate limit was hit during summary sync.")
-                matches = self.get_cached_matches(filters)
-                matches_by_id = {int(match.match_id): match for match in matches}
+                if not matches:
+                    summary_sync_due = True
+                else:
+                    summary_sync_elapsed = self._iso_elapsed_seconds(str(state.get("last_summary_sync_at") or ""))
+                    summary_sync_due = (
+                        summary_sync_elapsed is None
+                        or summary_sync_elapsed >= self._background_summary_sync_interval_seconds(window_days)
+                    )
+                    if not summary_sync_due:
+                        note_parts.append("Using cached summary snapshot; next OpenDota head sync is not due yet.")
+            if summary_sync_due:
+                try:
+                    request_targets_used.add("OpenDota")
+                    inserted_ids = self._sync_player_matches(filters, force=force, check_recent_head_page=True)
+                    summary_new_matches = len(inserted_ids)
+                    if summary_new_matches > 0:
+                        data_sources_used.add("OpenDota")
+                    matches = self.get_cached_matches(filters)
+                    matches_by_id = {int(match.match_id): match for match in matches}
+                except OpenDotaRateLimitError:
+                    request_targets_used.add("OpenDota")
+                    rate_limited = True
+                    status = "rate_limited"
+                    next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
+                    note_parts.append("OpenDota rate limit was hit during summary sync.")
+                    matches = self.get_cached_matches(filters)
+                    matches_by_id = {int(match.match_id): match for match in matches}
             pending_refresh = PendingParseRefreshResult()
             if skip_pending_parse_refresh:
                 note_parts.append("Waiting before the next pending replay-parse check after recent OpenDota activity.")

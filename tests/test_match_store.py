@@ -1266,6 +1266,60 @@ def test_background_sync_cycle_updates_state_history_and_parse_queue() -> None:
     assert parse_request["status"] == "pending"
 
 
+def test_background_sync_cycle_skips_summary_head_sync_when_recent_summary_snapshot_exists() -> None:
+    class _SummaryRateLimitedClient(_FakeClient):
+        def get_player_matches(self, **kwargs):
+            raise OpenDotaRateLimitError("OpenDota API rate limit reached")
+
+    client = _SummaryRateLimitedClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 810001,
+                "start_time": 1771552800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 8,
+                "deaths": 3,
+                "assists": 11,
+                "duration": 1400,
+                "hero_id": 1,
+                "item_0": 1,
+            }
+        ],
+    )
+    store.upsert_sync_state(
+        123,
+        "gm:23",
+        last_incremental_sync_at=datetime.now(tz=timezone.utc).isoformat(),
+        known_match_count=1,
+    )
+    store.upsert_background_sync_state(
+        123,
+        "gm:23",
+        365,
+        last_summary_sync_at=datetime.now(tz=timezone.utc).isoformat(),
+    )
+
+    result = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=0,
+        force=False,
+    )
+
+    assert result.status == "completed"
+    assert result.rate_limited is False
+    assert result.summary_new_matches == 0
+    assert "Using cached summary snapshot; next OpenDota head sync is not due yet." in result.note
+
+
 def test_background_sync_cycle_refreshes_oldest_pending_parse_requests_first() -> None:
     class _PendingRefreshClient(_FakeClient):
         def get_player_matches(self, **kwargs):
