@@ -1738,6 +1738,82 @@ def test_background_sync_cycle_waiting_does_not_reset_pending_retry_timer() -> N
     assert pending_request["last_polled_at"] == activity_at
 
 
+def test_background_sync_cycle_retries_stale_pending_even_if_recently_polled() -> None:
+    class _RetryStalePolledClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.requested_match_ids: list[int] = []
+
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 6100,
+                    "start_time": 1771466400,
+                    "player_slot": 0,
+                    "radiant_win": False,
+                    "game_mode": 23,
+                    "kills": 4,
+                    "deaths": 6,
+                    "assists": 7,
+                    "duration": 1300,
+                    "hero_id": 1,
+                    "item_0": 1,
+                }
+            ]
+
+        def get_match_details(self, match_id: int) -> dict:
+            return {
+                "match_id": 6100,
+                "version": None,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0,
+                        "item_0": 1,
+                    }
+                ],
+            }
+
+        def request_match_parse(self, match_id: int) -> int | None:
+            self.requested_match_ids.append(match_id)
+            return 901001
+
+    client = _RetryStalePolledClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    store.upsert_player_matches(123, client.get_player_matches())
+    store.upsert_match_detail(6100, {"match_id": 6100, "version": None, "players": [{"account_id": 123, "player_slot": 0, "item_0": 1}]})
+    requested_at = (datetime.now(tz=timezone.utc) - timedelta(hours=2)).isoformat()
+    recently_polled_at = (datetime.now(tz=timezone.utc) - timedelta(minutes=2)).isoformat()
+    store.upsert_match_parse_request(
+        6100,
+        123,
+        status="pending",
+        parse_job_id=900100,
+        requested_at=requested_at,
+        last_polled_at=recently_polled_at,
+    )
+
+    result = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=1,
+        pending_parse_retry_after_seconds=3600,
+        pending_parse_poll_after_seconds=300,
+        force=True,
+    )
+
+    pending_request = store.get_match_parse_request(6100)
+
+    assert result.status == "completed"
+    assert result.parse_requested == 1
+    assert client.requested_match_ids == [6100]
+    assert pending_request is not None
+    assert pending_request["parse_job_id"] == 901001
+
+
 def test_background_sync_cycle_fetches_four_new_matches_during_long_window_cooldown() -> None:
     recent_sync_at = "2026-04-08T10:00:00+00:00"
 

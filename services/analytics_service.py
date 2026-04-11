@@ -771,8 +771,10 @@ class DotaAnalyticsService:
         effective_retry_after_seconds = retry_after_seconds if has_parse_job_id else min(max(retry_after_seconds, 300), 300)
         if effective_retry_after_seconds <= 0:
             return True
-        last_activity = str(request.get("last_polled_at") or request.get("requested_at") or "")
-        elapsed_seconds = self._iso_elapsed_seconds(last_activity)
+        retry_anchor = str(request.get("requested_at") or "")
+        if not retry_anchor:
+            retry_anchor = str(request.get("last_polled_at") or "")
+        elapsed_seconds = self._iso_elapsed_seconds(retry_anchor)
         if elapsed_seconds is None:
             return False
         return elapsed_seconds >= effective_retry_after_seconds
@@ -2122,7 +2124,11 @@ class DotaAnalyticsService:
             return True
 
         recent_candidates = sorted(
-            pending_rows,
+            (
+                request
+                for request in pending_rows
+                if not self._pending_parse_retry_due(request, retry_after_seconds=retry_after_seconds)
+            ),
             key=self._pending_parse_activity_key,
             reverse=True,
         )[:recent_poll_limit]
