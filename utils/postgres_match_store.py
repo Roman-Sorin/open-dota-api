@@ -168,6 +168,7 @@ class PostgresMatchStore:
                     match_id BIGINT PRIMARY KEY,
                     account_id BIGINT NOT NULL,
                     status TEXT NOT NULL,
+                    parse_job_id BIGINT,
                     requested_at TEXT NOT NULL,
                     last_polled_at TEXT,
                     completed_at TEXT,
@@ -176,6 +177,7 @@ class PostgresMatchStore:
                 )
                 """
             )
+            cur.execute("ALTER TABLE match_parse_requests ADD COLUMN IF NOT EXISTS parse_job_id BIGINT")
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_match_parse_requests_lookup ON match_parse_requests (account_id, status, requested_at DESC)"
             )
@@ -764,6 +766,7 @@ class PostgresMatchStore:
         account_id: int,
         *,
         status: str,
+        parse_job_id: int | None = None,
         requested_at: str | None = None,
         last_polled_at: str | None = None,
         completed_at: str | None = None,
@@ -783,11 +786,12 @@ class PostgresMatchStore:
             cur.execute(
                 """
                 INSERT INTO match_parse_requests (
-                    match_id, account_id, status, requested_at, last_polled_at, completed_at, attempts, last_error
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    match_id, account_id, status, parse_job_id, requested_at, last_polled_at, completed_at, attempts, last_error
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT(match_id) DO UPDATE SET
                     account_id = excluded.account_id,
                     status = excluded.status,
+                    parse_job_id = COALESCE(excluded.parse_job_id, match_parse_requests.parse_job_id),
                     requested_at = COALESCE(excluded.requested_at, match_parse_requests.requested_at),
                     last_polled_at = COALESCE(excluded.last_polled_at, match_parse_requests.last_polled_at),
                     completed_at = COALESCE(excluded.completed_at, match_parse_requests.completed_at),
@@ -798,6 +802,7 @@ class PostgresMatchStore:
                     int(match_id),
                     int(account_id),
                     status,
+                    int(parse_job_id) if parse_job_id is not None else current.get("parse_job_id"),
                     requested_at or current.get("requested_at") or self._now_iso(),
                     last_polled_at or current.get("last_polled_at"),
                     completed_at or current.get("completed_at"),

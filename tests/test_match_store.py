@@ -1216,6 +1216,9 @@ def test_background_sync_cycle_refreshes_oldest_pending_parse_requests_first() -
                 ],
             }
 
+        def get_parse_job_status(self, job_id: int) -> dict | None:
+            return {"jobId": job_id, "status": "completed"}
+
     client = _PendingRefreshClient()
     store = SQLiteMatchStore(":memory:")
     service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
@@ -1261,8 +1264,8 @@ def test_background_sync_cycle_refreshes_oldest_pending_parse_requests_first() -
         51,
         {"match_id": 51, "version": None, "players": [{"account_id": 123, "player_slot": 0, "item_0": 1}]},
     )
-    store.upsert_match_parse_request(51, 123, status="pending", requested_at="2026-04-07T10:00:00+00:00")
-    store.upsert_match_parse_request(52, 123, status="pending", requested_at="2026-04-07T11:00:00+00:00")
+    store.upsert_match_parse_request(51, 123, status="pending", parse_job_id=1001, requested_at="2026-04-07T10:00:00+00:00")
+    store.upsert_match_parse_request(52, 123, status="pending", parse_job_id=1002, requested_at="2026-04-07T11:00:00+00:00")
 
     result = service.run_background_sync_cycle(
         player_id=123,
@@ -1425,7 +1428,13 @@ def test_background_sync_cycle_prioritizes_recently_retried_pending_jobs_for_com
 
         def request_match_parse(self, match_id: int) -> int | None:
             self.retried_match_ids.add(match_id)
-            return 1
+            return 500000 + match_id
+
+        def get_parse_job_status(self, job_id: int) -> dict | None:
+            match_id = int(job_id) - 500000
+            if match_id in self.retried_match_ids:
+                return {"jobId": job_id, "status": "completed"}
+            return None
 
     client = _PendingCompletionClient()
     store = SQLiteMatchStore(":memory:")

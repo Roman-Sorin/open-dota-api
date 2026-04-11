@@ -176,6 +176,7 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - `Sync History` notes now distinguish between actively waiting on existing parse jobs and retrying stale ones, so backlog runs explain what the app actually did.
 - Recently retried pending parse jobs are now checked first on later cycles, so completed OpenDota parses clear out of `Pending Parse` promptly instead of waiting behind the entire older backlog.
 - Fresh pending parse jobs are no longer force-polled against OpenDota every auto-refresh cycle; the app now waits a short poll delay, uses cached/STRATZ timing fallback first, and only then rechecks OpenDota so the dashboard does not lock itself into repeated `429` responses.
+- Pending OpenDota parse rows now persist the returned `jobId` and poll `request/{jobId}` before refreshing `matches/{id}`. This follows the async job flow more closely, reduces unnecessary detail calls, and avoids self-inflicted rate-limit loops on the `Database` page.
 - Streamlit Community Cloud local files are not durable storage. If neither Google Drive snapshot storage nor `DATABASE_URL` is configured, the app warns in the UI because a reboot/redeploy can reset the local `.cache/matches.sqlite3` file.
 
 ## Batch timing repair

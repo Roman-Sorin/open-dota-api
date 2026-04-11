@@ -767,13 +767,15 @@ class DotaAnalyticsService:
             return None
 
     def _pending_parse_retry_due(self, request: dict[str, Any], *, retry_after_seconds: int) -> bool:
-        if retry_after_seconds <= 0:
+        has_parse_job_id = int(request.get("parse_job_id") or 0) > 0
+        effective_retry_after_seconds = retry_after_seconds if has_parse_job_id else min(max(retry_after_seconds, 300), 300)
+        if effective_retry_after_seconds <= 0:
             return True
         last_activity = str(request.get("last_polled_at") or request.get("requested_at") or "")
         elapsed_seconds = self._iso_elapsed_seconds(last_activity)
         if elapsed_seconds is None:
             return False
-        return elapsed_seconds >= retry_after_seconds
+        return elapsed_seconds >= effective_retry_after_seconds
 
     def _pending_parse_poll_due(self, request: dict[str, Any], *, poll_after_seconds: int) -> bool:
         if poll_after_seconds <= 0:
@@ -1690,9 +1692,17 @@ class DotaAnalyticsService:
         submitted = 0
         pending_ids: set[int] = set()
         for match_id in requested_ids:
-            self.client.request_match_parse(match_id)
+            parse_job_id = self.client.request_match_parse(match_id)
             submitted += 1
             pending_ids.add(match_id)
+            if self.match_store is not None:
+                self.match_store.upsert_match_parse_request(
+                    match_id,
+                    player_id,
+                    status="pending",
+                    parse_job_id=parse_job_id,
+                    requested_at=self._utcnow_iso(),
+                )
 
         deadline = time_module.monotonic() + max(poll_timeout_seconds, 0)
         completed = 0
@@ -1985,46 +1995,72 @@ class DotaAnalyticsService:
                         return True
 
             should_poll_opendota = self._pending_parse_poll_due(request, poll_after_seconds=poll_after_seconds)
-            if not should_poll_opendota:
-                result.still_pending += 1
-                return True
-            try:
-                details = self.get_or_fetch_match_details(match_id, force_refresh=True)
-            except OpenDotaRateLimitError:
-                self.match_store.upsert_match_parse_request(
-                    match_id,
-                    player_id,
-                    status="pending",
-                    last_polled_at=now_iso,
-                    increment_attempts=False,
-                )
-                result.rate_limited = True
-                return False
-            player_row = self._extract_player_from_match_details(
-                details,
-                player_id=player_id,
-                player_slot=match.player_slot,
-            )
-            if self._player_row_has_timing_data(player_row):
-                self.match_store.upsert_match_parse_request(
-                    match_id,
-                    player_id,
-                    status="completed",
-                    last_polled_at=now_iso,
-                    completed_at=now_iso,
-                    increment_attempts=False,
-                )
-                result.completed += 1
-                return True
-
-            if allow_retry and self._pending_parse_retry_due(request, retry_after_seconds=retry_after_seconds):
+            parse_job_id = int(request.get("parse_job_id") or 0)
+            if should_poll_opendota and parse_job_id > 0:
                 try:
-                    self.client.request_match_parse(match_id)
+                    job_status = self.client.get_parse_job_status(parse_job_id)
                 except OpenDotaRateLimitError:
                     self.match_store.upsert_match_parse_request(
                         match_id,
                         player_id,
                         status="pending",
+                        parse_job_id=parse_job_id,
+                        last_polled_at=now_iso,
+                        increment_attempts=False,
+                    )
+                    result.rate_limited = True
+                    return False
+                if job_status is None:
+                    self.match_store.upsert_match_parse_request(
+                        match_id,
+                        player_id,
+                        status="pending",
+                        parse_job_id=parse_job_id,
+                        last_polled_at=now_iso,
+                        increment_attempts=False,
+                    )
+                    result.still_pending += 1
+                    return True
+                try:
+                    details = self.get_or_fetch_match_details(match_id, force_refresh=True)
+                except OpenDotaRateLimitError:
+                    self.match_store.upsert_match_parse_request(
+                        match_id,
+                        player_id,
+                        status="pending",
+                        parse_job_id=parse_job_id,
+                        last_polled_at=now_iso,
+                        increment_attempts=False,
+                    )
+                    result.rate_limited = True
+                    return False
+                player_row = self._extract_player_from_match_details(
+                    details,
+                    player_id=player_id,
+                    player_slot=match.player_slot,
+                )
+                if self._player_row_has_timing_data(player_row):
+                    self.match_store.upsert_match_parse_request(
+                        match_id,
+                        player_id,
+                        status="completed",
+                        parse_job_id=parse_job_id,
+                        last_polled_at=now_iso,
+                        completed_at=now_iso,
+                        increment_attempts=False,
+                    )
+                    result.completed += 1
+                    return True
+
+            if allow_retry and self._pending_parse_retry_due(request, retry_after_seconds=retry_after_seconds):
+                try:
+                    parse_job_id = self.client.request_match_parse(match_id)
+                except OpenDotaRateLimitError:
+                    self.match_store.upsert_match_parse_request(
+                        match_id,
+                        player_id,
+                        status="pending",
+                        parse_job_id=int(request.get("parse_job_id") or 0) or None,
                         last_polled_at=now_iso,
                         increment_attempts=False,
                     )
@@ -2034,6 +2070,7 @@ class DotaAnalyticsService:
                     match_id,
                     player_id,
                     status="pending",
+                    parse_job_id=parse_job_id,
                     requested_at=now_iso,
                     last_polled_at=now_iso,
                     last_error=None,
@@ -2046,6 +2083,7 @@ class DotaAnalyticsService:
                 match_id,
                 player_id,
                 status="pending",
+                parse_job_id=parse_job_id or None,
                 last_polled_at=now_iso,
                 increment_attempts=False,
             )
@@ -2227,7 +2265,7 @@ class DotaAnalyticsService:
 
                     for match_id in parse_candidates:
                         try:
-                            self.client.request_match_parse(match_id)
+                            parse_job_id = self.client.request_match_parse(match_id)
                         except OpenDotaRateLimitError:
                             rate_limited = True
                             status = "rate_limited"
@@ -2238,6 +2276,7 @@ class DotaAnalyticsService:
                             match_id,
                             player_id,
                             status="pending",
+                            parse_job_id=parse_job_id,
                             requested_at=self._utcnow_iso(),
                         )
                         parse_requested += 1

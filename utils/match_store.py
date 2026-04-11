@@ -89,6 +89,7 @@ class MatchStoreProtocol(Protocol):
         account_id: int,
         *,
         status: str,
+        parse_job_id: int | None = None,
         requested_at: str | None = None,
         last_polled_at: str | None = None,
         completed_at: str | None = None,
@@ -217,6 +218,7 @@ class SQLiteMatchStore:
                 match_id INTEGER PRIMARY KEY,
                 account_id INTEGER NOT NULL,
                 status TEXT NOT NULL,
+                parse_job_id INTEGER,
                 requested_at TEXT NOT NULL,
                 last_polled_at TEXT,
                 completed_at TEXT,
@@ -231,6 +233,9 @@ class SQLiteMatchStore:
         columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(background_sync_runs)").fetchall()}
         if "run_source" not in columns:
             self._conn.execute("ALTER TABLE background_sync_runs ADD COLUMN run_source TEXT NOT NULL DEFAULT 'manual'")
+        parse_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(match_parse_requests)").fetchall()}
+        if "parse_job_id" not in parse_columns:
+            self._conn.execute("ALTER TABLE match_parse_requests ADD COLUMN parse_job_id INTEGER")
         self._commit()
 
     def _commit(self) -> None:
@@ -798,6 +803,7 @@ class SQLiteMatchStore:
         account_id: int,
         *,
         status: str,
+        parse_job_id: int | None = None,
         requested_at: str | None = None,
         last_polled_at: str | None = None,
         completed_at: str | None = None,
@@ -816,11 +822,12 @@ class SQLiteMatchStore:
         self._conn.execute(
             """
             INSERT INTO match_parse_requests (
-                match_id, account_id, status, requested_at, last_polled_at, completed_at, attempts, last_error
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                match_id, account_id, status, parse_job_id, requested_at, last_polled_at, completed_at, attempts, last_error
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(match_id) DO UPDATE SET
                 account_id = excluded.account_id,
                 status = excluded.status,
+                parse_job_id = COALESCE(excluded.parse_job_id, match_parse_requests.parse_job_id),
                 requested_at = COALESCE(excluded.requested_at, match_parse_requests.requested_at),
                 last_polled_at = COALESCE(excluded.last_polled_at, match_parse_requests.last_polled_at),
                 completed_at = COALESCE(excluded.completed_at, match_parse_requests.completed_at),
@@ -831,6 +838,7 @@ class SQLiteMatchStore:
                 int(match_id),
                 int(account_id),
                 status,
+                int(parse_job_id) if parse_job_id is not None else current.get("parse_job_id"),
                 requested_at or current.get("requested_at") or self._now_iso(),
                 last_polled_at or current.get("last_polled_at"),
                 completed_at or current.get("completed_at"),

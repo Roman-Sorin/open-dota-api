@@ -123,3 +123,7 @@ class OpenDotaClient:
             return int(job_id) if job_id is not None else None
         job_id = result.get("jobId")
         return int(job_id) if job_id is not None else None
+
+    def get_parse_job_status(self, job_id: int) -> dict[str, Any] | None:
+        result = self._request("GET", f"request/{job_id}")
+        return result if isinstance(result, dict) else None
