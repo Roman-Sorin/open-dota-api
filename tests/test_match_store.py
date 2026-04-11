@@ -1481,7 +1481,7 @@ def test_background_sync_cycle_prioritizes_recently_retried_pending_jobs_for_com
 
     assert first_cycle.parse_requested == 5
     assert first_cycle.coverage.pending_parse_count == 12
-    assert second_cycle.parse_requested == 0
+    assert second_cycle.parse_requested == 5
     assert second_cycle.coverage.pending_parse_count == 7
     assert "Resolved 5 pending replay parse job(s)." in second_cycle.note
 
@@ -1650,6 +1650,72 @@ def test_background_sync_cycle_skips_pending_checks_during_quiet_period_after_re
     assert second_cycle.status == "completed"
     assert "Waiting before the next pending replay-parse check after recent OpenDota activity." in second_cycle.note
     assert client.parse_status_calls == 0
+
+
+def test_background_sync_cycle_waiting_does_not_reset_pending_retry_timer() -> None:
+    class _PendingTimerClient(_FakeClient):
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 5100,
+                    "start_time": 1771466400,
+                    "player_slot": 0,
+                    "radiant_win": False,
+                    "game_mode": 23,
+                    "kills": 4,
+                    "deaths": 6,
+                    "assists": 7,
+                    "duration": 1300,
+                    "hero_id": 1,
+                    "item_0": 1,
+                }
+            ]
+
+        def get_match_details(self, match_id: int) -> dict:
+            return {
+                "match_id": 5100,
+                "version": None,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0,
+                        "item_0": 1,
+                    }
+                ],
+            }
+
+    client = _PendingTimerClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    store.upsert_player_matches(123, client.get_player_matches())
+    store.upsert_match_detail(5100, {"match_id": 5100, "version": None, "players": [{"account_id": 123, "player_slot": 0, "item_0": 1}]})
+    activity_at = (datetime.now(tz=timezone.utc) - timedelta(minutes=2)).isoformat()
+    store.upsert_match_parse_request(
+        5100,
+        123,
+        status="pending",
+        parse_job_id=900100,
+        requested_at=activity_at,
+        last_polled_at=activity_at,
+    )
+
+    result = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=1,
+        pending_parse_retry_after_seconds=3600,
+        pending_parse_poll_after_seconds=300,
+        force=True,
+    )
+
+    pending_request = store.get_match_parse_request(5100)
+
+    assert result.status == "completed"
+    assert result.parse_requested == 0
+    assert pending_request is not None
+    assert pending_request["last_polled_at"] == activity_at
 
 
 def test_background_sync_cycle_fetches_four_new_matches_during_long_window_cooldown() -> None:

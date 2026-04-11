@@ -2100,14 +2100,6 @@ class DotaAnalyticsService:
                 result.still_pending += 1
                 return True
 
-            self.match_store.upsert_match_parse_request(
-                match_id,
-                player_id,
-                status="pending",
-                parse_job_id=parse_job_id or None,
-                last_polled_at=now_iso,
-                increment_attempts=False,
-            )
             result.still_pending += 1
             return True
 

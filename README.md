@@ -191,6 +191,7 @@ tests/
 - Pending parse requests now store the OpenDota `jobId` and poll the lighter `request/{jobId}` status path before fetching `matches/{id}` again. This keeps the background queue aligned with OpenDota's async parse flow and cuts down needless detail polling.
 - STRATZ timing fallback now targets the actual `pending` / missing-timing backlog first instead of only walking the newest cached matches. Older unresolved matches are no longer starved just because recent rows already have ready timings.
 - After a sync cycle already performed OpenDota work, the next pending-parse check now waits through a short quiet period instead of immediately polling again. This reduces self-inflicted `429` responses on the auto-refreshing `Database` page.
+- Passive `waiting on pending parse jobs` cycles no longer refresh `last_polled_at` for those rows. This keeps the stale-retry timer moving forward so old `pending` jobs can be retried instead of being stuck in an endless wait loop.
 - Temporary OpenDota upstream outages like HTTP `522` are now retried once and then folded into the same cooldown-style handling as other transient OpenDota availability problems, instead of surfacing as a hard sync error immediately.
 - Streamlit Community Cloud does not provide a true always-on worker inside the page process. The `Database` page can keep advancing the backlog while it stays open, but a real 24/7 worker still requires an external runner with shared persistent storage.
 
