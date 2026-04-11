@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from models.dtos import QueryFilters
 from services.analytics_service import DotaAnalyticsService
+from utils.exceptions import OpenDotaRateLimitError
 from utils.match_store import SQLiteMatchStore
 
 
@@ -2019,3 +2020,32 @@ def test_background_sync_cycle_persists_manual_and_auto_run_source() -> None:
     runs = service.list_background_sync_runs(123, window_days=365, limit=5)
 
     assert [run["run_source"] for run in runs[:2]] == ["auto", "manual"]
+
+
+def test_background_sync_cycle_treats_summary_sync_rate_limit_as_cooldown() -> None:
+    class _SummaryRateLimitClient(_FakeClient):
+        def get_player_matches(self, **kwargs):
+            raise OpenDotaRateLimitError("OpenDota API rate limit reached")
+
+    client = _SummaryRateLimitClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+
+    result = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=0,
+        rate_limit_cooldown_seconds=50,
+        force=True,
+        run_source="auto",
+    )
+
+    runs = service.list_background_sync_runs(123, window_days=365, limit=1)
+
+    assert result.status == "rate_limited"
+    assert result.rate_limited is True
+    assert result.next_retry_at is not None
+    assert "summary sync" in result.note
+    assert runs[0]["status"] == "rate_limited"
+    assert runs[0]["rate_limited"] == 1

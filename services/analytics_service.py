@@ -2230,27 +2230,38 @@ class DotaAnalyticsService:
         status = "completed"
 
         try:
-            inserted_ids = self._sync_player_matches(filters, force=force, check_recent_head_page=True)
-            summary_new_matches = len(inserted_ids)
-            matches = self.get_cached_matches(filters)
-            matches_by_id = {int(match.match_id): match for match in matches}
+            matches: list[MatchSummary] = []
+            matches_by_id: dict[int, MatchSummary] = {}
+            try:
+                inserted_ids = self._sync_player_matches(filters, force=force, check_recent_head_page=True)
+                summary_new_matches = len(inserted_ids)
+                matches = self.get_cached_matches(filters)
+                matches_by_id = {int(match.match_id): match for match in matches}
+            except OpenDotaRateLimitError:
+                rate_limited = True
+                status = "rate_limited"
+                next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
+                note_parts.append("OpenDota rate limit was hit during summary sync.")
+                matches = self.get_cached_matches(filters)
+                matches_by_id = {int(match.match_id): match for match in matches}
             pending_refresh = PendingParseRefreshResult()
             if skip_pending_parse_refresh:
                 note_parts.append("Waiting before the next pending replay-parse check after recent OpenDota activity.")
             else:
-                pending_refresh = self._refresh_pending_parse_requests(
-                    player_id=player_id,
-                    matches_by_id=matches_by_id,
-                    limit=max_parse_requests,
-                    retry_after_seconds=pending_parse_retry_after_seconds,
-                    poll_after_seconds=pending_parse_poll_after_seconds,
-                )
-                parse_requested += pending_refresh.retried
-                if pending_refresh.rate_limited:
-                    rate_limited = True
-                    status = "rate_limited"
-                    next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
-                    note_parts.append("OpenDota rate limit was hit while checking pending replay parses.")
+                if not rate_limited:
+                    pending_refresh = self._refresh_pending_parse_requests(
+                        player_id=player_id,
+                        matches_by_id=matches_by_id,
+                        limit=max_parse_requests,
+                        retry_after_seconds=pending_parse_retry_after_seconds,
+                        poll_after_seconds=pending_parse_poll_after_seconds,
+                    )
+                    parse_requested += pending_refresh.retried
+                    if pending_refresh.rate_limited:
+                        rate_limited = True
+                        status = "rate_limited"
+                        next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
+                        note_parts.append("OpenDota rate limit was hit while checking pending replay parses.")
 
             if not rate_limited:
                 missing_detail_ids = self.get_match_ids_requiring_detail_hydration(
