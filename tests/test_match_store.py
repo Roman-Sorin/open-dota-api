@@ -1551,6 +1551,107 @@ def test_background_sync_cycle_does_not_poll_fresh_pending_parse_jobs_before_pol
     assert pending_request["status"] == "pending"
 
 
+def test_background_sync_cycle_skips_pending_checks_during_quiet_period_after_recent_work() -> None:
+    class _QuietPeriodClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.parse_requested: set[int] = set()
+            self.parse_status_calls = 0
+
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 4101,
+                    "start_time": 1771552800,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 8,
+                    "deaths": 3,
+                    "assists": 11,
+                    "duration": 1400,
+                    "hero_id": 1,
+                    "item_0": 1,
+                },
+                {
+                    "match_id": 4100,
+                    "start_time": 1771466400,
+                    "player_slot": 0,
+                    "radiant_win": False,
+                    "game_mode": 23,
+                    "kills": 4,
+                    "deaths": 6,
+                    "assists": 7,
+                    "duration": 1300,
+                    "hero_id": 1,
+                    "item_0": 1,
+                },
+            ]
+
+        def get_match_details(self, match_id: int) -> dict:
+            if match_id == 4101:
+                return {
+                    "match_id": 4101,
+                    "version": 22,
+                    "players": [
+                        {
+                            "account_id": 123,
+                            "player_slot": 0,
+                            "item_0": 1,
+                            "purchase_log": [{"key": "blink", "time": 600}],
+                        }
+                    ],
+                }
+            return {
+                "match_id": 4100,
+                "version": None,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0,
+                        "item_0": 1,
+                    }
+                ],
+            }
+
+        def request_match_parse(self, match_id: int) -> int | None:
+            self.parse_requested.add(match_id)
+            return 700000 + match_id
+
+        def get_parse_job_status(self, job_id: int) -> dict | None:
+            self.parse_status_calls += 1
+            raise AssertionError("quiet-period cycle should not poll parse job status")
+
+    client = _QuietPeriodClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    service.references.item_ids_by_key["blink"] = 1
+    service.references.item_names_by_id[1] = "Blink Dagger"
+
+    first_cycle = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=5,
+        max_parse_requests=1,
+        pending_parse_quiet_period_seconds=300,
+        force=True,
+    )
+    second_cycle = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=1,
+        pending_parse_quiet_period_seconds=300,
+        run_source="auto",
+    )
+
+    assert first_cycle.parse_requested == 1
+    assert second_cycle.status == "completed"
+    assert "Waiting before the next pending replay-parse check after recent OpenDota activity." in second_cycle.note
+    assert client.parse_status_calls == 0
+
+
 def test_background_sync_cycle_fetches_four_new_matches_during_long_window_cooldown() -> None:
     recent_sync_at = "2026-04-08T10:00:00+00:00"
 

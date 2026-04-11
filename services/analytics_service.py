@@ -2153,6 +2153,7 @@ class DotaAnalyticsService:
         rate_limit_cooldown_seconds: int = 600,
         pending_parse_retry_after_seconds: int = 3600,
         pending_parse_poll_after_seconds: int = 300,
+        pending_parse_quiet_period_seconds: int = 180,
         force: bool = False,
         run_source: str = "manual",
     ) -> BackgroundSyncCycleResult:
@@ -2181,6 +2182,10 @@ class DotaAnalyticsService:
                 note="Waiting for the next retry window after a previous OpenDota rate limit.",
                 coverage=coverage,
             )
+
+        skip_pending_parse_refresh = (
+            not force and self._iso_is_future(str(state.get("next_pending_parse_check_at") or ""))
+        )
 
         started_at = self._utcnow_iso()
         self.match_store.upsert_background_sync_state(
@@ -2213,19 +2218,23 @@ class DotaAnalyticsService:
             summary_new_matches = len(inserted_ids)
             matches = self.get_cached_matches(filters)
             matches_by_id = {int(match.match_id): match for match in matches}
-            pending_refresh = self._refresh_pending_parse_requests(
-                player_id=player_id,
-                matches_by_id=matches_by_id,
-                limit=max_parse_requests,
-                retry_after_seconds=pending_parse_retry_after_seconds,
-                poll_after_seconds=pending_parse_poll_after_seconds,
-            )
-            parse_requested += pending_refresh.retried
-            if pending_refresh.rate_limited:
-                rate_limited = True
-                status = "rate_limited"
-                next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
-                note_parts.append("OpenDota rate limit was hit while checking pending replay parses.")
+            pending_refresh = PendingParseRefreshResult()
+            if skip_pending_parse_refresh:
+                note_parts.append("Waiting before the next pending replay-parse check after recent OpenDota activity.")
+            else:
+                pending_refresh = self._refresh_pending_parse_requests(
+                    player_id=player_id,
+                    matches_by_id=matches_by_id,
+                    limit=max_parse_requests,
+                    retry_after_seconds=pending_parse_retry_after_seconds,
+                    poll_after_seconds=pending_parse_poll_after_seconds,
+                )
+                parse_requested += pending_refresh.retried
+                if pending_refresh.rate_limited:
+                    rate_limited = True
+                    status = "rate_limited"
+                    next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
+                    note_parts.append("OpenDota rate limit was hit while checking pending replay parses.")
 
             if not rate_limited:
                 missing_detail_ids = self.get_match_ids_requiring_detail_hydration(
@@ -2319,6 +2328,9 @@ class DotaAnalyticsService:
                 window_days=window_days,
             )
             finished_at = self._utcnow_iso()
+            next_pending_parse_check_at = state.get("next_pending_parse_check_at")
+            if summary_new_matches > 0 or detail_completed > 0 or parse_requested > 0:
+                next_pending_parse_check_at = self._iso_after_seconds(pending_parse_quiet_period_seconds)
             previous_total_runs = int(state.get("total_runs") or 0)
             previous_detail_fetches = int(state.get("total_detail_fetches") or 0)
             previous_parse_requests = int(state.get("total_parse_requests") or 0)
@@ -2345,6 +2357,7 @@ class DotaAnalyticsService:
                 last_error=None,
                 last_rate_limited_at=started_at if rate_limited else state.get("last_rate_limited_at"),
                 next_retry_at=next_retry_at,
+                next_pending_parse_check_at=next_pending_parse_check_at,
                 last_summary_sync_at=finished_at,
                 target_match_count=coverage.total_matches,
                 detail_cached_count=coverage.detail_cached_count,
