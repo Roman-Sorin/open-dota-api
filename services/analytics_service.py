@@ -775,6 +775,17 @@ class DotaAnalyticsService:
             return False
         return elapsed_seconds >= retry_after_seconds
 
+    def _pending_parse_poll_due(self, request: dict[str, Any], *, poll_after_seconds: int) -> bool:
+        if poll_after_seconds <= 0:
+            return True
+        last_polled_at = str(request.get("last_polled_at") or "")
+        requested_at = str(request.get("requested_at") or "")
+        last_activity = last_polled_at or requested_at
+        elapsed_seconds = self._iso_elapsed_seconds(last_activity)
+        if elapsed_seconds is None:
+            return False
+        return elapsed_seconds >= poll_after_seconds
+
     @staticmethod
     def _pending_parse_activity_key(request: dict[str, Any]) -> tuple[float, int]:
         last_activity = str(request.get("last_polled_at") or request.get("requested_at") or "")
@@ -1916,6 +1927,7 @@ class DotaAnalyticsService:
         matches_by_id: dict[int, MatchSummary],
         limit: int,
         retry_after_seconds: int,
+        poll_after_seconds: int,
     ) -> PendingParseRefreshResult:
         result = PendingParseRefreshResult()
         if self.match_store is None or limit <= 0:
@@ -1935,6 +1947,47 @@ class DotaAnalyticsService:
             if match is None:
                 return True
             now_iso = self._utcnow_iso()
+            cached_details = self.get_match_details_if_cached(match_id)
+            if isinstance(cached_details, dict):
+                cached_player_row = self._extract_player_from_match_details(
+                    cached_details,
+                    player_id=player_id,
+                    player_slot=match.player_slot,
+                )
+                if self._player_row_has_timing_data(cached_player_row):
+                    self.match_store.upsert_match_parse_request(
+                        match_id,
+                        player_id,
+                        status="completed",
+                        last_polled_at=now_iso,
+                        completed_at=now_iso,
+                        increment_attempts=False,
+                    )
+                    result.completed += 1
+                    return True
+                if self._enrich_match_details_with_stratz_timings(match_id, cached_details):
+                    refreshed_details = self.get_match_details_if_cached(match_id) or cached_details
+                    refreshed_player_row = self._extract_player_from_match_details(
+                        refreshed_details,
+                        player_id=player_id,
+                        player_slot=match.player_slot,
+                    )
+                    if self._player_row_has_timing_data(refreshed_player_row):
+                        self.match_store.upsert_match_parse_request(
+                            match_id,
+                            player_id,
+                            status="completed",
+                            last_polled_at=now_iso,
+                            completed_at=now_iso,
+                            increment_attempts=False,
+                        )
+                        result.completed += 1
+                        return True
+
+            should_poll_opendota = self._pending_parse_poll_due(request, poll_after_seconds=poll_after_seconds)
+            if not should_poll_opendota:
+                result.still_pending += 1
+                return True
             try:
                 details = self.get_or_fetch_match_details(match_id, force_refresh=True)
             except OpenDotaRateLimitError:
@@ -2040,6 +2093,7 @@ class DotaAnalyticsService:
         max_parse_requests: int = 3,
         rate_limit_cooldown_seconds: int = 600,
         pending_parse_retry_after_seconds: int = 3600,
+        pending_parse_poll_after_seconds: int = 300,
         force: bool = False,
         run_source: str = "manual",
     ) -> BackgroundSyncCycleResult:
@@ -2105,6 +2159,7 @@ class DotaAnalyticsService:
                 matches_by_id=matches_by_id,
                 limit=max_parse_requests,
                 retry_after_seconds=pending_parse_retry_after_seconds,
+                poll_after_seconds=pending_parse_poll_after_seconds,
             )
             parse_requested += pending_refresh.retried
             if pending_refresh.rate_limited:
