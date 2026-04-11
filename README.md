@@ -43,8 +43,9 @@ Turbo-only dashboard for your account:
   - `Refresh Turbo Dashboard` and the dedicated `Database` page are the only UI flows allowed to talk to OpenDota for cache sync/detail hydration
   - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild from the currently loaded dashboard snapshot for the selected hero
 - Section refreshes no longer pull newer matches than the currently loaded overview; only `Refresh Turbo Dashboard` advances the dataset
-- `Refresh Turbo Dashboard` now forces an incremental sync check for new matches only; already cached summaries and match details are reused instead of being re-fetched
-- During dashboard refresh, missing match details for the current snapshot are hydrated once and then reused by all sections
+- `Refresh Turbo Dashboard` is now cache-first: it rebuilds the dashboard from the local match cache and only performs one bounded OpenDota head-sync to check for newer matches
+- If that bounded OpenDota head-sync is rate-limited or temporarily unavailable, the dashboard keeps rendering the cached snapshot instead of failing the whole page
+- Dashboard refresh no longer requires a fresh OpenDota player-profile lookup when the selected player's Turbo cache already exists locally
 - If the current cached snapshot still lacks required match details for some heroes, the app does not render that overview as valid data and tells you to rebuild the snapshot
 - Detailed hero section in Turbo includes avg duration, avg damage, avg net worth, max kills, and max hero damage
 - Selected-hero section refreshes are grouped into one action bar above the sections (`Hero Details`, `Matchups`, `Item Winrates`, `Recent Matches`)

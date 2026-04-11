@@ -779,6 +779,53 @@ def test_load_match_snapshot_rehydrates_cached_details_missing_purchase_log() ->
     assert [item.purchase_time_min for item in recent[0].items] == [10]
 
 
+def test_sync_recent_matches_into_cache_reports_rate_limit_and_keeps_cached_snapshot_usable() -> None:
+    class _RateLimitedSummaryClient(_FakeClient):
+        def get_player_matches(self, **kwargs):
+            raise OpenDotaRateLimitError("OpenDota API rate limit reached")
+
+    client = _RateLimitedSummaryClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 991,
+                "start_time": 1771552800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 11,
+                "deaths": 2,
+                "assists": 15,
+                "duration": 1500,
+                "hero_id": 1,
+                "hero_damage": 34567,
+                "net_worth": 27890,
+            }
+        ],
+    )
+    store.upsert_sync_state(
+        123,
+        "gm:23",
+        last_incremental_sync_at="2026-04-11T15:00:00+00:00",
+        known_match_count=1,
+    )
+
+    filters = QueryFilters(player_id=123, game_mode=23, game_mode_name="Turbo", days=67)
+    sync_result = service.sync_recent_matches_into_cache(filters, force=True)
+    snapshot = service.get_turbo_overview_snapshot(player_id=123, days=67, force_sync=False, hydrate_details=False)
+
+    assert sync_result.rate_limited is True
+    assert sync_result.inserted_match_ids == []
+    assert snapshot.overview
+    assert snapshot.overview[0]["matches"] == 1
+    assert snapshot.overview[0]["avg_net_worth"] == 27890.0
+    assert snapshot.overview[0]["avg_damage"] == 34567.0
+
+
 def test_repair_recent_match_item_timings_requests_parse_and_rebuilds_recent_rows() -> None:
     class _ParseRepairClient(_FakeClient):
         def __init__(self) -> None:

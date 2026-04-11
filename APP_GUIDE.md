@@ -42,9 +42,10 @@ The project includes two interfaces:
 - Dashboard sections load manually and independently to reduce one-shot API work on page open
 - Default selected hero in the hero dropdown is `Spectre` when present in the loaded overview; otherwise the first available hero is used
 - If matching dashboard data already exists in local SQLite storage, the app restores Hero Overview automatically on page load for the current filters
-- `Refresh Turbo Dashboard` fetches/syncs the hero overview from OpenDota when you want newer matches
+- `Refresh Turbo Dashboard` is cache-first: it rebuilds the hero overview from the local cache and then does one bounded OpenDota head-sync only to check whether newer matches exist
 - `Refresh Turbo Dashboard` and the dedicated `Database` page are the only UI actions that may talk to OpenDota
-- `Refresh Turbo Dashboard` performs an incremental new-match check and hydrates missing match details for the current snapshot exactly once
+- If that bounded OpenDota check is rate-limited or temporarily unavailable, the dashboard keeps showing the cached snapshot and warns instead of failing the whole page
+- If the player's Turbo cache already exists locally, dashboard refresh no longer requires a separate OpenDota player-profile lookup before rebuilding the view
 - If the current cached snapshot still lacks required match details for some heroes, the app does not render that overview as valid data and tells you to rebuild the snapshot
 - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild the selected hero sections from the currently loaded dashboard snapshot
 - Selected-hero refresh actions are grouped into one shared action bar above the detail sections, including `Refresh Matchups`

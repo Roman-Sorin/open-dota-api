@@ -804,6 +804,7 @@ def _store_dashboard_state(
     st.session_state["min_item_matches"] = min_item_matches_value
     st.session_state["overview_cache_only"] = cache_only
     st.session_state["overview_requires_refresh"] = False
+    st.session_state["dashboard_refresh_notice"] = None
 
 
 def _load_selected_hero_matches(
@@ -900,6 +901,49 @@ def _get_turbo_overview_snapshot_safe(
             self.matches = matches
             self.is_valid = not overview_looks_stale(rows)
     return _FallbackSnapshot(service.build_turbo_hero_overview_rows(matches) if matches else [])
+
+
+def _load_cached_dashboard_snapshot(
+    service: DotaAnalyticsService,
+    *,
+    player_id: int,
+    active_days: int | None,
+    active_start_date: date | None,
+    active_patches: list[str],
+    supports_patch_overview: bool,
+    patch_timeline: list[tuple[int, str]],
+) -> tuple[list[dict], list[MatchSummary] | None]:
+    if active_patches and not supports_patch_overview:
+        base_filters = QueryFilters(
+            player_id=player_id,
+            game_mode=23,
+            game_mode_name="Turbo",
+            days=None,
+            start_date=active_start_date,
+        )
+        all_cached_matches, _ = service.load_match_snapshot(base_filters, force_sync=False, hydrate_details=False)
+        selected_set = set(active_patches)
+        patch_filtered_matches = [
+            m for m in all_cached_matches if _resolve_patch_name(m.start_time, patch_timeline) in selected_set
+        ]
+        service.enrich_hero_damage(
+            player_id,
+            patch_filtered_matches,
+            max_fallback_detail_calls=max(120, len(patch_filtered_matches)),
+            allow_detail_fetch=False,
+        )
+        return _build_overview_from_matches(patch_filtered_matches, service), patch_filtered_matches
+
+    overview_snapshot = _get_turbo_overview_snapshot_safe(
+        service,
+        player_id=player_id,
+        days=active_days,
+        start_date=active_start_date,
+        patch_names=active_patches,
+        force_sync=False,
+        hydrate_details=False,
+    )
+    return overview_snapshot.overview, None
 
 
 def _build_item_purchase_times_by_item(
@@ -1505,38 +1549,15 @@ if "overview" not in st.session_state:
         player_id = parse_player_id(player_raw)
         cached_sync_state = service.get_cached_sync_state(player_id, game_mode=23)
         if cached_sync_state and int(cached_sync_state.get("known_match_count") or 0) > 0:
-            if active_patches and not supports_patch_overview:
-                base_filters = QueryFilters(
-                    player_id=player_id,
-                    game_mode=23,
-                    game_mode_name="Turbo",
-                    days=None,
-                    start_date=active_start_date,
-                )
-                all_cached_matches, _ = service.load_match_snapshot(base_filters, force_sync=False, hydrate_details=False)
-                selected_set = set(active_patches)
-                patch_filtered_matches = [
-                    m for m in all_cached_matches if _resolve_patch_name(m.start_time, patch_timeline) in selected_set
-                ]
-                service.enrich_hero_damage(
-                    player_id,
-                    patch_filtered_matches,
-                    max_fallback_detail_calls=max(120, len(patch_filtered_matches)),
-                    allow_detail_fetch=False,
-                )
-                overview = _build_overview_from_matches(patch_filtered_matches, service)
-            else:
-                patch_filtered_matches = None
-                overview_snapshot = _get_turbo_overview_snapshot_safe(
-                    service,
-                    player_id=player_id,
-                    days=active_days,
-                    start_date=active_start_date,
-                    patch_names=active_patches,
-                    force_sync=False,
-                    hydrate_details=False,
-                )
-                overview = overview_snapshot.overview
+            overview, patch_filtered_matches = _load_cached_dashboard_snapshot(
+                service,
+                player_id=player_id,
+                active_days=active_days,
+                active_start_date=active_start_date,
+                active_patches=active_patches,
+                supports_patch_overview=supports_patch_overview,
+                patch_timeline=patch_timeline,
+            )
             if overview and overview_looks_stale(overview):
                 st.session_state["overview_requires_refresh"] = True
             elif overview:
@@ -1571,49 +1592,48 @@ if load:
         active_start_date = start_date_value if time_filter_mode == "Start Date" else None
 
         player_id = parse_player_id(player_raw)
-        run_with_rate_limit_retry(
-            lambda: service.ensure_player_exists(player_id),
-            operation_label="player profile",
+        cached_sync_state = service.get_cached_sync_state(player_id, game_mode=23)
+        had_cached_matches = bool(cached_sync_state and int(cached_sync_state.get("known_match_count") or 0) > 0)
+        refresh_notice: str | None = None
+
+        if not had_cached_matches:
+            run_with_rate_limit_retry(
+                lambda: service.ensure_player_exists(player_id),
+                operation_label="player profile",
+            )
+
+        sync_filters = QueryFilters(
+            player_id=player_id,
+            game_mode=23,
+            game_mode_name="Turbo",
+            days=active_days,
+            start_date=active_start_date,
+            patch_names=active_patches,
         )
-        patch_filtered_matches: list[MatchSummary] | None = None
-        if active_patches and not supports_patch_overview:
-            base_filters = QueryFilters(
-                player_id=player_id,
-                game_mode=23,
-                game_mode_name="Turbo",
-                days=None,
-                start_date=active_start_date,
+        summary_sync = service.sync_recent_matches_into_cache(sync_filters, force=True)
+        if summary_sync.rate_limited:
+            refresh_notice = (
+                "OpenDota rate limit reached while checking for newer matches. "
+                "Showing cached dashboard data."
             )
-            all_turbo_matches = run_with_rate_limit_retry(
-                lambda: service.load_match_snapshot(base_filters, force_sync=True, hydrate_details=True)[0],
-                operation_label="patch-filtered matches",
-            )
-            selected_set = set(active_patches)
-            patch_filtered_matches = [
-                m for m in all_turbo_matches if _resolve_patch_name(m.start_time, patch_timeline) in selected_set
-            ]
-            service.enrich_hero_damage(
-                player_id,
-                patch_filtered_matches,
-                max_fallback_detail_calls=max(120, len(patch_filtered_matches)),
-                allow_detail_fetch=False,
-            )
-            overview = _build_overview_from_matches(patch_filtered_matches, service)
-        else:
-            overview_kwargs: dict[str, object] = {
-                "player_id": player_id,
-                "days": active_days,
-                "start_date": active_start_date,
-                "force_sync": True,
-                "hydrate_details": True,
-            }
-            if active_patches:
-                overview_kwargs["patch_names"] = active_patches
-            overview_snapshot = run_with_rate_limit_retry(
-                lambda: _get_turbo_overview_snapshot_safe(service, **overview_kwargs),
-                operation_label="hero overview",
-            )
-            overview = overview_snapshot.overview
+        elif summary_sync.error_message:
+            if had_cached_matches:
+                refresh_notice = (
+                    f"{summary_sync.error_message} "
+                    "Showing cached dashboard data."
+                )
+            else:
+                raise OpenDotaError(summary_sync.error_message)
+
+        overview, patch_filtered_matches = _load_cached_dashboard_snapshot(
+            service,
+            player_id=player_id,
+            active_days=active_days,
+            active_start_date=active_start_date,
+            active_patches=active_patches,
+            supports_patch_overview=supports_patch_overview,
+            patch_timeline=patch_timeline,
+        )
 
         if overview and overview_looks_stale(overview):
             st.session_state["overview_requires_refresh"] = True
@@ -1636,9 +1656,10 @@ if load:
                 patch_filtered_matches_value=patch_filtered_matches,
                 min_hero_matches_value=min_hero_matches,
                 min_item_matches_value=min_item_matches,
-                loaded_at_value=_utcnow_iso(),
-                cache_only=False,
+                loaded_at_value=str(_coalesce_dashboard_cache_timestamp(service.get_cached_sync_state(player_id, game_mode=23)) or _utcnow_iso()),
+                cache_only=refresh_notice is not None,
             )
+            st.session_state["dashboard_refresh_notice"] = refresh_notice
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 
@@ -1674,6 +1695,10 @@ else:
 st.subheader(f"Player {player_id} - Turbo - {selected_filter_text}")
 if overview_cache_only:
     st.caption("Loaded from local cache. Click `Refresh Turbo Dashboard` to sync new matches from OpenDota.")
+
+dashboard_refresh_notice = st.session_state.get("dashboard_refresh_notice")
+if isinstance(dashboard_refresh_notice, str) and dashboard_refresh_notice.strip():
+    st.warning(dashboard_refresh_notice)
 
 if not overview:
     st.warning("No Turbo matches found for selected period.")

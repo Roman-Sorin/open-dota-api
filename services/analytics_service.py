@@ -12,7 +12,7 @@ from clients.stratz_client import StratzClient, StratzError, StratzRateLimitErro
 from models.dtos import ItemStat, ItemsResult, MatchRow, MatchSummary, QueryFilters, StatsResult
 from parsers.input_parser import HeroParser
 from utils.cache import JsonFileCache
-from utils.exceptions import OpenDotaNotFoundError, OpenDotaRateLimitError
+from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError
 from utils.helpers import calculate_kda_ratio, format_duration, unix_to_dt, winrate_percent
 from utils.match_filters import is_excluded_match_id
 from utils.match_store import MatchStoreProtocol
@@ -93,6 +93,17 @@ class TurboOverviewSnapshot:
     overview: list[dict[str, Any]]
     detail_status: MatchDetailHydrationStatus
     is_valid: bool
+
+
+@dataclass(slots=True)
+class MatchSummarySyncResult:
+    inserted_match_ids: list[int]
+    rate_limited: bool
+    error_message: str | None = None
+
+    @property
+    def completed(self) -> bool:
+        return not self.rate_limited and not self.error_message
 
 
 @dataclass(slots=True)
@@ -1194,6 +1205,34 @@ class DotaAnalyticsService:
                 )
             )
         return self.get_cached_matches(filters)
+
+    def sync_recent_matches_into_cache(
+        self,
+        filters: QueryFilters,
+        *,
+        force: bool = True,
+    ) -> MatchSummarySyncResult:
+        if self.match_store is None:
+            return MatchSummarySyncResult(inserted_match_ids=[], rate_limited=False)
+        try:
+            inserted_match_ids = self._sync_player_matches(
+                filters,
+                force=force,
+                check_recent_head_page=True,
+            )
+        except OpenDotaRateLimitError:
+            return MatchSummarySyncResult(
+                inserted_match_ids=[],
+                rate_limited=True,
+                error_message="OpenDota rate limit reached while checking for newer matches.",
+            )
+        except OpenDotaError as exc:
+            return MatchSummarySyncResult(
+                inserted_match_ids=[],
+                rate_limited=False,
+                error_message=str(exc),
+            )
+        return MatchSummarySyncResult(inserted_match_ids=inserted_match_ids, rate_limited=False)
 
     def load_match_snapshot(
         self,
