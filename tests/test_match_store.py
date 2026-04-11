@@ -49,6 +49,26 @@ def test_match_store_persists_summary_and_details() -> None:
     assert store.get_latest_player_match_update(123, game_mode=23) is not None
 
 
+def test_match_parse_request_persists_source_and_reason() -> None:
+    store = SQLiteMatchStore(":memory:")
+    store.upsert_match_parse_request(
+        77,
+        123,
+        status="pending",
+        parse_job_id=9001,
+        request_source="opendota",
+        request_reason="stale_pending_retry",
+        requested_at="2026-04-11T16:00:00+00:00",
+    )
+
+    row = store.get_match_parse_request(77)
+
+    assert row is not None
+    assert row["parse_job_id"] == 9001
+    assert row["request_source"] == "opendota"
+    assert row["request_reason"] == "stale_pending_retry"
+
+
 class _FakeClient:
     def __init__(self) -> None:
         self.calls = 0

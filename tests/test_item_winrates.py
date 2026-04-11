@@ -267,3 +267,47 @@ def test_item_winrate_snapshot_includes_consumed_buffs_from_cached_details() -> 
     assert scepter["matches_with_item"] == 2
     assert scepter["wins_with_item"] == 1
     assert scepter["is_buff"] is True
+
+
+def test_item_winrate_snapshot_does_not_mark_inventory_moon_shard_as_buff() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        _match(1, True, [247]),
+        _match(2, False, [247]),
+    ]
+    service._match_details_memory_cache[1] = {
+        "players": [
+            {
+                "account_id": 123,
+                "player_slot": 0,
+                "item_0": 247,
+                "item_1": 0,
+                "item_2": 0,
+                "item_3": 0,
+                "item_4": 0,
+                "item_5": 0,
+                "first_purchase_time": {"moon_shard": 600},
+            }
+        ]
+    }
+    service._match_details_memory_cache[2] = {
+        "players": [
+            {
+                "account_id": 123,
+                "player_slot": 0,
+                "item_0": 247,
+                "item_1": 0,
+                "item_2": 0,
+                "item_3": 0,
+                "item_4": 0,
+                "item_5": 0,
+                "first_purchase_time": {"moon_shard": 660},
+            }
+        ]
+    }
+
+    snapshot = service.get_item_winrate_snapshot(player_id=123, matches=matches, top_n=20, allow_detail_fetch=False)
+
+    moon_shard = next(row for row in snapshot.rows if row["item"] == "Moon Shard")
+    assert moon_shard["matches_with_item"] == 2
+    assert moon_shard["is_buff"] is False

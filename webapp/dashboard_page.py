@@ -974,18 +974,6 @@ def _player_row_buff_items_local(service: DotaAnalyticsService, player_row: dict
             except (TypeError, ValueError):
                 by_item_id[item_id] = None
 
-    first_purchase_time = player_row.get("first_purchase_time")
-    if isinstance(first_purchase_time, dict):
-        for item_key, item_id in CONSUMABLE_BUFF_ITEM_KEYS.items():
-            if item_id in by_item_id and by_item_id[item_id] is not None:
-                continue
-            if item_key not in first_purchase_time:
-                continue
-            try:
-                by_item_id[item_id] = max(int(first_purchase_time[item_key]) // 60, 0)
-            except (TypeError, ValueError):
-                by_item_id[item_id] = None
-
     for field_name, item_key in (
         ("moonshard", "moon_shard"),
         ("aghanims_scepter", "ultimate_scepter"),
@@ -995,6 +983,18 @@ def _player_row_buff_items_local(service: DotaAnalyticsService, player_row: dict
             continue
         item_id = CONSUMABLE_BUFF_ITEM_KEYS[item_key]
         by_item_id.setdefault(item_id, None)
+
+    first_purchase_time = player_row.get("first_purchase_time")
+    if isinstance(first_purchase_time, dict):
+        for item_key, item_id in CONSUMABLE_BUFF_ITEM_KEYS.items():
+            if item_id not in by_item_id or by_item_id[item_id] is not None:
+                continue
+            if item_key not in first_purchase_time:
+                continue
+            try:
+                by_item_id[item_id] = max(int(first_purchase_time[item_key]) // 60, 0)
+            except (TypeError, ValueError):
+                by_item_id[item_id] = None
 
     return [(item_id, by_item_id[item_id]) for item_id in by_item_id]
 
@@ -1071,6 +1071,8 @@ def _build_item_winrate_snapshot_from_cached_inventory(
 
     appear_counter: dict[int, int] = {}
     win_counter: dict[int, int] = {}
+    buff_appearance_counter: dict[int, int] = {}
+    inventory_appearance_counter: dict[int, int] = {}
     timing_sum_by_item: dict[int, int] = {}
     timing_count_by_item: dict[int, int] = {}
     detail_backed_matches = 0
@@ -1085,6 +1087,8 @@ def _build_item_winrate_snapshot_from_cached_inventory(
             if int(item_id or 0) > 0
         }
         unique_items = set(summary_items)
+        inventory_items_this_match = set(summary_items)
+        buff_items_this_match: set[int] = set()
         detail_backed_this_match = False
         purchase_times_by_item: dict[int, list[int]] = {}
 
@@ -1115,6 +1119,22 @@ def _build_item_winrate_snapshot_from_cached_inventory(
                     buff_items = _player_row_buff_items_local(service, player_row)
                     detail_items.update(item_id for item_id, _ in buff_items)
                     unique_items.update(detail_items)
+                    inventory_items_this_match = {
+                        int(player_row.get(field_name) or 0)
+                        for field_name in (
+                            "item_0",
+                            "item_1",
+                            "item_2",
+                            "item_3",
+                            "item_4",
+                            "item_5",
+                            "backpack_0",
+                            "backpack_1",
+                            "backpack_2",
+                        )
+                        if int(player_row.get(field_name) or 0) > 0
+                    }
+                    buff_items_this_match = {item_id for item_id, _ in buff_items if item_id > 0}
                     detail_backed_this_match = True
                     purchase_times_by_item = _build_item_purchase_times_by_item(
                         service,
@@ -1142,6 +1162,10 @@ def _build_item_winrate_snapshot_from_cached_inventory(
             appear_counter[item_id] = appear_counter.get(item_id, 0) + 1
             if match.did_win:
                 win_counter[item_id] = win_counter.get(item_id, 0) + 1
+            if item_id in inventory_items_this_match:
+                inventory_appearance_counter[item_id] = inventory_appearance_counter.get(item_id, 0) + 1
+            if item_id in buff_items_this_match:
+                buff_appearance_counter[item_id] = buff_appearance_counter.get(item_id, 0) + 1
             item_times = purchase_times_by_item.get(item_id)
             if item_times:
                 timing_sum_by_item[item_id] = timing_sum_by_item.get(item_id, 0) + min(item_times)
@@ -1167,7 +1191,10 @@ def _build_item_winrate_snapshot_from_cached_inventory(
                     else None
                 ),
                 "timed_matches_with_item": avg_time_count,
-                "is_buff": item_id in CONSUMABLE_BUFF_ITEM_KEYS.values(),
+                "is_buff": (
+                    buff_appearance_counter.get(item_id, 0) > 0
+                    and inventory_appearance_counter.get(item_id, 0) == 0
+                ),
             }
         )
 

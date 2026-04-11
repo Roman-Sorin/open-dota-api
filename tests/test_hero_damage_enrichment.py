@@ -727,6 +727,73 @@ def test_recent_hero_matches_include_consumed_buff_items() -> None:
     assert rows[0].items[0].is_buff is True
 
 
+def test_recent_hero_matches_do_not_mark_unconsumed_moon_shard_as_buff() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=104,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=7,
+            deaths=8,
+            assists=10,
+            duration=1771,
+            hero_id=1,
+            item_0=145,
+            item_1=247,
+            item_2=116,
+            item_3=263,
+            item_4=208,
+            item_5=139,
+        )
+    ]
+
+    service.references.item_names_by_id.update(
+        {
+            145: "Battle Fury",
+            247: "Moon Shard",
+            116: "Black King Bar",
+            263: "Eye of Skadi",
+            208: "Abyssal Blade",
+            139: "Butterfly",
+        }
+    )
+
+    service._get_match_details_cached = lambda _: {  # type: ignore[method-assign]
+        "players": [
+            {
+                "account_id": 123,
+                "player_slot": 0,
+                "level": 27,
+                "hero_variant": 0,
+                "item_0": 145,
+                "item_1": 247,
+                "item_2": 116,
+                "item_3": 263,
+                "item_4": 208,
+                "item_5": 139,
+                "aghanims_shard": 1,
+                "first_purchase_time": {
+                    "bfury": 300,
+                    "moon_shard": 600,
+                    "black_king_bar": 780,
+                    "skadi": 1320,
+                    "abyssal_blade": 1440,
+                    "butterfly": 1620,
+                },
+            }
+        ]
+    }
+
+    rows = service.build_recent_hero_matches(player_id=123, matches=matches, limit=10)
+
+    moon_shards = [item for item in rows[0].items if item.item_id == 247]
+    assert len(moon_shards) == 1
+    assert moon_shards[0].is_buff is False
+    assert moon_shards[0].purchase_time_min == 10
+
+
 def test_turbo_hero_overview_matches_reported_muerta_example() -> None:
     service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
     matches = [

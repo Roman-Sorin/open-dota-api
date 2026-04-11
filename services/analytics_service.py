@@ -1000,18 +1000,6 @@ class DotaAnalyticsService:
                 except (TypeError, ValueError):
                     by_item_id[item_id] = None
 
-        first_purchase_time = player_row.get("first_purchase_time")
-        if isinstance(first_purchase_time, dict):
-            for item_key, item_id in self.CONSUMABLE_BUFF_ITEM_IDS.items():
-                if item_id in by_item_id and by_item_id[item_id] is not None:
-                    continue
-                if item_key not in first_purchase_time:
-                    continue
-                try:
-                    by_item_id[item_id] = max(int(first_purchase_time[item_key]) // 60, 0)
-                except (TypeError, ValueError):
-                    by_item_id[item_id] = None
-
         for field_name, item_key in (
             ("moonshard", "moon_shard"),
             ("aghanims_scepter", "ultimate_scepter"),
@@ -1021,6 +1009,18 @@ class DotaAnalyticsService:
                 continue
             item_id = self.CONSUMABLE_BUFF_ITEM_IDS[item_key]
             by_item_id.setdefault(item_id, None)
+
+        first_purchase_time = player_row.get("first_purchase_time")
+        if isinstance(first_purchase_time, dict):
+            for item_key, item_id in self.CONSUMABLE_BUFF_ITEM_IDS.items():
+                if item_id not in by_item_id or by_item_id[item_id] is not None:
+                    continue
+                if item_key not in first_purchase_time:
+                    continue
+                try:
+                    by_item_id[item_id] = max(int(first_purchase_time[item_key]) // 60, 0)
+                except (TypeError, ValueError):
+                    by_item_id[item_id] = None
 
         return [(item_id, by_item_id[item_id]) for item_id in by_item_id]
 
@@ -1722,6 +1722,8 @@ class DotaAnalyticsService:
                     player_id,
                     status="pending",
                     parse_job_id=parse_job_id,
+                    request_source="opendota",
+                    request_reason="recent_match_timing_repair",
                     requested_at=self._utcnow_iso(),
                 )
 
@@ -1990,6 +1992,8 @@ class DotaAnalyticsService:
                         match_id,
                         player_id,
                         status="completed",
+                        request_source="cache",
+                        request_reason="timing_data_already_cached",
                         last_polled_at=now_iso,
                         completed_at=now_iso,
                         increment_attempts=False,
@@ -2008,6 +2012,8 @@ class DotaAnalyticsService:
                             match_id,
                             player_id,
                             status="completed",
+                            request_source="stratz",
+                            request_reason="timing_recovered_from_stratz",
                             last_polled_at=now_iso,
                             completed_at=now_iso,
                             increment_attempts=False,
@@ -2026,6 +2032,8 @@ class DotaAnalyticsService:
                         player_id,
                         status="pending",
                         parse_job_id=parse_job_id,
+                        request_source="opendota",
+                        request_reason="parse_job_status_poll_rate_limited",
                         last_polled_at=now_iso,
                         increment_attempts=False,
                     )
@@ -2037,6 +2045,8 @@ class DotaAnalyticsService:
                         player_id,
                         status="pending",
                         parse_job_id=parse_job_id,
+                        request_source="opendota",
+                        request_reason="parse_job_status_pending",
                         last_polled_at=now_iso,
                         increment_attempts=False,
                     )
@@ -2050,6 +2060,8 @@ class DotaAnalyticsService:
                         player_id,
                         status="pending",
                         parse_job_id=parse_job_id,
+                        request_source="opendota",
+                        request_reason="match_detail_refresh_rate_limited",
                         last_polled_at=now_iso,
                         increment_attempts=False,
                     )
@@ -2066,6 +2078,8 @@ class DotaAnalyticsService:
                         player_id,
                         status="completed",
                         parse_job_id=parse_job_id,
+                        request_source="opendota",
+                        request_reason="parse_job_completed",
                         last_polled_at=now_iso,
                         completed_at=now_iso,
                         increment_attempts=False,
@@ -2082,6 +2096,8 @@ class DotaAnalyticsService:
                         player_id,
                         status="pending",
                         parse_job_id=int(request.get("parse_job_id") or 0) or None,
+                        request_source="opendota",
+                        request_reason="stale_pending_retry_rate_limited",
                         last_polled_at=now_iso,
                         increment_attempts=False,
                     )
@@ -2092,6 +2108,8 @@ class DotaAnalyticsService:
                     player_id,
                     status="pending",
                     parse_job_id=parse_job_id,
+                    request_source="opendota",
+                    request_reason="stale_pending_retry" if int(request.get("parse_job_id") or 0) > 0 else "legacy_pending_requeue",
                     requested_at=now_iso,
                     last_polled_at=now_iso,
                     last_error=None,
@@ -2299,6 +2317,8 @@ class DotaAnalyticsService:
                             player_id,
                             status="pending",
                             parse_job_id=parse_job_id,
+                            request_source="opendota",
+                            request_reason="new_missing_timing_parse_request",
                             requested_at=self._utcnow_iso(),
                         )
                         parse_requested += 1
@@ -2501,6 +2521,8 @@ class DotaAnalyticsService:
 
         appear_counter: Counter[int] = Counter()
         win_counter: Counter[int] = Counter()
+        buff_appearance_counter: Counter[int] = Counter()
+        inventory_appearance_counter: Counter[int] = Counter()
 
         fallback_detail_calls = 0
         max_fallback_detail_calls = 35
@@ -2511,6 +2533,8 @@ class DotaAnalyticsService:
         for match in matches:
             summary_items = {item_id for item_id in self._summary_item_ids(match) if item_id > 0}
             unique_items = set(summary_items)
+            inventory_items_this_match = set(summary_items)
+            buff_items_this_match: set[int] = set()
             detail_backed_this_match = False
 
             details_cached = self._has_match_details_cached(match.match_id)
@@ -2530,11 +2554,15 @@ class DotaAnalyticsService:
                         player_slot=match.player_slot,
                     )
                     if player_row:
-                        detail_items = set(self._player_row_item_winrate_ids(player_row))
-                        detail_items.update(item_id for item_id, _ in self._player_row_buff_items(player_row))
+                        inventory_items = {item_id for item_id in self._player_row_item_winrate_ids(player_row) if item_id > 0}
+                        buff_items = {item_id for item_id, _ in self._player_row_buff_items(player_row) if item_id > 0}
+                        detail_items = set(inventory_items)
+                        detail_items.update(buff_items)
                         detail_items.discard(0)
                         if detail_items:
                             unique_items.update(detail_items)
+                            inventory_items_this_match = inventory_items
+                            buff_items_this_match = buff_items
                             detail_backed_this_match = True
 
             if not unique_items:
@@ -2550,6 +2578,10 @@ class DotaAnalyticsService:
                 appear_counter[item_id] += 1
                 if match.did_win:
                     win_counter[item_id] += 1
+                if item_id in inventory_items_this_match:
+                    inventory_appearance_counter[item_id] += 1
+                if item_id in buff_items_this_match:
+                    buff_appearance_counter[item_id] += 1
 
         rows: list[dict[str, Any]] = []
         for item_id, appearances in appear_counter.items():
@@ -2565,7 +2597,7 @@ class DotaAnalyticsService:
                     "item_pick_rate": winrate_percent(appearances, total),
                     "wins_with_item": wins,
                     "item_winrate": winrate_percent(wins, appearances),
-                    "is_buff": item_id in self.CONSUMABLE_BUFF_ITEM_IDS.values(),
+                    "is_buff": buff_appearance_counter[item_id] > 0 and inventory_appearance_counter[item_id] == 0,
                 }
             )
 
@@ -2790,6 +2822,8 @@ class DotaAnalyticsService:
                                 match_id,
                                 account_id,
                                 status="completed",
+                                request_source="stratz",
+                                request_reason="timing_recovered_from_stratz",
                                 last_polled_at=self._utcnow_iso(),
                                 completed_at=self._utcnow_iso(),
                             )
