@@ -35,6 +35,7 @@ Turbo-only dashboard for your account:
 - `Database` `Sync History` now includes a `Source` column so you can see whether each run was `Manual`, `Auto`, or `Forced`
 - `Database` summary sync now still inspects the newest OpenDota page during long-window cooldowns, so fresh matches show up without waiting for the old 12-hour incremental throttle to expire
 - `Database` background cycles now keep a separate summary head-sync cooldown, so auto-fill can keep working from cached matches/STRATZ without hammering OpenDota summaries on every 15-second rerun
+- `Database` also keeps a separate STRATZ retry window, so a temporary STRATZ `429` no longer causes the app to silently hammer the Stats fallback on every subsequent cycle
 - Default `Database` `Balanced` mode now uses `5` detail fetches, `5` parse requests, and a `15` second interval
 - `Cached Matches` now supports pagination with configurable page size and direct navigation to first/previous/next/last pages
 - `Database` times are shown in Israel time and the page now exposes user-facing `Sync Speed` presets (`Safe`, `Balanced`, `Fast`) instead of only raw batch knobs

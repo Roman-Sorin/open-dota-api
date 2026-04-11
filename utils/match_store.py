@@ -176,6 +176,7 @@ class SQLiteMatchStore:
                 last_error TEXT,
                 last_rate_limited_at TEXT,
                 next_retry_at TEXT,
+                next_stratz_retry_at TEXT,
                 next_pending_parse_check_at TEXT,
                 last_summary_sync_at TEXT,
                 target_match_count INTEGER NOT NULL DEFAULT 0,
@@ -247,6 +248,8 @@ class SQLiteMatchStore:
         state_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(background_sync_state)").fetchall()}
         if "next_pending_parse_check_at" not in state_columns:
             self._conn.execute("ALTER TABLE background_sync_state ADD COLUMN next_pending_parse_check_at TEXT")
+        if "next_stratz_retry_at" not in state_columns:
+            self._conn.execute("ALTER TABLE background_sync_state ADD COLUMN next_stratz_retry_at TEXT")
         parse_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(match_parse_requests)").fetchall()}
         if "parse_job_id" not in parse_columns:
             self._conn.execute("ALTER TABLE match_parse_requests ADD COLUMN parse_job_id INTEGER")
@@ -645,6 +648,7 @@ class SQLiteMatchStore:
             "last_error": fields.get("last_error", current.get("last_error")),
             "last_rate_limited_at": fields.get("last_rate_limited_at", current.get("last_rate_limited_at")),
             "next_retry_at": fields.get("next_retry_at", current.get("next_retry_at")),
+            "next_stratz_retry_at": fields.get("next_stratz_retry_at", current.get("next_stratz_retry_at")),
             "next_pending_parse_check_at": fields.get("next_pending_parse_check_at", current.get("next_pending_parse_check_at")),
             "last_summary_sync_at": fields.get("last_summary_sync_at", current.get("last_summary_sync_at")),
             "target_match_count": int(fields.get("target_match_count", current.get("target_match_count", 0)) or 0),
@@ -671,12 +675,12 @@ class SQLiteMatchStore:
             """
             INSERT INTO background_sync_state (
                 account_id, scope_key, window_days, status, last_started_at, last_finished_at, last_status,
-                last_error, last_rate_limited_at, next_retry_at, next_pending_parse_check_at, last_summary_sync_at, target_match_count,
+                last_error, last_rate_limited_at, next_retry_at, next_stratz_retry_at, next_pending_parse_check_at, last_summary_sync_at, target_match_count,
                 detail_cached_count, timing_ready_count, missing_detail_count, missing_timing_count,
                 pending_parse_count, newest_match_start_time, oldest_match_start_time,
                 newest_fully_cached_start_time, oldest_fully_cached_start_time,
                 total_runs, total_detail_fetches, total_parse_requests
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(account_id, scope_key, window_days) DO UPDATE SET
                 status = excluded.status,
                 last_started_at = excluded.last_started_at,
@@ -685,6 +689,7 @@ class SQLiteMatchStore:
                 last_error = excluded.last_error,
                 last_rate_limited_at = excluded.last_rate_limited_at,
                 next_retry_at = excluded.next_retry_at,
+                next_stratz_retry_at = excluded.next_stratz_retry_at,
                 next_pending_parse_check_at = excluded.next_pending_parse_check_at,
                 last_summary_sync_at = excluded.last_summary_sync_at,
                 target_match_count = excluded.target_match_count,
@@ -712,6 +717,7 @@ class SQLiteMatchStore:
                 merged["last_error"],
                 merged["last_rate_limited_at"],
                 merged["next_retry_at"],
+                merged["next_stratz_retry_at"],
                 merged["next_pending_parse_check_at"],
                 merged["last_summary_sync_at"],
                 merged["target_match_count"],

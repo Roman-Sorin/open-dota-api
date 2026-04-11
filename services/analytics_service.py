@@ -107,6 +107,12 @@ class MatchSummarySyncResult:
 
 
 @dataclass(slots=True)
+class StratzBackfillResult:
+    completed: int = 0
+    rate_limited: bool = False
+
+
+@dataclass(slots=True)
 class ItemWinrateSnapshot:
     rows: list[dict[str, Any]]
     total_matches: int
@@ -1682,9 +1688,9 @@ class DotaAnalyticsService:
         player_id: int,
         matches: list[MatchSummary],
         batch_size: int = 20,
-    ) -> int:
+    ) -> StratzBackfillResult:
         if self.stratz_client is None or batch_size <= 0:
-            return 0
+            return StratzBackfillResult()
 
         prioritized_matches: list[MatchSummary] = []
         fallback_matches: list[MatchSummary] = []
@@ -1707,9 +1713,9 @@ class DotaAnalyticsService:
             else:
                 fallback_matches.append(match)
 
-        completed = 0
+        result = StratzBackfillResult()
         for match in [*prioritized_matches, *fallback_matches]:
-            if completed >= batch_size:
+            if result.completed >= batch_size:
                 break
             details = self.get_match_details_if_cached(match.match_id)
             if not isinstance(details, dict):
@@ -1723,9 +1729,14 @@ class DotaAnalyticsService:
                 continue
             if self._player_row_has_timing_data(player_row):
                 continue
-            if self._enrich_match_details_with_stratz_timings(match.match_id, details):
-                completed += 1
-        return completed
+            try:
+                changed = self._enrich_match_details_with_stratz_timings(match.match_id, details)
+            except StratzRateLimitError:
+                result.rate_limited = True
+                break
+            if changed:
+                result.completed += 1
+        return result
 
     def backfill_item_timing_details(
         self,
@@ -1742,11 +1753,12 @@ class DotaAnalyticsService:
 
         requested_ids: list[int] = []
         already_available = 0
-        stratz_completed = self.backfill_item_timing_details_from_stratz(
+        stratz_result = self.backfill_item_timing_details_from_stratz(
             player_id=player_id,
             matches=target_matches,
             batch_size=len(target_matches),
         )
+        stratz_completed = stratz_result.completed
         for match in target_matches:
             try:
                 details = self.get_match_details_if_cached(match.match_id)
@@ -2246,12 +2258,23 @@ class DotaAnalyticsService:
             started_at = self._utcnow_iso()
             finished_at = self._utcnow_iso()
             matches = self.get_cached_matches(filters)
-            if matches:
+            stratz_retry_blocked = self._iso_is_future(str(state.get("next_stratz_retry_at") or ""))
+            if matches and not stratz_retry_blocked:
                 request_targets_used.add("STRATZ")
-            stratz_completed = self.backfill_item_timing_details_from_stratz(
-                player_id=player_id,
-                matches=matches,
-                batch_size=max(max_parse_requests, max_detail_fetches, 5),
+            stratz_result = (
+                self.backfill_item_timing_details_from_stratz(
+                    player_id=player_id,
+                    matches=matches,
+                    batch_size=max(max_parse_requests, max_detail_fetches, 5),
+                )
+                if not stratz_retry_blocked
+                else StratzBackfillResult()
+            )
+            stratz_completed = stratz_result.completed
+            next_stratz_retry_at = (
+                self._iso_after_seconds(rate_limit_cooldown_seconds)
+                if stratz_result.rate_limited
+                else state.get("next_stratz_retry_at")
             )
             if stratz_completed > 0:
                 data_sources_used.add("STRATZ")
@@ -2259,6 +2282,10 @@ class DotaAnalyticsService:
             note = "Waiting for the next retry window after a previous OpenDota rate limit."
             if stratz_completed > 0:
                 note += f" Recovered timings for {stratz_completed} match(es) from STRATZ during OpenDota cooldown."
+            elif stratz_result.rate_limited:
+                note += " STRATZ rate limit was hit during cooldown maintenance."
+            elif stratz_retry_blocked:
+                note += " Waiting for the next STRATZ retry window."
             previous_total_runs = int(state.get("total_runs") or 0)
             previous_detail_fetches = int(state.get("total_detail_fetches") or 0)
             previous_parse_requests = int(state.get("total_parse_requests") or 0)
@@ -2273,6 +2300,7 @@ class DotaAnalyticsService:
                 last_error=None,
                 last_rate_limited_at=state.get("last_rate_limited_at"),
                 next_retry_at=state.get("next_retry_at"),
+                next_stratz_retry_at=next_stratz_retry_at,
                 next_pending_parse_check_at=state.get("next_pending_parse_check_at"),
                 last_summary_sync_at=state.get("last_summary_sync_at"),
                 target_match_count=coverage.total_matches,
@@ -2348,6 +2376,7 @@ class DotaAnalyticsService:
         stratz_completed = 0
         rate_limited = False
         next_retry_at: str | None = None
+        next_stratz_retry_at: str | None = state.get("next_stratz_retry_at")
         note_parts: list[str] = []
         status = "completed"
 
@@ -2429,15 +2458,26 @@ class DotaAnalyticsService:
                         next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
                         note_parts.append("OpenDota rate limit was hit during detail hydration.")
 
-            if matches:
+            stratz_retry_blocked = self._iso_is_future(str(next_stratz_retry_at or ""))
+            if matches and not stratz_retry_blocked:
                 request_targets_used.add("STRATZ")
-            stratz_completed = self.backfill_item_timing_details_from_stratz(
-                player_id=player_id,
-                matches=matches,
-                batch_size=max(max_parse_requests, max_detail_fetches, 5),
+            stratz_result = (
+                self.backfill_item_timing_details_from_stratz(
+                    player_id=player_id,
+                    matches=matches,
+                    batch_size=max(max_parse_requests, max_detail_fetches, 5),
+                )
+                if not stratz_retry_blocked
+                else StratzBackfillResult()
             )
+            stratz_completed = stratz_result.completed
             if stratz_completed > 0:
                 data_sources_used.add("STRATZ")
+            if stratz_result.rate_limited:
+                next_stratz_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
+                note_parts.append("STRATZ rate limit was hit during timing recovery.")
+            elif stratz_retry_blocked:
+                note_parts.append("Waiting for the next STRATZ retry window.")
 
             if not rate_limited:
                 matches = self.get_cached_matches(filters)
@@ -2448,7 +2488,7 @@ class DotaAnalyticsService:
                 ).pending_parse_count
                 if pending_refresh.completed > 0:
                     note_parts.append(f"Resolved {pending_refresh.completed} pending replay parse job(s).")
-                if pending_request_count == 0:
+                if pending_request_count == 0 and max_parse_requests > 0:
                     parse_candidates: list[int] = []
                     for match in matches:
                         details = self.get_match_details_if_cached(match.match_id)
@@ -2539,6 +2579,7 @@ class DotaAnalyticsService:
                 last_error=None,
                 last_rate_limited_at=started_at if rate_limited else state.get("last_rate_limited_at"),
                 next_retry_at=next_retry_at,
+                next_stratz_retry_at=next_stratz_retry_at,
                 next_pending_parse_check_at=next_pending_parse_check_at,
                 last_summary_sync_at=finished_at,
                 target_match_count=coverage.total_matches,
@@ -2901,7 +2942,9 @@ class DotaAnalyticsService:
 
         try:
             stratz_players = self.stratz_client.get_match_item_purchases(match_id)
-        except (StratzError, StratzRateLimitError):
+        except StratzRateLimitError:
+            raise
+        except StratzError:
             return False
 
         if not stratz_players:

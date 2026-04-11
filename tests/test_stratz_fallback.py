@@ -146,14 +146,15 @@ def test_background_sync_coverage_counts_reported_match_as_ready_after_stratz_ba
     matches = service.get_cached_matches(
         QueryFilters(player_id=1233793238, game_mode=23, game_mode_name="Turbo")
     )
-    completed = service.backfill_item_timing_details_from_stratz(
+    result = service.backfill_item_timing_details_from_stratz(
         player_id=1233793238,
         matches=matches,
         batch_size=1,
     )
     coverage = service.get_background_sync_coverage(player_id=1233793238, game_mode=23, window_days=365)
 
-    assert completed == 1
+    assert result.completed == 1
+    assert result.rate_limited is False
     assert coverage.timing_ready_count == 1
     assert coverage.missing_timing_count == 0
 
@@ -258,13 +259,14 @@ def test_stratz_backfill_prioritizes_pending_matches_outside_newest_head() -> No
     matches = service.get_cached_matches(
         QueryFilters(player_id=1233793238, game_mode=23, game_mode_name="Turbo")
     )
-    completed = service.backfill_item_timing_details_from_stratz(
+    result = service.backfill_item_timing_details_from_stratz(
         player_id=1233793238,
         matches=matches,
         batch_size=1,
     )
     parse_request = store.get_match_parse_request(8622417925)
 
-    assert completed == 1
+    assert result.completed == 1
+    assert result.rate_limited is False
     assert parse_request is not None
     assert parse_request["status"] == "completed"

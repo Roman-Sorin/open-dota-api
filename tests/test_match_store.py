@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from clients.stratz_client import StratzRateLimitError
 from models.dtos import QueryFilters
 from services.analytics_service import DotaAnalyticsService
 from utils.exceptions import OpenDotaRateLimitError
@@ -1318,6 +1319,95 @@ def test_background_sync_cycle_skips_summary_head_sync_when_recent_summary_snaps
     assert result.rate_limited is False
     assert result.summary_new_matches == 0
     assert "Using cached summary snapshot; next OpenDota head sync is not due yet." in result.note
+
+
+def test_background_sync_cycle_applies_stratz_retry_window_after_stratz_rate_limit() -> None:
+    class _StratzRateLimitedClient(_FakeClient):
+        def get_player_matches(self, **kwargs):
+            raise AssertionError("summary sync should have been skipped while recent cache exists")
+
+    class _RateLimitedStratzClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get_match_item_purchases(self, match_id: int):
+            self.calls += 1
+            raise StratzRateLimitError("STRATZ API rate limit reached")
+
+    client = _StratzRateLimitedClient()
+    stratz_client = _RateLimitedStratzClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store, stratz_client=stratz_client)
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 810101,
+                "start_time": 1771552800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 8,
+                "deaths": 3,
+                "assists": 11,
+                "duration": 1400,
+                "hero_id": 1,
+                "item_0": 1,
+            }
+        ],
+    )
+    store.upsert_match_detail(
+        810101,
+        {
+            "match_id": 810101,
+            "version": None,
+            "players": [
+                {
+                    "account_id": 123,
+                    "player_slot": 0,
+                    "item_0": 1,
+                }
+            ],
+        },
+    )
+    now_iso = datetime.now(tz=timezone.utc).isoformat()
+    store.upsert_sync_state(
+        123,
+        "gm:23",
+        last_incremental_sync_at=now_iso,
+        known_match_count=1,
+    )
+    store.upsert_background_sync_state(
+        123,
+        "gm:23",
+        365,
+        last_summary_sync_at=now_iso,
+    )
+
+    first = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=0,
+        rate_limit_cooldown_seconds=50,
+        force=False,
+    )
+    second = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=0,
+        rate_limit_cooldown_seconds=50,
+        force=False,
+    )
+    state = service.get_background_sync_state(123, window_days=365)
+
+    assert "STRATZ rate limit was hit during timing recovery." in first.note
+    assert "Waiting for the next STRATZ retry window." in second.note
+    assert state is not None
+    assert state["next_stratz_retry_at"] is not None
+    assert stratz_client.calls == 1
 
 
 def test_background_sync_cycle_refreshes_oldest_pending_parse_requests_first() -> None:
