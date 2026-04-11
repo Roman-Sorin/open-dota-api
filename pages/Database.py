@@ -431,6 +431,8 @@ recent_runs_df = pd.DataFrame(
             "Started": _format_datetime(str(row.get("started_at")) if row.get("started_at") else None),
             "Status": str(row.get("status") or ""),
             "Source": str(row.get("run_source") or "manual").title(),
+            "Requested Via": str(row.get("request_targets") or "-"),
+            "Data From": str(row.get("data_sources") or "-"),
             "New summaries": int(row.get("summary_new_matches") or 0),
             "Detail fetched": int(row.get("detail_completed") or 0),
             "Parse requested": int(row.get("parse_requested") or 0),

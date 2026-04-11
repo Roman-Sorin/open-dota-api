@@ -211,6 +211,8 @@ class SQLiteMatchStore:
                 pending_parse_count INTEGER NOT NULL DEFAULT 0,
                 rate_limited INTEGER NOT NULL DEFAULT 0,
                 next_retry_at TEXT,
+                request_targets TEXT,
+                data_sources TEXT,
                 note TEXT
             );
 
@@ -238,6 +240,10 @@ class SQLiteMatchStore:
         columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(background_sync_runs)").fetchall()}
         if "run_source" not in columns:
             self._conn.execute("ALTER TABLE background_sync_runs ADD COLUMN run_source TEXT NOT NULL DEFAULT 'manual'")
+        if "request_targets" not in columns:
+            self._conn.execute("ALTER TABLE background_sync_runs ADD COLUMN request_targets TEXT")
+        if "data_sources" not in columns:
+            self._conn.execute("ALTER TABLE background_sync_runs ADD COLUMN data_sources TEXT")
         state_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(background_sync_state)").fetchall()}
         if "next_pending_parse_check_at" not in state_columns:
             self._conn.execute("ALTER TABLE background_sync_state ADD COLUMN next_pending_parse_check_at TEXT")
@@ -743,6 +749,8 @@ class SQLiteMatchStore:
         pending_parse_count: int,
         rate_limited: bool,
         next_retry_at: str | None,
+        request_targets: str | None,
+        data_sources: str | None,
         note: str | None,
     ) -> None:
         self._conn.execute(
@@ -751,8 +759,8 @@ class SQLiteMatchStore:
                 account_id, scope_key, window_days, started_at, finished_at, status,
                 run_source,
                 summary_new_matches, total_matches_in_window, detail_requested, detail_completed,
-                parse_requested, pending_parse_count, rate_limited, next_retry_at, note
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                parse_requested, pending_parse_count, rate_limited, next_retry_at, request_targets, data_sources, note
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 int(account_id),
@@ -770,6 +778,8 @@ class SQLiteMatchStore:
                 int(pending_parse_count),
                 1 if rate_limited else 0,
                 next_retry_at,
+                request_targets,
+                data_sources,
                 note,
             ),
         )

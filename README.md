@@ -195,6 +195,7 @@ tests/
 - Recent match item chips now mark `Moon Shard`, `Aghanim's Scepter`, and `Aghanim's Shard` as `buff` only when match details explicitly report them as permanent buffs/consumed upgrades. A plain inventory item is no longer mislabeled as a buff just because `first_purchase_time` exists.
 - `match_parse_requests` rows now persist `request_source` and `request_reason` so pending-queue diagnostics can distinguish new OpenDota requests, stale retries, STRATZ-based completions, and other queue transitions.
 - Stale pending retries are now anchored to the last parse request time (`requested_at`), not to the most recent poll timestamp. Recently checked rows that are still stale no longer get trapped in the `waiting` bucket just because a status check touched them.
+- `Sync History` runs now persist and display both `Requested Via` and `Data From`, so each cycle can show which provider was queried (`OpenDota` / `STRATZ`) and which provider actually supplied recovered data.
 - Temporary OpenDota upstream outages like HTTP `522` are now retried once and then folded into the same cooldown-style handling as other transient OpenDota availability problems, instead of surfacing as a hard sync error immediately.
 - Streamlit Community Cloud does not provide a true always-on worker inside the page process. The `Database` page can keep advancing the backlog while it stays open, but a real 24/7 worker still requires an external runner with shared persistent storage.
 

@@ -183,6 +183,7 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - Recent Matches now show `Moon Shard`, `Aghanim's Scepter`, and `Aghanim's Shard` as `buff` only when the cached match details confirm a consumed/permanent-buff state. A normal inventory copy stays in the regular item list without a `buff` badge.
 - Parse-request storage now records `request_source` and `request_reason` on `match_parse_requests` rows. This is the first diagnostics step for the stuck `Pending Parse` backlog because it makes each queue transition traceable by provider and reason.
 - Pending retry eligibility is now based on the last parse-request submission time, not on the most recent status-check timestamp. This prevents stale jobs from being endlessly reclassified as `recently checked` and skipped for retry.
+- Database `Sync History` now includes provider provenance columns: `Requested Via` and `Data From`. This makes it visible whether a cycle touched `OpenDota`, `STRATZ`, or both, and whether any recovered timing data actually came from `STRATZ`.
 - OpenDota transient upstream failures such as Cloudflare `522` are now retried once in the client and then treated like a temporary cooldown condition instead of a hard background-sync `error` state.
 - Streamlit Community Cloud local files are not durable storage. If neither Google Drive snapshot storage nor `DATABASE_URL` is configured, the app warns in the UI because a reboot/redeploy can reset the local `.cache/matches.sqlite3` file.
 

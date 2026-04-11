@@ -70,6 +70,35 @@ def test_match_parse_request_persists_source_and_reason() -> None:
     assert row["request_reason"] == "stale_pending_retry"
 
 
+def test_background_sync_run_persists_request_targets_and_data_sources() -> None:
+    store = SQLiteMatchStore(":memory:")
+    store.insert_background_sync_run(
+        account_id=123,
+        scope_key="gm:23",
+        window_days=365,
+        started_at="2026-04-11T20:00:00+00:00",
+        finished_at="2026-04-11T20:00:05+00:00",
+        status="completed",
+        run_source="auto",
+        summary_new_matches=1,
+        total_matches_in_window=100,
+        detail_requested=2,
+        detail_completed=1,
+        parse_requested=3,
+        pending_parse_count=10,
+        rate_limited=False,
+        next_retry_at=None,
+        request_targets="OpenDota, STRATZ",
+        data_sources="STRATZ",
+        note="Recovered timings.",
+    )
+
+    runs = store.list_background_sync_runs(123, "gm:23", 365, limit=1)
+
+    assert runs[0]["request_targets"] == "OpenDota, STRATZ"
+    assert runs[0]["data_sources"] == "STRATZ"
+
+
 class _FakeClient:
     def __init__(self) -> None:
         self.calls = 0

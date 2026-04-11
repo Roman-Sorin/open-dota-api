@@ -807,6 +807,13 @@ class DotaAnalyticsService:
         if callable(flush):
             flush(force=force)
 
+    @staticmethod
+    def _format_provider_summary(values: set[str]) -> str | None:
+        normalized = sorted({value for value in values if value})
+        if not normalized:
+            return None
+        return ", ".join(normalized)
+
     def build_stats(self, matches: list[MatchSummary]) -> StatsResult:
         total = len(matches)
         if total == 0:
@@ -2178,10 +2185,82 @@ class DotaAnalyticsService:
 
         scope_key = self._sync_scope_key(game_mode)
         state = self.match_store.get_background_sync_state(player_id, scope_key, window_days) or {}
+        filters = QueryFilters(
+            player_id=player_id,
+            game_mode=game_mode,
+            game_mode_name="Turbo" if game_mode == 23 else None,
+            days=window_days,
+        )
+        request_targets_used: set[str] = set()
+        data_sources_used: set[str] = set()
         if not force and self._iso_is_future(str(state.get("next_retry_at") or "")):
-            coverage = self.get_background_sync_coverage(player_id=player_id, game_mode=game_mode, window_days=window_days)
             started_at = self._utcnow_iso()
             finished_at = self._utcnow_iso()
+            matches = self.get_cached_matches(filters)
+            if matches:
+                request_targets_used.add("STRATZ")
+            stratz_completed = self.backfill_item_timing_details_from_stratz(
+                player_id=player_id,
+                matches=matches,
+                batch_size=max(max_parse_requests, max_detail_fetches, 5),
+            )
+            if stratz_completed > 0:
+                data_sources_used.add("STRATZ")
+            coverage = self.get_background_sync_coverage(player_id=player_id, game_mode=game_mode, window_days=window_days)
+            note = "Waiting for the next retry window after a previous OpenDota rate limit."
+            if stratz_completed > 0:
+                note += f" Recovered timings for {stratz_completed} match(es) from STRATZ during OpenDota cooldown."
+            previous_total_runs = int(state.get("total_runs") or 0)
+            previous_detail_fetches = int(state.get("total_detail_fetches") or 0)
+            previous_parse_requests = int(state.get("total_parse_requests") or 0)
+            self.match_store.upsert_background_sync_state(
+                player_id,
+                scope_key,
+                window_days,
+                status="cooldown",
+                last_started_at=started_at,
+                last_finished_at=finished_at,
+                last_status="cooldown",
+                last_error=None,
+                last_rate_limited_at=state.get("last_rate_limited_at"),
+                next_retry_at=state.get("next_retry_at"),
+                next_pending_parse_check_at=state.get("next_pending_parse_check_at"),
+                last_summary_sync_at=state.get("last_summary_sync_at"),
+                target_match_count=coverage.total_matches,
+                detail_cached_count=coverage.detail_cached_count,
+                timing_ready_count=coverage.timing_ready_count,
+                missing_detail_count=coverage.missing_detail_count,
+                missing_timing_count=coverage.missing_timing_count,
+                pending_parse_count=coverage.pending_parse_count,
+                newest_match_start_time=coverage.newest_match_start_time,
+                oldest_match_start_time=coverage.oldest_match_start_time,
+                newest_fully_cached_start_time=coverage.newest_fully_cached_start_time,
+                oldest_fully_cached_start_time=coverage.oldest_fully_cached_start_time,
+                total_runs=previous_total_runs + 1,
+                total_detail_fetches=previous_detail_fetches,
+                total_parse_requests=previous_parse_requests,
+            )
+            self.match_store.insert_background_sync_run(
+                account_id=player_id,
+                scope_key=scope_key,
+                window_days=window_days,
+                started_at=started_at,
+                finished_at=finished_at,
+                status="cooldown",
+                run_source=run_source,
+                summary_new_matches=0,
+                total_matches_in_window=coverage.total_matches,
+                detail_requested=0,
+                detail_completed=0,
+                parse_requested=0,
+                pending_parse_count=coverage.pending_parse_count,
+                rate_limited=False,
+                next_retry_at=str(state.get("next_retry_at") or ""),
+                request_targets=self._format_provider_summary(request_targets_used),
+                data_sources=self._format_provider_summary(data_sources_used),
+                note=note,
+            )
+            self._flush_persistent_match_store(force=True)
             return BackgroundSyncCycleResult(
                 status="cooldown",
                 started_at=started_at,
@@ -2195,7 +2274,7 @@ class DotaAnalyticsService:
                 pending_parse_count=coverage.pending_parse_count,
                 rate_limited=False,
                 next_retry_at=str(state.get("next_retry_at") or ""),
-                note="Waiting for the next retry window after a previous OpenDota rate limit.",
+                note=note,
                 coverage=coverage,
             )
 
@@ -2213,12 +2292,6 @@ class DotaAnalyticsService:
             last_error=None,
         )
 
-        filters = QueryFilters(
-            player_id=player_id,
-            game_mode=game_mode,
-            game_mode_name="Turbo" if game_mode == 23 else None,
-            days=window_days,
-        )
         summary_new_matches = 0
         detail_requested = 0
         detail_completed = 0
@@ -2233,11 +2306,15 @@ class DotaAnalyticsService:
             matches: list[MatchSummary] = []
             matches_by_id: dict[int, MatchSummary] = {}
             try:
+                request_targets_used.add("OpenDota")
                 inserted_ids = self._sync_player_matches(filters, force=force, check_recent_head_page=True)
                 summary_new_matches = len(inserted_ids)
+                if summary_new_matches > 0:
+                    data_sources_used.add("OpenDota")
                 matches = self.get_cached_matches(filters)
                 matches_by_id = {int(match.match_id): match for match in matches}
             except OpenDotaRateLimitError:
+                request_targets_used.add("OpenDota")
                 rate_limited = True
                 status = "rate_limited"
                 next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
@@ -2249,6 +2326,7 @@ class DotaAnalyticsService:
                 note_parts.append("Waiting before the next pending replay-parse check after recent OpenDota activity.")
             else:
                 if not rate_limited:
+                    request_targets_used.add("OpenDota")
                     pending_refresh = self._refresh_pending_parse_requests(
                         player_id=player_id,
                         matches_by_id=matches_by_id,
@@ -2257,6 +2335,8 @@ class DotaAnalyticsService:
                         poll_after_seconds=pending_parse_poll_after_seconds,
                     )
                     parse_requested += pending_refresh.retried
+                    if pending_refresh.completed > 0:
+                        data_sources_used.update({"OpenDota", "STRATZ", "Cache"})
                     if pending_refresh.rate_limited:
                         rate_limited = True
                         status = "rate_limited"
@@ -2264,6 +2344,8 @@ class DotaAnalyticsService:
                         note_parts.append("OpenDota rate limit was hit while checking pending replay parses.")
 
             if not rate_limited:
+                if max_detail_fetches > 0:
+                    request_targets_used.add("OpenDota")
                 missing_detail_ids = self.get_match_ids_requiring_detail_hydration(
                     matches,
                     player_id=player_id,
@@ -2274,18 +2356,23 @@ class DotaAnalyticsService:
                 if missing_detail_ids:
                     detail_status = self.hydrate_match_details_for_match_ids(missing_detail_ids)
                     detail_completed = detail_status.completed
+                    if detail_completed > 0:
+                        data_sources_used.add("OpenDota")
                     if detail_status.rate_limited:
                         rate_limited = True
                         status = "rate_limited"
                         next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
                         note_parts.append("OpenDota rate limit was hit during detail hydration.")
 
-            if not rate_limited:
-                stratz_completed = self.backfill_item_timing_details_from_stratz(
-                    player_id=player_id,
-                    matches=matches,
-                    batch_size=max(max_parse_requests, max_detail_fetches),
-                )
+            if matches:
+                request_targets_used.add("STRATZ")
+            stratz_completed = self.backfill_item_timing_details_from_stratz(
+                player_id=player_id,
+                matches=matches,
+                batch_size=max(max_parse_requests, max_detail_fetches, 5),
+            )
+            if stratz_completed > 0:
+                data_sources_used.add("STRATZ")
 
             if not rate_limited:
                 matches = self.get_cached_matches(filters)
@@ -2322,6 +2409,7 @@ class DotaAnalyticsService:
 
                     for match_id in parse_candidates:
                         try:
+                            request_targets_used.add("OpenDota")
                             parse_job_id = self.client.request_match_parse(match_id)
                         except OpenDotaRateLimitError:
                             rate_limited = True
@@ -2418,6 +2506,8 @@ class DotaAnalyticsService:
                 pending_parse_count=coverage.pending_parse_count,
                 rate_limited=rate_limited,
                 next_retry_at=next_retry_at,
+                request_targets=self._format_provider_summary(request_targets_used),
+                data_sources=self._format_provider_summary(data_sources_used),
                 note=note,
             )
             self._flush_persistent_match_store(force=True)
@@ -2465,6 +2555,8 @@ class DotaAnalyticsService:
                 pending_parse_count=0,
                 rate_limited=False,
                 next_retry_at=None,
+                request_targets=self._format_provider_summary(request_targets_used),
+                data_sources=self._format_provider_summary(data_sources_used),
                 note=str(exc),
             )
             self._flush_persistent_match_store(force=True)
