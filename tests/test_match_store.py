@@ -1693,9 +1693,102 @@ def test_background_sync_cycle_pending_refresh_does_not_call_stratz_directly() -
     assert result.status == "completed"
     assert result.rate_limited is False
     assert "STRATZ rate limit was hit while checking pending replay parses." not in result.note
+    assert "STRATZ rate limit was hit during timing recovery." in result.note
     assert state is not None
-    assert state["next_stratz_retry_at"] is None
-    assert stratz_client.calls == 0
+    assert state["next_stratz_retry_at"] is not None
+    assert stratz_client.calls == 1
+
+
+def test_background_sync_cycle_can_run_bounded_stratz_recovery_after_successful_opendota_pending_work() -> None:
+    class _RetryingOpenDotaClient(_FakeClient):
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 9903,
+                    "start_time": 1771552800,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 8,
+                    "deaths": 3,
+                    "assists": 11,
+                    "duration": 1400,
+                    "hero_id": 1,
+                    "item_0": 1,
+                }
+            ]
+
+        def request_match_parse(self, match_id: int):
+            return 991003
+
+        def get_parse_job_status(self, parse_job_id: int):
+            return None
+
+    class _TrackingStratzClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get_match_item_purchases(self, match_id: int):
+            self.calls += 1
+            return []
+
+    client = _RetryingOpenDotaClient()
+    stratz_client = _TrackingStratzClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store, stratz_client=stratz_client)
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 9903,
+                "start_time": 1771552800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 8,
+                "deaths": 3,
+                "assists": 11,
+                "duration": 1400,
+                "hero_id": 1,
+                "item_0": 1,
+            }
+        ],
+    )
+    store.upsert_match_detail(
+        9903,
+        {"match_id": 9903, "version": None, "players": [{"account_id": 123, "player_slot": 0, "item_0": 1}]},
+    )
+    stale_at = (datetime.now(tz=timezone.utc) - timedelta(hours=4)).isoformat()
+    store.upsert_match_parse_request(
+        9903,
+        123,
+        status="pending",
+        parse_job_id=9003,
+        requested_at=stale_at,
+        last_polled_at=stale_at,
+    )
+    store.upsert_background_sync_state(
+        123,
+        "gm:23",
+        365,
+        last_summary_sync_at=datetime.now(tz=timezone.utc).isoformat(),
+    )
+
+    result = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=1,
+        pending_parse_poll_after_seconds=0,
+        force=False,
+    )
+    runs = service.list_background_sync_runs(123, window_days=365, limit=1)
+
+    assert result.status == "completed"
+    assert stratz_client.calls == 1
+    assert runs[0]["request_targets"] == "OpenDota, STRATZ"
 
 
 def test_background_sync_cycle_refreshes_oldest_pending_parse_requests_first() -> None:

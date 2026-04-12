@@ -110,6 +110,7 @@ class MatchSummarySyncResult:
 class StratzBackfillResult:
     completed: int = 0
     rate_limited: bool = False
+    attempted: bool = False
 
 
 @dataclass(slots=True)
@@ -1740,6 +1741,7 @@ class DotaAnalyticsService:
             if self._player_row_has_timing_data(player_row):
                 continue
             try:
+                result.attempted = True
                 changed = self._enrich_match_details_with_stratz_timings(match.match_id, details)
             except StratzRateLimitError:
                 result.rate_limited = True
@@ -2303,8 +2305,6 @@ class DotaAnalyticsService:
             finished_at = self._utcnow_iso()
             matches = self.get_cached_matches(filters)
             stratz_retry_blocked = self._iso_is_future(str(state.get("next_stratz_retry_at") or ""))
-            if matches and not stratz_retry_blocked:
-                request_targets_used.add("STRATZ")
             stratz_result = (
                 self.backfill_item_timing_details_from_stratz(
                     player_id=player_id,
@@ -2314,6 +2314,8 @@ class DotaAnalyticsService:
                 if not stratz_retry_blocked
                 else StratzBackfillResult()
             )
+            if stratz_result.attempted:
+                request_targets_used.add("STRATZ")
             stratz_completed = stratz_result.completed
             next_stratz_retry_at = (
                 self._iso_after_seconds(rate_limit_cooldown_seconds)
@@ -2510,9 +2512,7 @@ class DotaAnalyticsService:
                         note_parts.append("OpenDota rate limit was hit during detail hydration.")
 
             stratz_retry_blocked = self._iso_is_future(str(next_stratz_retry_at or ""))
-            allow_stratz_recovery = not opendota_attempted_this_cycle and not rate_limited
-            if matches and not stratz_retry_blocked and allow_stratz_recovery:
-                request_targets_used.add("STRATZ")
+            allow_stratz_recovery = not rate_limited
             stratz_result = (
                 self.backfill_item_timing_details_from_stratz(
                     player_id=player_id,
@@ -2522,6 +2522,8 @@ class DotaAnalyticsService:
                 if not stratz_retry_blocked and allow_stratz_recovery
                 else StratzBackfillResult()
             )
+            if stratz_result.attempted:
+                request_targets_used.add("STRATZ")
             stratz_completed = stratz_result.completed
             if stratz_completed > 0:
                 data_sources_used.add("STRATZ")
@@ -2530,8 +2532,6 @@ class DotaAnalyticsService:
                 note_parts.append("STRATZ rate limit was hit during timing recovery.")
             elif stratz_retry_blocked:
                 note_parts.append("Waiting for the next STRATZ retry window.")
-            elif not allow_stratz_recovery and matches:
-                note_parts.append("Skipping STRATZ timing recovery this cycle because OpenDota work already ran.")
 
             if not rate_limited:
                 matches = self.get_cached_matches(filters)
