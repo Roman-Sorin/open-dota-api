@@ -2127,31 +2127,6 @@ class DotaAnalyticsService:
                     )
                     result.completed += 1
                     return True
-                try:
-                    stratz_recovered = self._enrich_match_details_with_stratz_timings(match_id, cached_details)
-                except StratzRateLimitError:
-                    result.stratz_rate_limited = True
-                    return False
-                if stratz_recovered:
-                    refreshed_details = self.get_match_details_if_cached(match_id) or cached_details
-                    refreshed_player_row = self._extract_player_from_match_details(
-                        refreshed_details,
-                        player_id=player_id,
-                        player_slot=match.player_slot,
-                    )
-                    if self._player_row_has_timing_data(refreshed_player_row):
-                        self.match_store.upsert_match_parse_request(
-                            match_id,
-                            player_id,
-                            status="completed",
-                            request_source="stratz",
-                            request_reason="timing_recovered_from_stratz",
-                            last_polled_at=now_iso,
-                            completed_at=now_iso,
-                            increment_attempts=False,
-                        )
-                        result.completed += 1
-                        return True
 
             should_poll_opendota = self._pending_parse_poll_due(request, poll_after_seconds=poll_after_seconds)
             parse_job_id = int(request.get("parse_job_id") or 0)
@@ -2495,15 +2470,12 @@ class DotaAnalyticsService:
                     )
                     parse_requested += pending_refresh.retried
                     if pending_refresh.completed > 0:
-                        data_sources_used.update({"OpenDota", "STRATZ", "Cache"})
+                        data_sources_used.update({"OpenDota", "Cache"})
                     if pending_refresh.rate_limited:
                         rate_limited = True
                         status = "rate_limited"
                         next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
                         note_parts.append("OpenDota rate limit was hit while checking pending replay parses.")
-                    if pending_refresh.stratz_rate_limited:
-                        next_stratz_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
-                        note_parts.append("STRATZ rate limit was hit while checking pending replay parses.")
 
             if not rate_limited:
                 if max_detail_fetches > 0:

@@ -1607,7 +1607,7 @@ def test_background_sync_cycle_skips_stratz_when_open_dota_rate_limits_same_cycl
     assert runs[0]["request_targets"] == "OpenDota"
 
 
-def test_background_sync_cycle_treats_pending_refresh_stratz_rate_limit_as_retry_window() -> None:
+def test_background_sync_cycle_pending_refresh_does_not_call_stratz_directly() -> None:
     class _NoopOpenDotaClient(_FakeClient):
         def get_player_matches(self, **kwargs):
             self.calls += 1
@@ -1626,6 +1626,9 @@ def test_background_sync_cycle_treats_pending_refresh_stratz_rate_limit_as_retry
                     "item_0": 1,
                 }
             ]
+
+        def request_match_parse(self, match_id: int):
+            return 991001
 
     class _AlwaysRateLimitedStratzClient:
         def __init__(self) -> None:
@@ -1689,10 +1692,10 @@ def test_background_sync_cycle_treats_pending_refresh_stratz_rate_limit_as_retry
 
     assert result.status == "completed"
     assert result.rate_limited is False
-    assert "STRATZ rate limit was hit while checking pending replay parses." in result.note
+    assert "STRATZ rate limit was hit while checking pending replay parses." not in result.note
     assert state is not None
-    assert state["next_stratz_retry_at"] is not None
-    assert stratz_client.calls == 1
+    assert state["next_stratz_retry_at"] is None
+    assert stratz_client.calls == 0
 
 
 def test_background_sync_cycle_refreshes_oldest_pending_parse_requests_first() -> None:
