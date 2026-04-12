@@ -838,6 +838,14 @@ class DotaAnalyticsService:
             return 1800
         return 3600
 
+    @staticmethod
+    def _pending_parse_rate_limit_backoff_seconds(rate_limit_cooldown_seconds: int) -> int:
+        return max(int(rate_limit_cooldown_seconds) * 6, 300)
+
+    @staticmethod
+    def _stratz_rate_limit_backoff_seconds(rate_limit_cooldown_seconds: int) -> int:
+        return max(int(rate_limit_cooldown_seconds) * 12, 900)
+
     def _flush_persistent_match_store(self, *, force: bool = False) -> None:
         if self.match_store is None:
             return
@@ -2318,7 +2326,7 @@ class DotaAnalyticsService:
                 request_targets_used.add("STRATZ")
             stratz_completed = stratz_result.completed
             next_stratz_retry_at = (
-                self._iso_after_seconds(rate_limit_cooldown_seconds)
+                self._iso_after_seconds(self._stratz_rate_limit_backoff_seconds(rate_limit_cooldown_seconds))
                 if stratz_result.rate_limited
                 else state.get("next_stratz_retry_at")
             )
@@ -2424,6 +2432,7 @@ class DotaAnalyticsService:
         rate_limited = False
         next_retry_at: str | None = None
         next_stratz_retry_at: str | None = state.get("next_stratz_retry_at")
+        next_pending_parse_check_at: str | None = state.get("next_pending_parse_check_at")
         note_parts: list[str] = []
         status = "completed"
 
@@ -2487,6 +2496,9 @@ class DotaAnalyticsService:
                         rate_limited = True
                         status = "rate_limited"
                         next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
+                        next_pending_parse_check_at = self._iso_after_seconds(
+                            self._pending_parse_rate_limit_backoff_seconds(rate_limit_cooldown_seconds)
+                        )
                         note_parts.append("OpenDota rate limit was hit while checking pending replay parses.")
 
             if not rate_limited:
@@ -2528,7 +2540,9 @@ class DotaAnalyticsService:
             if stratz_completed > 0:
                 data_sources_used.add("STRATZ")
             if stratz_result.rate_limited:
-                next_stratz_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
+                next_stratz_retry_at = self._iso_after_seconds(
+                    self._stratz_rate_limit_backoff_seconds(rate_limit_cooldown_seconds)
+                )
                 note_parts.append("STRATZ rate limit was hit during timing recovery.")
             elif stratz_retry_blocked:
                 note_parts.append("Waiting for the next STRATZ retry window.")
@@ -2605,7 +2619,6 @@ class DotaAnalyticsService:
                 window_days=window_days,
             )
             finished_at = self._utcnow_iso()
-            next_pending_parse_check_at = state.get("next_pending_parse_check_at")
             if summary_new_matches > 0 or detail_completed > 0:
                 next_pending_parse_check_at = self._iso_after_seconds(pending_parse_quiet_period_seconds)
             previous_total_runs = int(state.get("total_runs") or 0)

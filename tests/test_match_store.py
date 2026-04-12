@@ -1569,6 +1569,8 @@ def test_background_sync_cycle_applies_stratz_retry_window_after_stratz_rate_lim
     assert "Waiting for the next STRATZ retry window." in second.note
     assert state is not None
     assert state["next_stratz_retry_at"] is not None
+    retry_at = datetime.fromisoformat(str(state["next_stratz_retry_at"]))
+    assert retry_at >= datetime.now(tz=timezone.utc) + timedelta(minutes=14)
     assert stratz_client.calls == 1
 
 
@@ -1605,6 +1607,88 @@ def test_background_sync_cycle_skips_stratz_when_open_dota_rate_limits_same_cycl
     assert "Skipping STRATZ timing recovery this cycle" not in result.note
     assert stratz_client.calls == 0
     assert runs[0]["request_targets"] == "OpenDota"
+
+
+def test_background_sync_cycle_applies_longer_pending_poll_backoff_after_open_dota_rate_limit() -> None:
+    class _PendingPollRateLimitedClient(_FakeClient):
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 9904,
+                    "start_time": 1771552800,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 8,
+                    "deaths": 3,
+                    "assists": 11,
+                    "duration": 1400,
+                    "hero_id": 1,
+                    "item_0": 1,
+                }
+            ]
+
+        def get_parse_job_status(self, parse_job_id: int):
+            raise OpenDotaRateLimitError("OpenDota API rate limit reached")
+
+    client = _PendingPollRateLimitedClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    stale_at = (datetime.now(tz=timezone.utc) - timedelta(hours=4)).isoformat()
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 9904,
+                "start_time": 1771552800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 8,
+                "deaths": 3,
+                "assists": 11,
+                "duration": 1400,
+                "hero_id": 1,
+                "item_0": 1,
+            }
+        ],
+    )
+    store.upsert_match_detail(
+        9904,
+        {"match_id": 9904, "version": None, "players": [{"account_id": 123, "player_slot": 0, "item_0": 1}]},
+    )
+    store.upsert_match_parse_request(
+        9904,
+        123,
+        status="pending",
+        parse_job_id=9004,
+        requested_at=stale_at,
+        last_polled_at=stale_at,
+    )
+    store.upsert_background_sync_state(
+        123,
+        "gm:23",
+        365,
+        last_summary_sync_at=datetime.now(tz=timezone.utc).isoformat(),
+    )
+
+    result = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=1,
+        pending_parse_poll_after_seconds=0,
+        rate_limit_cooldown_seconds=50,
+        force=False,
+    )
+    state = service.get_background_sync_state(123, window_days=365)
+
+    assert result.status == "rate_limited"
+    assert state is not None
+    assert state["next_pending_parse_check_at"] is not None
+    poll_retry_at = datetime.fromisoformat(str(state["next_pending_parse_check_at"]))
+    assert poll_retry_at >= datetime.now(tz=timezone.utc) + timedelta(minutes=4)
 
 
 def test_background_sync_cycle_pending_refresh_does_not_call_stratz_directly() -> None:
