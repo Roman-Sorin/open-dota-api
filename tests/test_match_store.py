@@ -2080,6 +2080,70 @@ def test_background_sync_cycle_does_not_poll_fresh_pending_parse_jobs_before_pol
     assert pending_request["status"] == "pending"
 
 
+def test_background_sync_cycle_waiting_pending_rows_do_not_claim_opendota_work() -> None:
+    class _WaitingOnlyClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.detail_calls = 0
+
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 9902,
+                    "start_time": 1771552800,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 8,
+                    "deaths": 3,
+                    "assists": 11,
+                    "duration": 1400,
+                    "hero_id": 1,
+                    "item_0": 1,
+                }
+            ]
+
+    client = _WaitingOnlyClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    store.upsert_player_matches(123, client.get_player_matches())
+    store.upsert_match_detail(9902, {"match_id": 9902, "version": None, "players": [{"account_id": 123, "player_slot": 0, "item_0": 1}]})
+    fresh_activity_at = datetime.now(tz=timezone.utc).isoformat()
+    store.upsert_match_parse_request(
+        9902,
+        123,
+        status="pending",
+        parse_job_id=9002,
+        requested_at=fresh_activity_at,
+        last_polled_at=fresh_activity_at,
+    )
+    store.upsert_background_sync_state(
+        123,
+        "gm:23",
+        365,
+        last_summary_sync_at=fresh_activity_at,
+        next_stratz_retry_at=(datetime.now(tz=timezone.utc) + timedelta(minutes=10)).isoformat(),
+    )
+
+    result = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=1,
+        pending_parse_retry_after_seconds=3600,
+        pending_parse_poll_after_seconds=300,
+        force=False,
+    )
+    runs = service.list_background_sync_runs(123, window_days=365, limit=1)
+
+    assert result.status == "completed"
+    assert client.calls == 1
+    assert runs[0]["request_targets"] is None
+    assert "Using cached summary snapshot; next OpenDota head sync is not due yet." in result.note
+    assert "Waiting on 1 existing replay parse job(s); no additional parse requests were sent this cycle." in result.note
+
+
 def test_background_sync_cycle_skips_pending_checks_during_quiet_period_after_recent_work() -> None:
     class _QuietPeriodClient(_FakeClient):
         def __init__(self) -> None:

@@ -153,10 +153,13 @@ class BackgroundMatchStatusRow:
 @dataclass(slots=True)
 class PendingParseRefreshResult:
     completed: int = 0
+    completed_from_cache: int = 0
+    completed_from_opendota: int = 0
     retried: int = 0
     still_pending: int = 0
     rate_limited: bool = False
     stratz_rate_limited: bool = False
+    opendota_attempted: bool = False
 
 
 @dataclass(slots=True)
@@ -2126,11 +2129,13 @@ class DotaAnalyticsService:
                         increment_attempts=False,
                     )
                     result.completed += 1
+                    result.completed_from_cache += 1
                     return True
 
             should_poll_opendota = self._pending_parse_poll_due(request, poll_after_seconds=poll_after_seconds)
             parse_job_id = int(request.get("parse_job_id") or 0)
             if should_poll_opendota and parse_job_id > 0:
+                result.opendota_attempted = True
                 try:
                     job_status = self.client.get_parse_job_status(parse_job_id)
                 except OpenDotaRateLimitError:
@@ -2192,9 +2197,11 @@ class DotaAnalyticsService:
                         increment_attempts=False,
                     )
                     result.completed += 1
+                    result.completed_from_opendota += 1
                     return True
 
             if allow_retry and self._pending_parse_retry_due(request, retry_after_seconds=retry_after_seconds):
+                result.opendota_attempted = True
                 try:
                     parse_job_id = self.client.request_match_parse(match_id)
                 except OpenDotaRateLimitError:
@@ -2459,8 +2466,6 @@ class DotaAnalyticsService:
                 note_parts.append("Waiting before the next pending replay-parse check after recent OpenDota activity.")
             else:
                 if not rate_limited:
-                    request_targets_used.add("OpenDota")
-                    opendota_attempted_this_cycle = True
                     pending_refresh = self._refresh_pending_parse_requests(
                         player_id=player_id,
                         matches_by_id=matches_by_id,
@@ -2468,9 +2473,14 @@ class DotaAnalyticsService:
                         retry_after_seconds=pending_parse_retry_after_seconds,
                         poll_after_seconds=pending_parse_poll_after_seconds,
                     )
+                    if pending_refresh.opendota_attempted:
+                        request_targets_used.add("OpenDota")
+                        opendota_attempted_this_cycle = True
                     parse_requested += pending_refresh.retried
-                    if pending_refresh.completed > 0:
-                        data_sources_used.update({"OpenDota", "Cache"})
+                    if pending_refresh.completed_from_cache > 0:
+                        data_sources_used.add("Cache")
+                    if pending_refresh.completed_from_opendota > 0:
+                        data_sources_used.add("OpenDota")
                     if pending_refresh.rate_limited:
                         rate_limited = True
                         status = "rate_limited"

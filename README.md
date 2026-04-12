@@ -203,6 +203,7 @@ tests/
 - `Sync History` runs now persist and display both `Requested Via` and `Data From`, so each cycle can show which provider was queried (`OpenDota` / `STRATZ`) and which provider actually supplied recovered data.
 - `Database` metrics now break `Pending Parse` into actionable buckets: `Pending Waiting`, `Pending Poll Due`, `Pending Retry Due`, `Pending Legacy`, and `Pending Ready-Stuck`. This is a diagnostics-only change that makes a stuck `150 pending` backlog explainable without reading raw queue rows.
 - Pending-refresh no longer issues hidden STRATZ timing-recovery requests per queued replay-parse row. STRATZ recovery now stays in its own bounded stage so the app does not create a second provider rate-limit loop while polling the OpenDota parse queue.
+- Waiting pending rows no longer mark the cycle as `Requested Via: OpenDota` unless the cycle actually polled or retried OpenDota parse jobs. This keeps `Sync History` honest and allows STRATZ fallback to run on truly cache-only / no-op pending cycles.
 - Temporary OpenDota upstream outages like HTTP `522` are now retried once and then folded into the same cooldown-style handling as other transient OpenDota availability problems, instead of surfacing as a hard sync error immediately.
 - Streamlit Community Cloud does not provide a true always-on worker inside the page process. The `Database` page can keep advancing the backlog while it stays open, but a real 24/7 worker still requires an external runner with shared persistent storage.
 
