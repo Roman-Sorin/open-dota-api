@@ -8,7 +8,7 @@ import time as time_module
 from typing import Any
 
 from clients.opendota_client import OpenDotaClient
-from clients.stratz_client import StratzClient, StratzError, StratzRateLimitError
+from clients.stratz_client import StratzAuthError, StratzClient, StratzError, StratzRateLimitError
 from models.dtos import ItemStat, ItemsResult, MatchRow, MatchSummary, QueryFilters, StatsResult
 from parsers.input_parser import HeroParser
 from utils.cache import JsonFileCache
@@ -111,6 +111,8 @@ class StratzBackfillResult:
     completed: int = 0
     rate_limited: bool = False
     attempted: bool = False
+    auth_blocked: bool = False
+    error_message: str | None = None
 
 
 @dataclass(slots=True)
@@ -845,6 +847,10 @@ class DotaAnalyticsService:
     @staticmethod
     def _stratz_rate_limit_backoff_seconds(rate_limit_cooldown_seconds: int) -> int:
         return max(int(rate_limit_cooldown_seconds) * 12, 900)
+
+    @staticmethod
+    def _stratz_auth_backoff_seconds() -> int:
+        return 24 * 60 * 60
 
     def _flush_persistent_match_store(self, *, force: bool = False) -> None:
         if self.match_store is None:
@@ -1753,6 +1759,11 @@ class DotaAnalyticsService:
                 changed = self._enrich_match_details_with_stratz_timings(match.match_id, details)
             except StratzRateLimitError:
                 result.rate_limited = True
+                result.error_message = "STRATZ API rate limit reached"
+                break
+            except StratzAuthError as exc:
+                result.auth_blocked = True
+                result.error_message = str(exc)
                 break
             if changed:
                 result.completed += 1
@@ -2308,6 +2319,7 @@ class DotaAnalyticsService:
         )
         request_targets_used: set[str] = set()
         data_sources_used: set[str] = set()
+        last_error_message: str | None = None
         if not force and self._iso_is_future(str(state.get("next_retry_at") or "")):
             started_at = self._utcnow_iso()
             finished_at = self._utcnow_iso()
@@ -2328,16 +2340,22 @@ class DotaAnalyticsService:
             next_stratz_retry_at = (
                 self._iso_after_seconds(self._stratz_rate_limit_backoff_seconds(rate_limit_cooldown_seconds))
                 if stratz_result.rate_limited
+                else self._iso_after_seconds(self._stratz_auth_backoff_seconds())
+                if stratz_result.auth_blocked
                 else state.get("next_stratz_retry_at")
             )
             if stratz_completed > 0:
                 data_sources_used.add("STRATZ")
+            if stratz_result.error_message:
+                last_error_message = stratz_result.error_message
             coverage = self.get_background_sync_coverage(player_id=player_id, game_mode=game_mode, window_days=window_days)
             note = "Waiting for the next retry window after a previous OpenDota rate limit."
             if stratz_completed > 0:
                 note += f" Recovered timings for {stratz_completed} match(es) from STRATZ during OpenDota cooldown."
             elif stratz_result.rate_limited:
                 note += " STRATZ rate limit was hit during cooldown maintenance."
+            elif stratz_result.auth_blocked:
+                note += " STRATZ timing recovery is blocked by token/IP configuration."
             elif stratz_retry_blocked:
                 note += " Waiting for the next STRATZ retry window."
             previous_total_runs = int(state.get("total_runs") or 0)
@@ -2351,7 +2369,7 @@ class DotaAnalyticsService:
                 last_started_at=started_at,
                 last_finished_at=finished_at,
                 last_status="cooldown",
-                last_error=None,
+                last_error=last_error_message,
                 last_rate_limited_at=state.get("last_rate_limited_at"),
                 next_retry_at=state.get("next_retry_at"),
                 next_stratz_retry_at=next_stratz_retry_at,
@@ -2539,11 +2557,16 @@ class DotaAnalyticsService:
             stratz_completed = stratz_result.completed
             if stratz_completed > 0:
                 data_sources_used.add("STRATZ")
+            if stratz_result.error_message:
+                last_error_message = stratz_result.error_message
             if stratz_result.rate_limited:
                 next_stratz_retry_at = self._iso_after_seconds(
                     self._stratz_rate_limit_backoff_seconds(rate_limit_cooldown_seconds)
                 )
                 note_parts.append("STRATZ rate limit was hit during timing recovery.")
+            elif stratz_result.auth_blocked:
+                next_stratz_retry_at = self._iso_after_seconds(self._stratz_auth_backoff_seconds())
+                note_parts.append("STRATZ timing recovery is blocked by token/IP configuration.")
             elif stratz_retry_blocked:
                 note_parts.append("Waiting for the next STRATZ retry window.")
 
@@ -2644,7 +2667,7 @@ class DotaAnalyticsService:
                 last_started_at=started_at,
                 last_finished_at=finished_at,
                 last_status=status,
-                last_error=None,
+                last_error=last_error_message,
                 last_rate_limited_at=started_at if rate_limited else state.get("last_rate_limited_at"),
                 next_retry_at=next_retry_at,
                 next_stratz_retry_at=next_stratz_retry_at,
@@ -3011,6 +3034,8 @@ class DotaAnalyticsService:
         try:
             stratz_players = self.stratz_client.get_match_item_purchases(match_id)
         except StratzRateLimitError:
+            raise
+        except StratzAuthError:
             raise
         except StratzError:
             return False

@@ -13,6 +13,10 @@ class StratzRateLimitError(StratzError):
     """Raised when STRATZ rate limits the request."""
 
 
+class StratzAuthError(StratzError):
+    """Raised when STRATZ rejects the token or request origin."""
+
+
 class StratzClient:
     def __init__(
         self,
@@ -44,6 +48,9 @@ class StratzClient:
 
         if response.status_code == 429:
             raise StratzRateLimitError("STRATZ API rate limit reached")
+
+        if response.status_code in {401, 403}:
+            raise StratzAuthError(f"STRATZ API auth error {response.status_code}: {response.text[:300]}")
 
         if response.status_code >= 400:
             raise StratzError(f"STRATZ API error {response.status_code}: {response.text[:300]}")

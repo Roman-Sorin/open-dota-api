@@ -109,6 +109,7 @@ def _metric_card(label: str, value: str) -> str:
 
 def _render_metrics(coverage: Any, state: dict[str, object] | None) -> None:
     state = state or {}
+    last_error = str(state.get("last_error") or "").strip()
     cards = [
         _metric_card("Turbo Matches In Window", str(coverage.total_matches)),
         _metric_card("Detail Cached", f"{coverage.detail_cached_count}/{coverage.total_matches}"),
@@ -131,6 +132,8 @@ def _render_metrics(coverage: Any, state: dict[str, object] | None) -> None:
         f'<div style="display:flex;flex-wrap:wrap;gap:0.55rem;margin:0.4rem 0 1rem 0;">{"".join(cards)}</div>',
         unsafe_allow_html=True,
     )
+    if last_error:
+        st.error(f"Provider error: {last_error}")
 
 
 def _render_match_table(rows: list[Any], service) -> None:
