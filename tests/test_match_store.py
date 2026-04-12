@@ -1383,6 +1383,7 @@ def test_background_sync_cycle_applies_stratz_retry_window_after_stratz_rate_lim
         "gm:23",
         365,
         last_summary_sync_at=now_iso,
+        next_pending_parse_check_at=(datetime.now(tz=timezone.utc) + timedelta(minutes=10)).isoformat(),
     )
 
     first = service.run_background_sync_cycle(
@@ -1408,6 +1409,41 @@ def test_background_sync_cycle_applies_stratz_retry_window_after_stratz_rate_lim
     assert state is not None
     assert state["next_stratz_retry_at"] is not None
     assert stratz_client.calls == 1
+
+
+def test_background_sync_cycle_skips_stratz_when_open_dota_rate_limits_same_cycle() -> None:
+    class _OpenDotaRateLimitedClient(_FakeClient):
+        def get_player_matches(self, **kwargs):
+            raise OpenDotaRateLimitError("OpenDota API rate limit reached")
+
+    class _TrackingStratzClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get_match_item_purchases(self, match_id: int):
+            self.calls += 1
+            return []
+
+    client = _OpenDotaRateLimitedClient()
+    stratz_client = _TrackingStratzClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store, stratz_client=stratz_client)
+
+    result = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=0,
+        force=True,
+    )
+    runs = service.list_background_sync_runs(123, window_days=365, limit=1)
+
+    assert result.status == "rate_limited"
+    assert result.rate_limited is True
+    assert "OpenDota rate limit was hit during summary sync." in result.note
+    assert "Skipping STRATZ timing recovery this cycle" not in result.note
+    assert stratz_client.calls == 0
+    assert runs[0]["request_targets"] == "OpenDota"
 
 
 def test_background_sync_cycle_refreshes_oldest_pending_parse_requests_first() -> None:
