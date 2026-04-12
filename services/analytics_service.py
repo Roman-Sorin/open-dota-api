@@ -2559,7 +2559,7 @@ class DotaAnalyticsService:
             )
             finished_at = self._utcnow_iso()
             next_pending_parse_check_at = state.get("next_pending_parse_check_at")
-            if summary_new_matches > 0 or detail_completed > 0 or parse_requested > 0:
+            if summary_new_matches > 0 or detail_completed > 0:
                 next_pending_parse_check_at = self._iso_after_seconds(pending_parse_quiet_period_seconds)
             previous_total_runs = int(state.get("total_runs") or 0)
             previous_detail_fetches = int(state.get("total_detail_fetches") or 0)

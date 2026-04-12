@@ -33,6 +33,7 @@ The project includes two interfaces:
 - `Database` now keeps a separate summary head-sync cooldown, so auto-fill can keep maintaining cached matches and STRATZ timing recovery without re-hitting the OpenDota summaries endpoint every cycle
 - `Database` now also keeps a separate STRATZ retry window, so a temporary STRATZ `429` no longer triggers hidden repeated Stats retries on every auto-fill cycle
 - `Database` auto-fill now avoids mixing OpenDota and STRATZ work in one cycle, so a rate limit from one provider does not immediately trigger a second provider attempt in that same run
+- Parse-only retry cycles no longer start the pending-parse quiet window, so freshly retried replay parses can be checked on the very next cycle instead of getting stuck behind repeated `Waiting...` messages
 - Default `Database` `Balanced` mode now uses `5` detail fetches, `5` parse requests, and a `15` second interval
 - Default `Database` cooldown after `HTTP 429` is now `50` seconds
 - `Cached Matches` now has real pagination: page size, page number, and `First/Prev/Next/Last` navigation

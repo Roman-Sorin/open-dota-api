@@ -1995,6 +1995,115 @@ def test_background_sync_cycle_waiting_does_not_reset_pending_retry_timer() -> N
     assert pending_request["last_polled_at"] == activity_at
 
 
+def test_background_sync_cycle_parse_only_retry_does_not_start_pending_quiet_period() -> None:
+    class _ParseOnlyRetryClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.parse_requested: set[int] = set()
+            self.parse_status_calls = 0
+
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 8801,
+                    "start_time": 1771466400,
+                    "player_slot": 0,
+                    "radiant_win": False,
+                    "game_mode": 23,
+                    "kills": 4,
+                    "deaths": 6,
+                    "assists": 7,
+                    "duration": 1300,
+                    "hero_id": 1,
+                    "item_0": 1,
+                }
+            ]
+
+        def get_match_details(self, match_id: int) -> dict:
+            player = {"account_id": 123, "player_slot": 0, "item_0": 1}
+            if match_id in self.parse_requested:
+                player["purchase_log"] = [{"key": "blink", "time": 600}]
+            return {"match_id": match_id, "version": 22 if match_id in self.parse_requested else None, "players": [player]}
+
+        def request_match_parse(self, match_id: int) -> int | None:
+            self.parse_requested.add(match_id)
+            return 900000 + match_id
+
+        def get_parse_job_status(self, job_id: int) -> dict | None:
+            self.parse_status_calls += 1
+            return {"jobId": job_id, "status": "completed"}
+
+    client = _ParseOnlyRetryClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    service.references.item_ids_by_key["blink"] = 1
+    service.references.item_names_by_id[1] = "Blink Dagger"
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 8801,
+                "start_time": 1771466400,
+                "player_slot": 0,
+                "radiant_win": False,
+                "game_mode": 23,
+                "kills": 4,
+                "deaths": 6,
+                "assists": 7,
+                "duration": 1300,
+                "hero_id": 1,
+                "item_0": 1,
+            }
+        ],
+    )
+    store.upsert_match_detail(
+        8801,
+        {"match_id": 8801, "version": None, "players": [{"account_id": 123, "player_slot": 0, "item_0": 1}]},
+    )
+    stale_at = (datetime.now(tz=timezone.utc) - timedelta(hours=4)).isoformat()
+    store.upsert_match_parse_request(
+        8801,
+        123,
+        status="pending",
+        requested_at=stale_at,
+        last_polled_at=stale_at,
+    )
+    store.upsert_background_sync_state(
+        123,
+        "gm:23",
+        365,
+        last_summary_sync_at=datetime.now(tz=timezone.utc).isoformat(),
+    )
+
+    first_cycle = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=1,
+        pending_parse_retry_after_seconds=3600,
+        pending_parse_poll_after_seconds=0,
+        pending_parse_quiet_period_seconds=300,
+        force=False,
+    )
+    second_cycle = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=1,
+        pending_parse_retry_after_seconds=3600,
+        pending_parse_poll_after_seconds=0,
+        pending_parse_quiet_period_seconds=300,
+        force=False,
+    )
+
+    assert first_cycle.parse_requested == 1
+    assert "Waiting before the next pending replay-parse check after recent OpenDota activity." not in second_cycle.note
+    assert second_cycle.coverage.pending_parse_count == 0
+    assert client.parse_status_calls >= 1
+
+
 def test_background_sync_cycle_retries_stale_pending_even_if_recently_polled() -> None:
     class _RetryStalePolledClient(_FakeClient):
         def __init__(self) -> None:
