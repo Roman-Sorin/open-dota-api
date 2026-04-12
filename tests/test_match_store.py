@@ -1446,6 +1446,94 @@ def test_background_sync_cycle_skips_stratz_when_open_dota_rate_limits_same_cycl
     assert runs[0]["request_targets"] == "OpenDota"
 
 
+def test_background_sync_cycle_treats_pending_refresh_stratz_rate_limit_as_retry_window() -> None:
+    class _NoopOpenDotaClient(_FakeClient):
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 9901,
+                    "start_time": 1771552800,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 8,
+                    "deaths": 3,
+                    "assists": 11,
+                    "duration": 1400,
+                    "hero_id": 1,
+                    "item_0": 1,
+                }
+            ]
+
+    class _AlwaysRateLimitedStratzClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get_match_item_purchases(self, match_id: int):
+            self.calls += 1
+            raise StratzRateLimitError("STRATZ API rate limit reached")
+
+    client = _NoopOpenDotaClient()
+    stratz_client = _AlwaysRateLimitedStratzClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store, stratz_client=stratz_client)
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 9901,
+                "start_time": 1771552800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 8,
+                "deaths": 3,
+                "assists": 11,
+                "duration": 1400,
+                "hero_id": 1,
+                "item_0": 1,
+            }
+        ],
+    )
+    store.upsert_match_detail(
+        9901,
+        {"match_id": 9901, "version": None, "players": [{"account_id": 123, "player_slot": 0, "item_0": 1}]},
+    )
+    store.upsert_match_parse_request(
+        9901,
+        123,
+        status="pending",
+        requested_at=(datetime.now(tz=timezone.utc) - timedelta(hours=4)).isoformat(),
+        last_polled_at=(datetime.now(tz=timezone.utc) - timedelta(hours=4)).isoformat(),
+    )
+    store.upsert_background_sync_state(
+        123,
+        "gm:23",
+        365,
+        last_summary_sync_at=datetime.now(tz=timezone.utc).isoformat(),
+        next_pending_parse_check_at=(datetime.now(tz=timezone.utc) - timedelta(seconds=1)).isoformat(),
+    )
+
+    result = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=1,
+        pending_parse_poll_after_seconds=0,
+        force=False,
+    )
+    state = service.get_background_sync_state(123, window_days=365)
+
+    assert result.status == "completed"
+    assert result.rate_limited is False
+    assert "STRATZ rate limit was hit while checking pending replay parses." in result.note
+    assert state is not None
+    assert state["next_stratz_retry_at"] is not None
+    assert stratz_client.calls == 1
+
+
 def test_background_sync_cycle_refreshes_oldest_pending_parse_requests_first() -> None:
     class _PendingRefreshClient(_FakeClient):
         def get_player_matches(self, **kwargs):
