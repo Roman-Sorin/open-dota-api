@@ -1146,8 +1146,169 @@ def test_background_sync_coverage_reports_detail_and_timing_gaps() -> None:
     assert coverage.missing_detail_count == 1
     assert coverage.missing_timing_count == 1
     assert coverage.pending_parse_count == 1
+    assert coverage.pending_waiting_count == 0
+    assert coverage.pending_poll_due_count == 0
+    assert coverage.pending_retry_due_count == 0
+    assert coverage.pending_legacy_count == 1
+    assert coverage.pending_ready_stuck_count == 0
     assert coverage.newest_fully_cached_start_time == 1771552800
     assert coverage.oldest_fully_cached_start_time == 1771552800
+
+
+def test_background_sync_coverage_breaks_pending_backlog_into_actionable_buckets() -> None:
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache(), match_store=store)
+    now = datetime.now(tz=timezone.utc)
+    account_id = 123
+    rows = [
+        {
+            "match_id": 401,
+            "start_time": 1771552800,
+            "player_slot": 0,
+            "radiant_win": True,
+            "game_mode": 23,
+            "kills": 8,
+            "deaths": 3,
+            "assists": 12,
+            "duration": 1800,
+            "hero_id": 1,
+        },
+        {
+            "match_id": 402,
+            "start_time": 1771552700,
+            "player_slot": 0,
+            "radiant_win": True,
+            "game_mode": 23,
+            "kills": 8,
+            "deaths": 3,
+            "assists": 12,
+            "duration": 1800,
+            "hero_id": 1,
+        },
+        {
+            "match_id": 403,
+            "start_time": 1771552600,
+            "player_slot": 0,
+            "radiant_win": True,
+            "game_mode": 23,
+            "kills": 8,
+            "deaths": 3,
+            "assists": 12,
+            "duration": 1800,
+            "hero_id": 1,
+        },
+        {
+            "match_id": 404,
+            "start_time": 1771552500,
+            "player_slot": 0,
+            "radiant_win": True,
+            "game_mode": 23,
+            "kills": 8,
+            "deaths": 3,
+            "assists": 12,
+            "duration": 1800,
+            "hero_id": 1,
+        },
+        {
+            "match_id": 405,
+            "start_time": 1771552400,
+            "player_slot": 0,
+            "radiant_win": True,
+            "game_mode": 23,
+            "kills": 8,
+            "deaths": 3,
+            "assists": 12,
+            "duration": 1800,
+            "hero_id": 1,
+        },
+    ]
+    store.upsert_player_matches(account_id, rows)
+    for match_id in (401, 402, 403, 404, 405):
+        store.upsert_match_detail(
+            match_id,
+            {
+                "match_id": match_id,
+                "version": None,
+                "players": [
+                    {
+                        "account_id": account_id,
+                        "player_slot": 0,
+                        "item_0": 1,
+                    }
+                ],
+            },
+        )
+
+    waiting_at = (now - timedelta(seconds=30)).isoformat()
+    poll_due_at = (now - timedelta(minutes=10)).isoformat()
+    retry_due_at = (now - timedelta(hours=2)).isoformat()
+    ready_payload = {
+        "match_id": 405,
+        "version": None,
+        "players": [
+            {
+                "account_id": account_id,
+                "player_slot": 0,
+                "item_0": 1,
+                "purchase_log": [{"key": "boots", "time": 100}],
+            }
+        ],
+    }
+    store.upsert_match_detail(405, ready_payload)
+
+    store.upsert_match_parse_request(
+        401,
+        account_id,
+        status="pending",
+        parse_job_id=9001,
+        requested_at=waiting_at,
+        last_polled_at=waiting_at,
+    )
+    store.upsert_match_parse_request(
+        402,
+        account_id,
+        status="pending",
+        parse_job_id=9002,
+        requested_at=retry_due_at,
+        last_polled_at=poll_due_at,
+    )
+    store.upsert_match_parse_request(
+        403,
+        account_id,
+        status="pending",
+        parse_job_id=9003,
+        requested_at=poll_due_at,
+        last_polled_at=poll_due_at,
+    )
+    store.upsert_match_parse_request(
+        404,
+        account_id,
+        status="pending",
+        requested_at=retry_due_at,
+        last_polled_at=retry_due_at,
+    )
+    store.upsert_match_parse_request(
+        405,
+        account_id,
+        status="pending",
+        parse_job_id=9005,
+        requested_at=waiting_at,
+        last_polled_at=waiting_at,
+    )
+
+    coverage = service.get_background_sync_coverage(
+        player_id=account_id,
+        window_days=365,
+        pending_parse_retry_after_seconds=3600,
+        pending_parse_poll_after_seconds=300,
+    )
+
+    assert coverage.pending_parse_count == 5
+    assert coverage.pending_waiting_count == 1
+    assert coverage.pending_retry_due_count == 1
+    assert coverage.pending_poll_due_count == 1
+    assert coverage.pending_legacy_count == 1
+    assert coverage.pending_ready_stuck_count == 1
 
 
 def test_background_sync_cycle_updates_state_history_and_parse_queue() -> None:

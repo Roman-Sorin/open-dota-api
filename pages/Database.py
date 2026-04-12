@@ -116,30 +116,21 @@ def _render_metrics(coverage: Any, state: dict[str, object] | None) -> None:
         _metric_card("Missing Detail", str(coverage.missing_detail_count)),
         _metric_card("Missing Timings", str(coverage.missing_timing_count)),
         _metric_card("Pending Parse", str(coverage.pending_parse_count)),
+        _metric_card("Pending Waiting", str(getattr(coverage, "pending_waiting_count", 0))),
+        _metric_card("Pending Poll Due", str(getattr(coverage, "pending_poll_due_count", 0))),
+        _metric_card("Pending Retry Due", str(getattr(coverage, "pending_retry_due_count", 0))),
+        _metric_card("Pending Legacy", str(getattr(coverage, "pending_legacy_count", 0))),
+        _metric_card("Pending Ready-Stuck", str(getattr(coverage, "pending_ready_stuck_count", 0))),
         _metric_card("Window Range", f"{_format_match_time(coverage.oldest_match_start_time)} to {_format_match_time(coverage.newest_match_start_time)}"),
         _metric_card("Fully Cached Through", _format_match_time(coverage.oldest_fully_cached_start_time)),
         _metric_card("Last Status", _cycle_status_chip(str(state.get("last_status") or state.get("status") or "idle"))),
         _metric_card("Next Retry", _format_datetime(str(state.get('next_retry_at')) if state.get('next_retry_at') else None)),
+        _metric_card("STRATZ Retry", _format_datetime(str(state.get('next_stratz_retry_at')) if state.get('next_stratz_retry_at') else None)),
     ]
     st.markdown(
         f'<div style="display:flex;flex-wrap:wrap;gap:0.55rem;margin:0.4rem 0 1rem 0;">{"".join(cards)}</div>',
         unsafe_allow_html=True,
     )
-
-
-class _PageCoverage:
-    def __init__(self, state: dict[str, object] | None, rows: list[Any]) -> None:
-        state = state or {}
-        self.total_matches = int(state.get("target_match_count") or len(rows))
-        self.detail_cached_count = int(state.get("detail_cached_count") or 0)
-        self.timing_ready_count = int(state.get("timing_ready_count") or 0)
-        self.missing_detail_count = int(state.get("missing_detail_count") or 0)
-        self.missing_timing_count = int(state.get("missing_timing_count") or 0)
-        self.pending_parse_count = int(state.get("pending_parse_count") or 0)
-        self.newest_match_start_time = state.get("newest_match_start_time")
-        self.oldest_match_start_time = state.get("oldest_match_start_time")
-        self.oldest_fully_cached_start_time = state.get("oldest_fully_cached_start_time")
-        self.rows = rows
 
 
 def _render_match_table(rows: list[Any], service) -> None:
@@ -401,7 +392,11 @@ page_rows = service.list_background_match_status_rows(
     limit=current_page_size,
     offset=start_idx,
 )
-coverage = _PageCoverage(state, page_rows)
+coverage = service.get_background_sync_coverage(
+    player_id=player_id,
+    game_mode=23,
+    window_days=int(window_days),
+)
 
 if run_result is not None:
     if run_result.status == "completed":
@@ -460,7 +455,7 @@ else:
     )
 
 st.subheader("Cached Matches")
-if not coverage.rows:
+if not page_rows:
     st.info("No cached Turbo matches for the selected window yet.")
 else:
     nav_cols = st.columns([1.1, 0.9, 0.8, 0.8, 0.8, 0.8, 1.8])
@@ -492,7 +487,7 @@ else:
         f"Showing matches {start_idx + 1}-{end_idx} of {total_rows} cached match(es). "
         f"Page {current_page} of {total_pages}. This table is newest-first."
     )
-    _render_match_table(coverage.rows, service)
+    _render_match_table(page_rows, service)
 
 if auto_run:
     st.caption(

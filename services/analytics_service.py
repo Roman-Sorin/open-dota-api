@@ -143,6 +143,7 @@ class BackgroundMatchStatusRow:
     detail_status: str
     timing_status: str
     parse_status: str | None
+    pending_bucket: str | None = None
 
     @property
     def is_fully_cached(self) -> bool:
@@ -166,6 +167,11 @@ class BackgroundSyncCoverage:
     missing_detail_count: int
     missing_timing_count: int
     pending_parse_count: int
+    pending_waiting_count: int
+    pending_poll_due_count: int
+    pending_retry_due_count: int
+    pending_legacy_count: int
+    pending_ready_stuck_count: int
     newest_match_start_time: int | None
     oldest_match_start_time: int | None
     newest_fully_cached_start_time: int | None
@@ -1893,6 +1899,8 @@ class DotaAnalyticsService:
         window_days: int,
         limit: int | None = None,
         offset: int = 0,
+        pending_parse_retry_after_seconds: int = 3600,
+        pending_parse_poll_after_seconds: int = 300,
     ) -> list[BackgroundMatchStatusRow]:
         if self.match_store is None:
             return []
@@ -1960,9 +1968,39 @@ class DotaAnalyticsService:
                     detail_status=detail_status,
                     timing_status=timing_status,
                     parse_status=parse_status,
+                    pending_bucket=self._classify_pending_parse_bucket(
+                        parse_status=parse_status,
+                        timing_status=timing_status,
+                        parse_request=parse_request,
+                        retry_after_seconds=pending_parse_retry_after_seconds,
+                        poll_after_seconds=pending_parse_poll_after_seconds,
+                    ),
                 )
             )
         return rows
+
+    def _classify_pending_parse_bucket(
+        self,
+        *,
+        parse_status: str | None,
+        timing_status: str,
+        parse_request: dict[str, Any] | None,
+        retry_after_seconds: int,
+        poll_after_seconds: int,
+    ) -> str | None:
+        if parse_status != "pending":
+            return None
+        if timing_status == "ready":
+            return "ready_stuck"
+        if not isinstance(parse_request, dict):
+            return "legacy"
+        if int(parse_request.get("parse_job_id") or 0) <= 0:
+            return "legacy"
+        if self._pending_parse_retry_due(parse_request, retry_after_seconds=retry_after_seconds):
+            return "retry_due"
+        if self._pending_parse_poll_due(parse_request, poll_after_seconds=poll_after_seconds):
+            return "poll_due"
+        return "waiting"
 
     def get_background_sync_coverage(
         self,
@@ -1971,12 +2009,16 @@ class DotaAnalyticsService:
         game_mode: int = 23,
         window_days: int = 365,
         limit: int | None = None,
+        pending_parse_retry_after_seconds: int = 3600,
+        pending_parse_poll_after_seconds: int = 300,
     ) -> BackgroundSyncCoverage:
         rows = self._background_match_status_rows(
             player_id=player_id,
             game_mode=game_mode,
             window_days=window_days,
             limit=limit,
+            pending_parse_retry_after_seconds=pending_parse_retry_after_seconds,
+            pending_parse_poll_after_seconds=pending_parse_poll_after_seconds,
         )
         total_matches = len(rows)
         detail_cached_count = sum(1 for row in rows if row.detail_status == "cached")
@@ -1984,6 +2026,11 @@ class DotaAnalyticsService:
         missing_detail_count = sum(1 for row in rows if row.detail_status != "cached")
         missing_timing_count = sum(1 for row in rows if row.detail_status == "cached" and row.timing_status in {"missing", "pending_parse"})
         pending_parse_count = sum(1 for row in rows if row.parse_status == "pending")
+        pending_waiting_count = sum(1 for row in rows if row.pending_bucket == "waiting")
+        pending_poll_due_count = sum(1 for row in rows if row.pending_bucket == "poll_due")
+        pending_retry_due_count = sum(1 for row in rows if row.pending_bucket == "retry_due")
+        pending_legacy_count = sum(1 for row in rows if row.pending_bucket == "legacy")
+        pending_ready_stuck_count = sum(1 for row in rows if row.pending_bucket == "ready_stuck")
         newest_match_start_time = rows[0].start_time if rows else None
         oldest_match_start_time = rows[-1].start_time if rows else None
 
@@ -2000,6 +2047,11 @@ class DotaAnalyticsService:
             missing_detail_count=missing_detail_count,
             missing_timing_count=missing_timing_count,
             pending_parse_count=pending_parse_count,
+            pending_waiting_count=pending_waiting_count,
+            pending_poll_due_count=pending_poll_due_count,
+            pending_retry_due_count=pending_retry_due_count,
+            pending_legacy_count=pending_legacy_count,
+            pending_ready_stuck_count=pending_ready_stuck_count,
             newest_match_start_time=newest_match_start_time,
             oldest_match_start_time=oldest_match_start_time,
             newest_fully_cached_start_time=contiguous_rows[0].start_time if contiguous_rows else None,
@@ -2015,6 +2067,8 @@ class DotaAnalyticsService:
         window_days: int = 365,
         limit: int = 100,
         offset: int = 0,
+        pending_parse_retry_after_seconds: int = 3600,
+        pending_parse_poll_after_seconds: int = 300,
     ) -> list[BackgroundMatchStatusRow]:
         return self._background_match_status_rows(
             player_id=player_id,
@@ -2022,6 +2076,8 @@ class DotaAnalyticsService:
             window_days=window_days,
             limit=limit,
             offset=offset,
+            pending_parse_retry_after_seconds=pending_parse_retry_after_seconds,
+            pending_parse_poll_after_seconds=pending_parse_poll_after_seconds,
         )
 
     def _refresh_pending_parse_requests(
