@@ -1,5 +1,12 @@
 ﻿# Application Handoff Notes
 
+## 2026-04-16
+
+- Changed `Refresh Turbo Dashboard` in `webapp/dashboard_page.py` to use the full snapshot path (`force_sync=True`, `hydrate_details=True`) instead of a summary-sync-only refresh.
+- One dashboard refresh now persists summary rows, hydrated match details, and item-timing parse/backfill work for the active snapshot without requiring per-hero manual repair clicks.
+- Added regression coverage in `tests/test_match_store.py` for the forced dashboard snapshot path so repaired timing details and parse-request metadata are stored in SQLite during refresh.
+- Updated `README.md` and `APP_GUIDE.md` to document the new refresh behavior.
+
 ## Current product direction
 
 Primary UX is now a Turbo-only web dashboard (Streamlit) that acts like a personal Dotabuff view.

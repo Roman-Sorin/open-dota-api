@@ -101,6 +101,7 @@ The project includes two interfaces:
 - In `Recent Matches`, regular end-of-match items stay left-aligned within the `Items` cell while consumable buffs are grouped against the right edge of that same cell
 - Recent hero matches repair legacy cached item timings on the next main dashboard refresh when an older stored detail row is missing `purchase_log`
 - If `Recent Matches` is already visible, `Refresh Turbo Dashboard` rebuilds that section from cached data in the same rerun so repaired item timings appear immediately
+- `Refresh Turbo Dashboard` now persists the whole active snapshot in one pass: OpenDota summary sync, cached match-detail hydration, and item-timing backfill/parse submission all run during the main refresh instead of requiring hero-by-hero manual repair
 - `Repair Missing Item Timings via OpenDota Parse` explicitly requests OpenDota replay parses for the visible recent hero matches that still have no timing data, waits briefly, then rebuilds the section from the refreshed cached details
 - When final-item timings are available, recent-match items are ordered by earliest completion time
 - Recent hero matches include `Net Worth` and player `Hero Damage`

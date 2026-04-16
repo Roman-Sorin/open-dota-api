@@ -1610,30 +1610,49 @@ if load:
             start_date=active_start_date,
             patch_names=active_patches,
         )
-        summary_sync = service.sync_recent_matches_into_cache(sync_filters, force=True)
-        if summary_sync.rate_limited:
-            refresh_notice = (
-                "OpenDota rate limit reached while checking for newer matches. "
-                "Showing cached dashboard data."
-            )
-        elif summary_sync.error_message:
-            if had_cached_matches:
-                refresh_notice = (
-                    f"{summary_sync.error_message} "
-                    "Showing cached dashboard data."
+        try:
+            if active_patches and not supports_patch_overview:
+                all_matches, _ = service.load_match_snapshot(
+                    sync_filters,
+                    force_sync=True,
+                    hydrate_details=True,
                 )
+                selected_set = set(active_patches)
+                patch_filtered_matches = [
+                    match for match in all_matches if _resolve_patch_name(match.start_time, patch_timeline) in selected_set
+                ]
+                service.enrich_hero_damage(
+                    player_id,
+                    patch_filtered_matches,
+                    max_fallback_detail_calls=max(120, len(patch_filtered_matches)),
+                    allow_detail_fetch=False,
+                )
+                overview = _build_overview_from_matches(patch_filtered_matches, service)
             else:
-                raise OpenDotaError(summary_sync.error_message)
-
-        overview, patch_filtered_matches = _load_cached_dashboard_snapshot(
-            service,
-            player_id=player_id,
-            active_days=active_days,
-            active_start_date=active_start_date,
-            active_patches=active_patches,
-            supports_patch_overview=supports_patch_overview,
-            patch_timeline=patch_timeline,
-        )
+                overview_snapshot = _get_turbo_overview_snapshot_safe(
+                    service,
+                    player_id=player_id,
+                    days=active_days,
+                    start_date=active_start_date,
+                    patch_names=active_patches,
+                    force_sync=True,
+                    hydrate_details=True,
+                )
+                overview = overview_snapshot.overview
+                patch_filtered_matches = None
+        except OpenDotaError as exc:
+            if not had_cached_matches:
+                raise
+            refresh_notice = f"{exc} Showing cached dashboard data."
+            overview, patch_filtered_matches = _load_cached_dashboard_snapshot(
+                service,
+                player_id=player_id,
+                active_days=active_days,
+                active_start_date=active_start_date,
+                active_patches=active_patches,
+                supports_patch_overview=supports_patch_overview,
+                patch_timeline=patch_timeline,
+            )
 
         if overview and overview_looks_stale(overview):
             st.session_state["overview_requires_refresh"] = True

@@ -177,7 +177,8 @@ tests/
 
 - Some `players/{id}/matches` rows may have empty `item_0..item_5` (especially Turbo cases).
 - Missing detail-heavy fields are hydrated during the main dashboard refresh and then reused from local storage by all sections.
-- Main dashboard refresh now also attempts OpenDota parse-based backfill for missing item timings on cached final-inventory matches, so newly synced matches usually do not require pressing the manual repair button.
+- `Refresh Turbo Dashboard` now runs the full cache pipeline for the active snapshot: summary sync, match-detail hydration, and item-timing backfill/parse submission are all persisted to the database in the same refresh.
+- Main dashboard refresh now also attempts OpenDota parse-based backfill for missing item timings on cached final-inventory matches across the current snapshot, so newly synced matches no longer require opening each hero and pressing the manual repair button one by one.
 - Player matches are persisted in local `SQLite` storage and reused for later filters/analytics.
 - Match details are persisted separately and reused for enrichment-heavy sections.
 - The service performs incremental syncs instead of refetching whole history on each reload.

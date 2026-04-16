@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import services.analytics_service as analytics_service_module
 from clients.stratz_client import StratzAuthError, StratzRateLimitError
 from models.dtos import QueryFilters
 from services.analytics_service import DotaAnalyticsService
@@ -704,6 +705,120 @@ def test_refresh_cached_matches_rehydrates_legacy_details_without_purchase_log_f
         "Eye of Skadi",
     ]
     assert [item.purchase_time_min for item in recent[0].items] == [8, 12, 15, 17, 20]
+
+
+def test_force_refresh_dashboard_snapshot_hydrates_details_and_backfills_item_timings_into_store() -> None:
+    class _RefreshDashboardClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.detail_calls = 0
+            self.parse_requested: set[int] = set()
+
+        def get_constants_heroes(self) -> dict:
+            return {
+                "1": {"id": 1, "localized_name": "Axe", "img": "/apps/dota2/images/heroes/axe.png"},
+                "2": {"id": 2, "localized_name": "Bane", "img": "/apps/dota2/images/heroes/bane.png"},
+            }
+
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 8101,
+                    "start_time": 1771552800,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 8,
+                    "deaths": 3,
+                    "assists": 11,
+                    "duration": 1400,
+                    "hero_id": 1,
+                    "item_0": 1,
+                },
+                {
+                    "match_id": 8102,
+                    "start_time": 1771466400,
+                    "player_slot": 0,
+                    "radiant_win": False,
+                    "game_mode": 23,
+                    "kills": 4,
+                    "deaths": 6,
+                    "assists": 7,
+                    "duration": 1300,
+                    "hero_id": 2,
+                    "item_0": 2,
+                },
+            ]
+
+        def get_match_details(self, match_id: int) -> dict:
+            self.detail_calls += 1
+            if match_id == 8101 or match_id in self.parse_requested:
+                return {
+                    "match_id": match_id,
+                    "version": 22,
+                    "players": [
+                        {
+                            "account_id": 123,
+                            "player_slot": 0,
+                            "hero_damage": 17000 if match_id == 8101 else 12500,
+                            "net_worth": 22000 if match_id == 8101 else 18100,
+                            "item_0": 1 if match_id == 8101 else 2,
+                            "purchase_log": [
+                                {"key": "blink", "time": 600}
+                            ] if match_id == 8101 else [
+                                {"key": "force_staff", "time": 720}
+                            ],
+                        }
+                    ],
+                }
+            return {
+                "match_id": 8102,
+                "version": None,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0,
+                        "hero_damage": 12500,
+                        "net_worth": 18100,
+                        "item_0": 2,
+                    }
+                ],
+            }
+
+        def request_match_parse(self, match_id: int) -> int | None:
+            self.parse_requested.add(match_id)
+            return 900000 + match_id
+
+    client = _RefreshDashboardClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    service.references.item_ids_by_key.update({"blink": 1, "force_staff": 2})
+    service.references.item_names_by_id.update({1: "Blink Dagger", 2: "Force Staff"})
+
+    original_sleep = analytics_service_module.time_module.sleep
+    analytics_service_module.time_module.sleep = lambda _seconds: None
+    try:
+        snapshot = service.get_turbo_overview_snapshot(
+            player_id=123,
+            days=365,
+            force_sync=True,
+            hydrate_details=True,
+        )
+    finally:
+        analytics_service_module.time_module.sleep = original_sleep
+
+    repaired_details = store.get_match_detail(8102)
+    parse_request = store.get_match_parse_request(8102)
+
+    assert len(snapshot.matches) == 2
+    assert len(snapshot.overview) == 2
+    assert client.detail_calls >= 3
+    assert 8102 in client.parse_requested
+    assert isinstance(repaired_details, dict)
+    assert repaired_details["players"][0]["purchase_log"] == [{"key": "force_staff", "time": 720}]
+    assert parse_request is not None
+    assert parse_request["request_reason"] == "recent_match_timing_repair"
 
 
 def test_load_match_snapshot_rehydrates_cached_details_missing_purchase_log() -> None:
