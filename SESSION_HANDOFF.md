@@ -8,9 +8,11 @@
   - overview columns: `MVP`, `High`, `Tag`
   - detail cards: `MVP Matches`, `Highlight Matches`, `Tagged Matches`
   - all three are now rendered as `count (pct%)` against the hero's total matches
+- The top dashboard summary cards also expose global `MVP`, `Highlighted`, and `Tag` totals as `count (pct%)` across the active snapshot.
 - `Recent Matches for Hero` now shows saved tag badges inline and opens the edit dialog from an in-table `Edit Tags` action on each visible row instead of the old top-of-section selector/button flow.
 - Tag saves rebuild the current overview and recent section from cached matches only; they do not trigger OpenDota sync and do not advance the dashboard snapshot timestamp.
-- Bumped `OVERVIEW_SCHEMA_VERSION` to `16` and added a dedicated recent-section schema key so old in-session rows are not reused after deploy.
+- The current `Recent Matches` implementation no longer uses the transient iframe/query-param route. It renders native Streamlit rows and opens the tag dialog from a per-row button through session state, which avoids the blank `~/+` tab flow and the oversized iframe whitespace.
+- Bumped `OVERVIEW_SCHEMA_VERSION` to `17` and the dedicated recent-section schema key to `3` so old in-session rows are not reused after deploy.
 - Added regression coverage in `tests/test_match_store.py` and `tests/test_hero_overview_table.py`.
 - Updated `README.md` and `APP_GUIDE.md` to document the new manual-tag behavior and storage model.
 - Follow-up hotfix:
@@ -22,9 +24,11 @@
   - root cause was the same mixed-runtime pattern, but now on the `StatsResult` dataclass shape.
   - fixed by routing `build_stats()` through `_make_stats_result()`, which falls back to `SimpleNamespace` when the in-process `StatsResult` class is older than the service code.
 - Third follow-up hotfix:
-  - the in-table `Edit Tags` action inside `Recent Matches` was rendered through `st.markdown(..., unsafe_allow_html=True)`.
+  - the first in-table `Edit Tags` action inside `Recent Matches` was rendered through `st.markdown(..., unsafe_allow_html=True)`.
   - Streamlit treated the anchor as a normal external link and opened a blank `~/+` tab instead of driving the in-app modal flow.
-  - fixed by rendering the recent-match table through `components.html(...)` and using an inline button that updates the current page query param via JavaScript in the same window.
+- Fourth follow-up hotfix:
+  - the interim iframe/query-param workaround created fragile click behavior and excess vertical whitespace in `Recent Matches`.
+  - fixed by removing that path entirely and switching the section to native Streamlit row rendering plus session-state-driven dialog opening.
 
 ## 2026-04-16
 

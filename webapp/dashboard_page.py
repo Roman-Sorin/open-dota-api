@@ -47,9 +47,9 @@ MATCH_USER_TAG_MVP = getattr(dtos_module, "MATCH_USER_TAG_MVP", "mvp")
 MATCH_USER_TAG_HIGHLIGHT = getattr(dtos_module, "MATCH_USER_TAG_HIGHLIGHT", "highlight")
 
 
-OVERVIEW_SCHEMA_VERSION = 16
+OVERVIEW_SCHEMA_VERSION = 17
 ITEM_WINRATES_SCHEMA_VERSION = 3
-RECENT_MATCHES_SCHEMA_VERSION = 2
+RECENT_MATCHES_SCHEMA_VERSION = 3
 CONSUMABLE_BUFF_ITEM_KEYS: dict[str, int] = {
     "moon_shard": 247,
     "ultimate_scepter": 108,
@@ -87,6 +87,28 @@ st.markdown(
         font-weight: 700;
         line-height: 1.2;
         margin-top: 0.2rem;
+    }
+    [class*="st-key-recent_row_action_"] button {
+        min-height: 2rem;
+        padding: 0.1rem 0.55rem;
+        font-size: 0.72rem;
+        line-height: 1.1;
+        margin-top: 0.25rem;
+    }
+    [class*="st-key-recent_row_action_"] {
+        margin-top: 0;
+        margin-bottom: 0;
+    }
+    .recent-row-divider {
+        height: 1px;
+        background: rgba(127, 127, 127, 0.12);
+        margin: 0.2rem 0 0.35rem 0;
+    }
+    .recent-action-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
     }
     .hero-select-preview {
         display: flex;
@@ -499,6 +521,11 @@ def colored_metric_html(value: object, color: str) -> str:
     return f'<span style="color: {color}; font-weight: 700;">{value}</span>'
 
 
+def format_count_pct_value(count: int, total: int) -> str:
+    pct = round((count / total * 100.0)) if total > 0 else 0
+    return f"{count} ({pct}%)"
+
+
 def _style_winrate_cell(value: object) -> str:
     text = str(value).strip().replace("%", "")
     try:
@@ -679,18 +706,15 @@ except Exception:  # noqa: BLE001
 query_filters_supports_patch = "patch_names" in getattr(QueryFilters, "__dataclass_fields__", {})
 patch_timeline = _load_patch_timeline(service)
 patch_options = _build_patch_options(patch_timeline)
-EDIT_MATCH_QUERY_PARAM = "edit_match_id"
-
-
-def _recent_match_editor_label(row) -> str:
-    return (
-        f"{row.match_id} | {row.result} | {row.kills}/{row.deaths}/{row.assists} | "
-        f"{row.duration} | {format_time_ago(row.started_at)}"
-    )
+PENDING_RECENT_MATCH_EDIT_KEY = "pending_recent_match_edit_id"
 
 
 def _clear_pending_recent_match_edit() -> None:
-    st.query_params.pop(EDIT_MATCH_QUERY_PARAM, None)
+    st.session_state.pop(PENDING_RECENT_MATCH_EDIT_KEY, None)
+
+
+def _queue_pending_recent_match_edit(match_id: int) -> None:
+    st.session_state[PENDING_RECENT_MATCH_EDIT_KEY] = int(match_id)
 
 
 @st.dialog("Edit Match Tags", width="small", on_dismiss=_clear_pending_recent_match_edit)
@@ -722,7 +746,6 @@ def _edit_match_tags_dialog(
     if highlight_selected:
         selected_tags.append(MATCH_USER_TAG_HIGHLIGHT)
     service.replace_match_user_tags(player_id, match_id, selected_tags)
-    st.query_params.pop(EDIT_MATCH_QUERY_PARAM, None)
     _refresh_match_tag_views(
         service,
         player_id=player_id,
@@ -819,85 +842,6 @@ def _render_match_tag_badges_html(tag_labels: tuple[str, ...] | list[str]) -> st
         css_class = "mvp" if normalized == "mvp" else "highlight"
         badges.append(f'<span class="recent-tag {css_class}">{html.escape(str(label))}</span>')
     return f'<div class="recent-tags">{"".join(badges)}</div>'
-
-
-def _render_recent_matches_table_html(table_rows_html: str, row_count: int) -> tuple[str, int]:
-    table_html = f"""
-    <html>
-    <head>
-      <style>
-        body {{ margin: 0; font-family: sans-serif; color: inherit; }}
-        .recent-matches-wrap {{ overflow-x: auto; margin-top: 0.5rem; }}
-        .recent-matches-table {{ width: 100%; min-width: 860px; border-collapse: collapse; font-size: 0.84rem; }}
-        .recent-matches-table th {{ text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.72; padding: 0.45rem 0.55rem; border-bottom: 1px solid rgba(49, 51, 63, 0.18); white-space: nowrap; }}
-        .recent-matches-table td {{ padding: 0.55rem; border-bottom: 1px solid rgba(49, 51, 63, 0.1); vertical-align: middle; }}
-        .recent-hero-cell {{ min-width: 150px; }}
-        .recent-hero-wrap {{ display: flex; align-items: center; gap: 0.55rem; }}
-        .recent-hero-icon-wrap {{ position: relative; width: 38px; height: 38px; flex: 0 0 38px; }}
-        .recent-hero-icon-wrap img {{ width: 38px; height: 38px; border-radius: 6px; display: block; }}
-        .recent-hero-level, .recent-hero-variant {{ position: absolute; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; font-size: 0.6rem; font-weight: 700; line-height: 16px; text-align: center; color: #fff; background: rgba(17, 24, 39, 0.92); border: 1px solid rgba(255, 255, 255, 0.16); }}
-        .recent-hero-level {{ top: -5px; left: -5px; }}
-        .recent-hero-variant {{ right: -5px; bottom: -5px; }}
-        .recent-hero-name {{ font-weight: 700; line-height: 1.1; }}
-        .recent-result {{ font-weight: 700; white-space: nowrap; }}
-        .recent-result.win {{ color: #23a55a; }}
-        .recent-result.loss {{ color: #d9534f; }}
-        .recent-when {{ white-space: nowrap; opacity: 0.78; font-size: 0.72rem; margin-top: 0.12rem; }}
-        .recent-tags {{ display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.35rem; }}
-        .recent-tag {{ display: inline-flex; align-items: center; padding: 0.12rem 0.42rem; border-radius: 999px; font-size: 0.66rem; font-weight: 700; line-height: 1.2; letter-spacing: 0.02em; border: 1px solid rgba(255, 255, 255, 0.14); white-space: nowrap; }}
-        .recent-tag.mvp {{ color: #111827; background: rgba(245, 158, 11, 0.96); border-color: rgba(17, 24, 39, 0.2); }}
-        .recent-tag.highlight {{ color: #ecfeff; background: rgba(8, 145, 178, 0.94); border-color: rgba(165, 243, 252, 0.22); }}
-        .recent-action-link {{ display: inline-flex; align-items: center; justify-content: center; padding: 0.24rem 0.56rem; border-radius: 0.42rem; font-size: 0.72rem; font-weight: 700; color: #e5e7eb; text-decoration: none; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.04); white-space: nowrap; cursor: pointer; }}
-        .recent-action-link:hover {{ border-color: rgba(96, 165, 250, 0.42); background: rgba(59, 130, 246, 0.12); }}
-        .recent-duration-value, .recent-kda-value, .recent-stat-value {{ white-space: nowrap; font-weight: 700; }}
-        .recent-bar {{ width: 100%; height: 6px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, 0.08); margin-top: 0.32rem; }}
-        .recent-bar-fill {{ height: 100%; border-radius: 999px; background: linear-gradient(90deg, #d97706 0%, #f59e0b 100%); }}
-        .recent-kda-bar {{ display: flex; width: 100%; height: 6px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, 0.08); margin-top: 0.32rem; }}
-        .recent-kda-kills {{ background: #c2410c; }}
-        .recent-kda-deaths {{ background: #6b7280; }}
-        .recent-kda-assists {{ background: #15803d; }}
-        .recent-items-inline {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 0.35rem; min-width: 236px; }}
-        .recent-items-main {{ display: flex; align-items: flex-start; gap: 0.35rem; min-width: 0; }}
-        .recent-items-buffs {{ display: flex; align-items: flex-start; justify-content: flex-end; gap: 0.35rem; margin-left: auto; min-width: 0; }}
-        .recent-items-inline.empty {{ opacity: 0.65; }}
-        .recent-item-inline {{ position: relative; width: 34px; flex: 0 0 34px; display: inline-flex; align-items: flex-start; justify-content: center; padding-bottom: 0.15rem; }}
-        .recent-item-inline img {{ width: 34px; height: auto; border-radius: 5px; display: block; margin: 0 auto; }}
-        .recent-item-chip {{ position: absolute; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; font-size: 0.6rem; font-weight: 700; line-height: 16px; text-align: center; white-space: nowrap; color: #fff; background: rgba(17, 24, 39, 0.92); border: 1px solid rgba(255, 255, 255, 0.16); }}
-        .recent-item-chip-time {{ left: -5px; bottom: -5px; }}
-        .recent-item-chip-buff {{ top: -5px; right: -5px; color: #111827; background: rgba(245, 158, 11, 0.96); border-color: rgba(17, 24, 39, 0.2); }}
-        .recent-item-chip.na {{ opacity: 0.58; }}
-      </style>
-    </head>
-    <body>
-      <div class="recent-matches-wrap">
-        <table class="recent-matches-table">
-          <thead><tr>
-            <th>Hero</th>
-            <th>Result</th>
-            <th>Duration</th>
-            <th>K/D/A</th>
-            <th>KDA</th>
-            <th>Net Worth</th>
-            <th>Damage</th>
-            <th>Items</th>
-            <th>Tags</th>
-          </tr></thead>
-          <tbody>{table_rows_html}</tbody>
-        </table>
-      </div>
-      <script>
-        function editMatchTags(matchId) {{
-          const targetWindow = window.parent;
-          const nextUrl = new URL(targetWindow.location.href);
-          nextUrl.searchParams.set("{EDIT_MATCH_QUERY_PARAM}", String(matchId));
-          targetWindow.location.href = nextUrl.toString();
-        }}
-      </script>
-    </body>
-    </html>
-    """
-    table_height = min(220 + max(row_count, 1) * 88, 1600)
-    return table_html, table_height
 
 
 def _mark_section_visible(section_name: str, request_key: object) -> None:
@@ -2009,12 +1953,18 @@ total_matches = sum(int(row["matches"]) for row in overview)
 total_wins = sum(int(row["wins"]) for row in overview)
 total_losses = total_matches - total_wins
 overall_wr = (total_wins / total_matches * 100.0) if total_matches else 0.0
+total_mvp_matches = sum(int(row.get("mvp_matches", 0) or 0) for row in overview)
+total_highlight_matches = sum(int(row.get("highlight_matches", 0) or 0) for row in overview)
+total_tagged_matches = sum(int(row.get("tagged_matches", 0) or 0) for row in overview)
 
 top_cards = [
     ("Turbo Matches", f"{total_matches}"),
     ("Turbo Wins", colored_metric_html(total_wins, "#23a55a")),
     ("Turbo Losses", colored_metric_html(total_losses, "#d9534f")),
     ("Turbo Winrate", colored_winrate_html(overall_wr)),
+    ("MVP", format_count_pct_value(total_mvp_matches, total_matches)),
+    ("Highlighted", format_count_pct_value(total_highlight_matches, total_matches)),
+    ("Tag", format_count_pct_value(total_tagged_matches, total_matches)),
 ]
 top_html = "".join(
     f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div></div>'
@@ -2681,16 +2631,9 @@ if recent_matches_loaded:
     recent_match_rows = recent_match_rows or []
     if recent_section_stale:
         st.caption("Recent matches were loaded before the latest dashboard refresh. Use the hero action bar above to rebuild this section from the current dashboard snapshot.")
-    st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches)} matches")
     recent_rows_by_id = {int(row.match_id): row for row in recent_match_rows}
-    pending_edit_match_id_raw = st.query_params.get(EDIT_MATCH_QUERY_PARAM)
-    pending_edit_match_id: int | None = None
-    try:
-        if pending_edit_match_id_raw is not None and str(pending_edit_match_id_raw).strip():
-            pending_edit_match_id = int(str(pending_edit_match_id_raw))
-    except (TypeError, ValueError):
-        pending_edit_match_id = None
-    if pending_edit_match_id is not None and pending_edit_match_id in recent_rows_by_id:
+    pending_edit_match_id = st.session_state.get(PENDING_RECENT_MATCH_EDIT_KEY)
+    if isinstance(pending_edit_match_id, int) and pending_edit_match_id in recent_rows_by_id:
         selected_recent_row = recent_rows_by_id[pending_edit_match_id]
         _edit_match_tags_dialog(
             player_id=player_id,
@@ -2707,16 +2650,18 @@ if recent_matches_loaded:
         )
     elif pending_edit_match_id is not None:
         _clear_pending_recent_match_edit()
+    st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches)} matches")
 
-    table_rows_html = ""
+    header_cols = st.columns([2.15, 1.25, 1.15, 1.25, 0.8, 0.95, 0.95, 2.3, 1.25], gap="small")
+    header_labels = ["Hero", "Result", "Duration", "K/D/A", "KDA", "Net Worth", "Damage", "Items", "Tags / Edit"]
+    for col, label in zip(header_cols, header_labels, strict=False):
+        col.caption(label)
+
     for row in recent_match_rows:
         result_class = "win" if row.result == "Win" else "loss"
         duration_percent = duration_bar_percent(row.duration_seconds)
         kills_pct, deaths_pct, assists_pct = kda_bar_segments(row.kills, row.deaths, row.assists)
         tag_badges_html = _render_match_tag_badges_html(tuple(getattr(row, "user_tags", ()) or ()))
-        edit_link_html = (
-            f'<button type="button" class="recent-action-link" onclick="editMatchTags({int(row.match_id)})">Edit Tags</button>'
-        )
         regular_item_html = "".join(
             _render_item_icon_html(
                 image_url=item.item_image,
@@ -2741,52 +2686,69 @@ if recent_matches_loaded:
             f'<div class="recent-items-main">{regular_item_html}</div>'
             f'<div class="recent-items-buffs">{buff_item_html}</div>'
         ) if (regular_item_html or buff_item_html) else '<div class="recent-items-inline empty">No item data</div>'
-        table_rows_html += (
-            "<tr>"
-            '<td class="recent-hero-cell">'
-            '<div class="recent-hero-wrap">'
-            '<div class="recent-hero-icon-wrap">'
-            f'<img src="{row.hero_image}" alt="{row.hero_name}"/>'
-            f'<div class="recent-hero-level">{row.hero_level or "?"}</div>'
-            f'<div class="recent-hero-variant">{row.hero_variant or "-"}</div>'
-            "</div>"
-            "<div>"
-            f'<div class="recent-hero-name">{row.hero_name}</div>'
-            f"{tag_badges_html}"
-            "</div>"
-            "</div>"
-            "</td>"
-            f'<td><div class="recent-result {result_class}">{row.result} Match</div>'
-            f'<div class="recent-when">{format_time_ago(row.started_at)}</div></td>'
-            '<td>'
-            f'<div class="recent-duration-value">{row.duration}</div>'
-            f'<div class="recent-bar"><div class="recent-bar-fill" style="width:{duration_percent:.1f}%"></div></div>'
-            "</td>"
-            '<td>'
-            f'<div class="recent-kda-value">{row.kills}/{row.deaths}/{row.assists}</div>'
-            '<div class="recent-kda-bar">'
-            f'<div class="recent-kda-kills" style="width:{kills_pct:.1f}%"></div>'
-            f'<div class="recent-kda-deaths" style="width:{deaths_pct:.1f}%"></div>'
-            f'<div class="recent-kda-assists" style="width:{assists_pct:.1f}%"></div>'
-            "</div>"
-            "</td>"
-            f'<td><div class="recent-stat-value">{row.kda_ratio:.1f}</div></td>'
-            f'<td><div class="recent-stat-value">{f"{round((row.net_worth or 0) / 1000, 1)}k" if row.net_worth else "-"}</div></td>'
-            f'<td><div class="recent-stat-value">{f"{round((row.hero_damage or 0) / 1000, 1)}k" if row.hero_damage else "-"}</div></td>'
-            f'<td><div class="recent-items-inline">{item_html}</div></td>'
-            f"<td>{edit_link_html}</td>"
-            "</tr>"
-        )
-
-    recent_table_html, recent_table_height = _render_recent_matches_table_html(
-        table_rows_html,
-        len(recent_match_rows),
-    )
-    components.html(
-        recent_table_html,
-        height=recent_table_height,
-        scrolling=False,
-    )
+        row_cols = st.columns([2.15, 1.25, 1.15, 1.25, 0.8, 0.95, 0.95, 2.3, 1.25], gap="small")
+        with row_cols[0]:
+            st.markdown(
+                (
+                    '<div class="recent-hero-wrap">'
+                    '<div class="recent-hero-icon-wrap">'
+                    f'<img src="{row.hero_image}" alt="{row.hero_name}"/>'
+                    f'<div class="recent-hero-level">{row.hero_level or "?"}</div>'
+                    f'<div class="recent-hero-variant">{row.hero_variant or "-"}</div>'
+                    "</div>"
+                    "<div>"
+                    f'<div class="recent-hero-name">{row.hero_name}</div>'
+                    "</div>"
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
+        with row_cols[1]:
+            st.markdown(
+                f'<div class="recent-result {result_class}">{row.result} Match</div><div class="recent-when">{format_time_ago(row.started_at)}</div>',
+                unsafe_allow_html=True,
+            )
+        with row_cols[2]:
+            st.markdown(
+                f'<div class="recent-duration-value">{row.duration}</div><div class="recent-bar"><div class="recent-bar-fill" style="width:{duration_percent:.1f}%"></div></div>',
+                unsafe_allow_html=True,
+            )
+        with row_cols[3]:
+            st.markdown(
+                (
+                    f'<div class="recent-kda-value">{row.kills}/{row.deaths}/{row.assists}</div>'
+                    '<div class="recent-kda-bar">'
+                    f'<div class="recent-kda-kills" style="width:{kills_pct:.1f}%"></div>'
+                    f'<div class="recent-kda-deaths" style="width:{deaths_pct:.1f}%"></div>'
+                    f'<div class="recent-kda-assists" style="width:{assists_pct:.1f}%"></div>'
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
+        with row_cols[4]:
+            st.markdown(f'<div class="recent-stat-value">{row.kda_ratio:.1f}</div>', unsafe_allow_html=True)
+        with row_cols[5]:
+            st.markdown(
+                f'<div class="recent-stat-value">{f"{round((row.net_worth or 0) / 1000, 1)}k" if row.net_worth else "-"}</div>',
+                unsafe_allow_html=True,
+            )
+        with row_cols[6]:
+            st.markdown(
+                f'<div class="recent-stat-value">{f"{round((row.hero_damage or 0) / 1000, 1)}k" if row.hero_damage else "-"}</div>',
+                unsafe_allow_html=True,
+            )
+        with row_cols[7]:
+            st.markdown(f'<div class="recent-items-inline">{item_html}</div>', unsafe_allow_html=True)
+        with row_cols[8]:
+            st.markdown(f'<div class="recent-action-cell">{tag_badges_html}</div>', unsafe_allow_html=True)
+            st.button(
+                "Edit Tags",
+                key=f"recent_row_action_{current_recent_request_key}_{int(row.match_id)}",
+                use_container_width=True,
+                on_click=_queue_pending_recent_match_edit,
+                args=(int(row.match_id),),
+            )
+        st.markdown('<div class="recent-row-divider"></div>', unsafe_allow_html=True)
 
     if visible_recent_matches < len(matches):
         if st.button("Load 10 more matches", key=f"{recent_matches_key}_load_more"):
