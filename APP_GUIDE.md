@@ -75,6 +75,7 @@ The project includes two interfaces:
 - Detail-section caches are tied to the current dashboard snapshot, so a newer overview will not silently reuse old hero/item/recent rows
 - Section caches are invalidated only by real dashboard sync timestamps; local enrichment writes do not count as a new snapshot and must not close already built sections
 - Cached day-based hero snapshots are anchored to the newest cached match in that snapshot, so a stale cached overview does not silently lose rows just because wall-clock time advanced between reruns
+- Cache-only selected-hero rebuilds now batch cached match-detail reads per section, so `Recent Matches`, item snapshots, hydration scans, and STRATZ timing recovery avoid per-match SQLite lookups on every rerun
 - If the dashboard was refreshed later than a section, the section shows a hint that it should be rebuilt from the current dashboard snapshot with `Refresh ...`
 - Overview snapshots with suspicious per-hero zero `NW`/`Dmg`/`Max Dmg` rows are treated as stale and rebuilt automatically
 - Most frequent final items

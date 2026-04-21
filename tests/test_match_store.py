@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import services.analytics_service as analytics_service_module
 from clients.stratz_client import StratzAuthError, StratzRateLimitError
-from models.dtos import QueryFilters
+from models.dtos import MatchSummary, QueryFilters
 from services.analytics_service import DotaAnalyticsService
 from utils.exceptions import OpenDotaRateLimitError
 from utils.match_store import SQLiteMatchStore
@@ -705,6 +705,59 @@ def test_refresh_cached_matches_rehydrates_legacy_details_without_purchase_log_f
         "Eye of Skadi",
     ]
     assert [item.purchase_time_min for item in recent[0].items] == [8, 12, 15, 17, 20]
+
+
+def test_get_match_ids_requiring_detail_hydration_uses_batched_cached_detail_lookup() -> None:
+    client = _FakeClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+
+    matches = [
+        MatchSummary(
+            match_id=match_id,
+            start_time=1771552800,
+            player_slot=0,
+            radiant_win=True,
+            kills=1,
+            deaths=1,
+            assists=1,
+            duration=1200,
+            hero_id=1,
+        )
+        for match_id in (101, 102, 103)
+    ]
+
+    for match_id in (101, 102):
+        store.upsert_match_detail(
+            match_id,
+            {
+                "match_id": match_id,
+                "players": [
+                    {
+                        "account_id": 123,
+                        "player_slot": 0,
+                        "purchase_log": [{"key": "blink", "time": 600}],
+                    }
+                ],
+            },
+        )
+
+    original_get_match_detail = store.get_match_detail
+
+    def _fail_single_lookup(match_id: int):
+        raise AssertionError(f"unexpected single-detail lookup for {match_id}")
+
+    store.get_match_detail = _fail_single_lookup  # type: ignore[method-assign]
+    try:
+        missing_ids = service.get_match_ids_requiring_detail_hydration(
+            matches,
+            player_id=123,
+            require_purchase_log=True,
+        )
+    finally:
+        store.get_match_detail = original_get_match_detail  # type: ignore[method-assign]
+
+    assert missing_ids == [103]
 
 
 def test_force_refresh_dashboard_snapshot_hydrates_details_and_backfills_item_timings_into_store() -> None:

@@ -73,6 +73,7 @@ Turbo-only dashboard for your account:
 - Detail-section caches are scoped to the current dashboard snapshot so old hero/recent/item rows are not reused after the overview changes
 - Section caches are invalidated only by real dashboard sync timestamps; local enrichment writes do not count as a new snapshot and must not close already built sections
 - Cached day-based hero snapshots stay anchored to the newest cached match in that snapshot, so wall-clock time alone does not silently shrink an older cached overview between reruns
+- Cache-only selected-hero rebuilds batch cached match-detail reads per section, which reduces repeated SQLite lookups during recent-match, item, and timing-repair reruns
 - Section actions are refresh actions now; if dashboard data is newer than a section cache, the UI shows a stale hint instead of silently hiding that fact
 - Hero Overview snapshots with suspicious per-hero zero `NW`/`Dmg`/`Max Dmg` rows are auto-invalidated and rebuilt instead of being rendered as valid data
 - Item winrates count only end-of-match inventory items; cached match details add backpack slots, and summary-only fallback uses final slot columns only

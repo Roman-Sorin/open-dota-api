@@ -1158,6 +1158,39 @@ class DotaAnalyticsService:
     def get_match_details_if_cached(self, match_id: int) -> dict[str, Any] | None:
         return self._get_match_details(match_id, allow_fetch=False)
 
+    def get_cached_match_details_map(self, match_ids: list[int]) -> dict[int, dict[str, Any]]:
+        unique_ids = [int(match_id) for match_id in dict.fromkeys(match_ids) if int(match_id) > 0]
+        if not unique_ids:
+            return {}
+
+        details_by_id: dict[int, dict[str, Any]] = {}
+        pending_ids: list[int] = []
+        for match_id in unique_ids:
+            cached = self._match_details_memory_cache.get(match_id)
+            if isinstance(cached, dict):
+                details_by_id[match_id] = cached
+            else:
+                pending_ids.append(match_id)
+
+        if pending_ids and self.match_store is not None:
+            stored_details = self.match_store.get_match_details_for_ids(pending_ids)
+            for match_id, details in stored_details.items():
+                if isinstance(details, dict):
+                    self._match_details_memory_cache[int(match_id)] = details
+                    details_by_id[int(match_id)] = details
+            pending_ids = [match_id for match_id in pending_ids if match_id not in details_by_id]
+
+        for match_id in pending_ids:
+            cached = self.cache.get(f"match_details_{match_id}")
+            if not isinstance(cached, dict):
+                continue
+            self._match_details_memory_cache[match_id] = cached
+            if self.match_store is not None:
+                self.match_store.upsert_match_detail(match_id, cached)
+            details_by_id[match_id] = cached
+
+        return details_by_id
+
     def get_or_fetch_match_details(self, match_id: int, *, force_refresh: bool = False) -> dict[str, Any]:
         details = self._fetch_match_details(match_id) if force_refresh else self._get_match_details(match_id, allow_fetch=True)
         if details is None:
@@ -1167,12 +1200,13 @@ class DotaAnalyticsService:
     def get_missing_detail_match_ids(self, matches: list[MatchSummary], limit: int | None = None) -> list[int]:
         missing_ids: list[int] = []
         seen_ids: set[int] = set()
+        cached_details = self.get_cached_match_details_map([int(match.match_id) for match in matches])
         for match in matches:
             match_id = int(match.match_id)
             if match_id <= 0 or match_id in seen_ids:
                 continue
             seen_ids.add(match_id)
-            if not self._has_match_details_cached(match_id):
+            if match_id not in cached_details:
                 missing_ids.append(match_id)
                 if limit is not None and len(missing_ids) >= limit:
                     break
@@ -1188,24 +1222,26 @@ class DotaAnalyticsService:
     ) -> list[int]:
         missing_ids: list[int] = []
         seen_ids: set[int] = set()
+        cached_details = self.get_cached_match_details_map([int(match.match_id) for match in matches])
         for match in matches:
             match_id = int(match.match_id)
             if match_id <= 0 or match_id in seen_ids:
                 continue
             seen_ids.add(match_id)
 
-            needs_hydration = not self._has_match_details_cached(match_id)
+            details = cached_details.get(match_id)
+            needs_hydration = not isinstance(details, dict)
             if (
                 not needs_hydration
                 and require_purchase_log
                 and player_id is not None
-                and not self._cached_match_detail_has_purchase_log_for_player(
-                    match_id,
+            ):
+                player_row = self._extract_player_from_match_details(
+                    details,
                     player_id=player_id,
                     player_slot=match.player_slot,
                 )
-            ):
-                needs_hydration = True
+                needs_hydration = not self._player_row_has_timing_data(player_row)
 
             if needs_hydration:
                 missing_ids.append(match_id)
@@ -1726,10 +1762,11 @@ class DotaAnalyticsService:
         if self.stratz_client is None or batch_size <= 0:
             return StratzBackfillResult()
 
+        details_by_match_id = self.get_cached_match_details_map([int(match.match_id) for match in matches])
         prioritized_matches: list[MatchSummary] = []
         fallback_matches: list[MatchSummary] = []
         for match in matches:
-            details = self.get_match_details_if_cached(match.match_id)
+            details = details_by_match_id.get(int(match.match_id))
             if not isinstance(details, dict):
                 continue
             player_row = self._extract_player_from_match_details(
@@ -1751,7 +1788,7 @@ class DotaAnalyticsService:
         for match in [*prioritized_matches, *fallback_matches]:
             if result.completed >= batch_size:
                 break
-            details = self.get_match_details_if_cached(match.match_id)
+            details = details_by_match_id.get(int(match.match_id))
             if not isinstance(details, dict):
                 continue
             player_row = self._extract_player_from_match_details(

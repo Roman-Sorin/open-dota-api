@@ -1051,12 +1051,13 @@ def _augment_recent_rows_with_cached_buffs(
     recent_rows: list[object],
 ) -> list[object]:
     match_by_id = {int(match.match_id): match for match in matches}
+    details_by_match_id = service.get_cached_match_details_map(list(match_by_id))
     for row in recent_rows:
         match_id = int(getattr(row, "match_id", 0) or 0)
         match = match_by_id.get(match_id)
         if match is None:
             continue
-        details = service.get_match_details_if_cached(match_id)
+        details = details_by_match_id.get(match_id)
         if not isinstance(details, dict):
             continue
         player_row = service._extract_player_from_match_details(  # noqa: SLF001
@@ -1123,6 +1124,7 @@ def _build_item_winrate_snapshot_from_cached_inventory(
     summary_only_matches = 0
     missing_matches = 0
     timed_item_matches = 0
+    details_by_match_id = service.get_cached_match_details_map([int(match.match_id) for match in matches])
 
     for match in matches:
         summary_items = {
@@ -1136,7 +1138,7 @@ def _build_item_winrate_snapshot_from_cached_inventory(
         detail_backed_this_match = False
         purchase_times_by_item: dict[int, list[int]] = {}
 
-        details = service.get_match_details_if_cached(match.match_id)
+        details = details_by_match_id.get(int(match.match_id))
         if isinstance(details, dict):
             player_row = service._extract_player_from_match_details(  # noqa: SLF001
                 details,
