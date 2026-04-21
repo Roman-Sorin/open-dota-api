@@ -841,138 +841,336 @@ def _render_match_tag_badges_html(tag_labels: tuple[str, ...] | list[str]) -> st
     return f'<div class="recent-tags">{"".join(badges)}</div>'
 
 
-def _render_recent_matches_table_html(table_rows_html: str, row_count: int) -> tuple[str, int]:
-    table_html = f"""
-    <html>
-    <head>
-      <meta charset="utf-8" />
-      <style>
-        :root {{
-          --recent-text: #111827;
-          --recent-muted: rgba(17, 24, 39, 0.72);
-          --recent-border-strong: rgba(49, 51, 63, 0.18);
-          --recent-border-soft: rgba(49, 51, 63, 0.10);
-          --recent-surface-soft: rgba(17, 24, 39, 0.04);
-          --recent-surface-hover: rgba(59, 130, 246, 0.12);
-          --recent-bar-bg: rgba(17, 24, 39, 0.08);
-        }}
-        html, body {{
-          margin: 0;
-          padding: 0;
-          background: transparent;
-          color: var(--recent-text);
-          font-family: sans-serif;
-        }}
-        .recent-matches-wrap {{ overflow-x: auto; margin-top: 0.5rem; }}
-        .recent-matches-table {{ width: 100%; min-width: 860px; border-collapse: collapse; font-size: 0.84rem; }}
-        .recent-matches-table th {{ text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--recent-muted); padding: 0.45rem 0.55rem; border-bottom: 1px solid var(--recent-border-strong); white-space: nowrap; }}
-        .recent-matches-table td {{ padding: 0.55rem; border-bottom: 1px solid var(--recent-border-soft); vertical-align: middle; color: var(--recent-text); }}
-        .recent-hero-cell {{ min-width: 150px; }}
-        .recent-hero-wrap {{ display: flex; align-items: center; gap: 0.55rem; }}
-        .recent-hero-icon-wrap {{ position: relative; width: 38px; height: 38px; flex: 0 0 38px; }}
-        .recent-hero-icon-wrap img {{ width: 38px; height: 38px; border-radius: 6px; display: block; }}
-        .recent-hero-level, .recent-hero-variant {{ position: absolute; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; font-size: 0.6rem; font-weight: 700; line-height: 16px; text-align: center; color: #fff; background: rgba(17, 24, 39, 0.92); border: 1px solid rgba(255, 255, 255, 0.16); }}
-        .recent-hero-level {{ top: -5px; left: -5px; }}
-        .recent-hero-variant {{ right: -5px; bottom: -5px; }}
-        .recent-hero-name {{ font-weight: 700; line-height: 1.1; color: var(--recent-text); }}
-        .recent-tags {{ display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.35rem; }}
-        .recent-tag {{ display: inline-flex; align-items: center; padding: 0.12rem 0.42rem; border-radius: 999px; font-size: 0.66rem; font-weight: 700; line-height: 1.2; letter-spacing: 0.02em; border: 1px solid rgba(255, 255, 255, 0.14); white-space: nowrap; }}
-        .recent-tag.mvp {{ color: #111827; background: rgba(245, 158, 11, 0.96); border-color: rgba(17, 24, 39, 0.2); }}
-        .recent-tag.highlight {{ color: #ecfeff; background: rgba(8, 145, 178, 0.94); border-color: rgba(165, 243, 252, 0.22); }}
-        .recent-result {{ font-weight: 700; white-space: nowrap; }}
-        .recent-result.win {{ color: #23a55a; }}
-        .recent-result.loss {{ color: #d9534f; }}
-        .recent-when {{ white-space: nowrap; color: var(--recent-muted); font-size: 0.72rem; margin-top: 0.12rem; }}
-        .recent-duration-value, .recent-kda-value, .recent-stat-value {{ white-space: nowrap; font-weight: 700; color: var(--recent-text); }}
-        .recent-bar {{ width: 100%; height: 6px; border-radius: 999px; overflow: hidden; background: var(--recent-bar-bg); margin-top: 0.32rem; }}
-        .recent-bar-fill {{ height: 100%; border-radius: 999px; background: linear-gradient(90deg, #d97706 0%, #f59e0b 100%); }}
-        .recent-kda-bar {{ display: flex; width: 100%; height: 6px; border-radius: 999px; overflow: hidden; background: var(--recent-bar-bg); margin-top: 0.32rem; }}
-        .recent-kda-kills {{ background: #c2410c; }}
-        .recent-kda-deaths {{ background: #6b7280; }}
-        .recent-kda-assists {{ background: #15803d; }}
-        .recent-items-inline {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 0.35rem; min-width: 236px; }}
-        .recent-items-main {{ display: flex; align-items: flex-start; gap: 0.35rem; min-width: 0; }}
-        .recent-items-buffs {{ display: flex; align-items: flex-start; justify-content: flex-end; gap: 0.35rem; margin-left: auto; min-width: 0; }}
-        .recent-items-inline.empty {{ opacity: 0.65; }}
-        .recent-item-inline {{ position: relative; width: 34px; flex: 0 0 34px; display: inline-flex; align-items: flex-start; justify-content: center; padding-bottom: 0.15rem; }}
-        .recent-item-inline img {{ width: 34px; height: auto; border-radius: 5px; display: block; margin: 0 auto; }}
-        .recent-item-chip {{ position: absolute; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; font-size: 0.6rem; font-weight: 700; line-height: 16px; text-align: center; white-space: nowrap; color: #fff; background: rgba(17, 24, 39, 0.92); border: 1px solid rgba(255, 255, 255, 0.16); }}
-        .recent-item-chip-time {{ left: -5px; bottom: -5px; }}
-        .recent-item-chip-buff {{ top: -5px; right: -5px; color: #111827; background: rgba(245, 158, 11, 0.96); border-color: rgba(17, 24, 39, 0.2); }}
-        .recent-item-chip.na {{ opacity: 0.58; }}
-        .recent-action-link {{ display: inline-flex; align-items: center; justify-content: center; padding: 0.24rem 0.56rem; border-radius: 0.42rem; font-size: 0.72rem; font-weight: 700; color: var(--recent-text); text-decoration: none; border: 1px solid var(--recent-border-soft); background: var(--recent-surface-soft); white-space: nowrap; cursor: pointer; }}
-        .recent-action-link:hover {{ border-color: rgba(96, 165, 250, 0.42); background: var(--recent-surface-hover); }}
-        .sort-indicator{{display:inline-block;min-width:1ch;margin-left:0.2rem;opacity:0.7;}}
-      </style>
-    </head>
-    <body>
-      <div class="recent-matches-wrap">
-        <table class="recent-matches-table" id="recent-matches-table">
-          <thead>
-            <tr>
-              <th>Hero</th>
-              <th>Result</th>
-              <th>Duration</th>
-              <th>K/D/A</th>
-              <th>KDA</th>
-              <th>Net Worth</th>
-              <th>Damage</th>
-              <th>Items</th>
-              <th>Tags</th>
-            </tr>
-          </thead>
-          <tbody>
-            {table_rows_html}
-          </tbody>
-        </table>
-      </div>
-      <script>
-        function parseRgb(value) {{
-          const match = String(value || "").match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);
-          if (!match) {{
-            return null;
-          }}
-          return [Number(match[1]), Number(match[2]), Number(match[3])];
-        }}
-        function rgba(rgb, alpha) {{
-          if (!rgb) {{
-            return null;
-          }}
-          return `rgba(${{rgb[0]}}, ${{rgb[1]}}, ${{rgb[2]}}, ${{alpha}})`;
-        }}
-        function syncRecentTheme() {{
-          try {{
-            const targetWindow = window.parent;
-            const parentDoc = targetWindow.document;
-            const themeSource =
-              parentDoc.querySelector('[data-testid="stAppViewContainer"]') ||
-              parentDoc.querySelector('.stApp') ||
-              parentDoc.body;
-            const computed = targetWindow.getComputedStyle(themeSource);
-            const textRgb = parseRgb(computed.color) || [17, 24, 39];
-            document.documentElement.style.setProperty('--recent-text', rgba(textRgb, 1) || '#111827');
-            document.documentElement.style.setProperty('--recent-muted', rgba(textRgb, 0.72) || 'rgba(17, 24, 39, 0.72)');
-            document.documentElement.style.setProperty('--recent-border-strong', rgba(textRgb, 0.18) || 'rgba(49, 51, 63, 0.18)');
-            document.documentElement.style.setProperty('--recent-border-soft', rgba(textRgb, 0.10) || 'rgba(49, 51, 63, 0.10)');
-            document.documentElement.style.setProperty('--recent-surface-soft', rgba(textRgb, 0.04) || 'rgba(17, 24, 39, 0.04)');
-            document.documentElement.style.setProperty('--recent-bar-bg', rgba(textRgb, 0.08) || 'rgba(17, 24, 39, 0.08)');
-          }} catch (error) {{
-            console.debug('recent theme sync skipped', error);
-          }}
-        }}
-        function editMatchTags(matchId) {{
-          const targetWindow = window.parent;
-          const nextUrl = new URL(targetWindow.location.href);
-          nextUrl.searchParams.set("{EDIT_MATCH_QUERY_PARAM}", String(matchId));
-          targetWindow.location.href = nextUrl.toString();
-        }}
-        syncRecentTheme();
-      </script>
-    </body>
-    </html>
-    """
-    table_height = min(220 + max(row_count, 1) * 88, 1600)
-    return table_html, table_height
+RECENT_MATCHES_TABLE_COMPONENT = st.components.v2.component(
+    "recent_matches_table",
+    html="""
+    <div class="recent-matches-wrap">
+      <table class="recent-matches-table">
+        <thead>
+          <tr>
+            <th>Hero</th>
+            <th>Result</th>
+            <th>Duration</th>
+            <th>K/D/A</th>
+            <th>KDA</th>
+            <th>Net Worth</th>
+            <th>Damage</th>
+            <th>Items</th>
+            <th>Tags</th>
+          </tr>
+        </thead>
+        <tbody id="recent-matches-body"></tbody>
+      </table>
+    </div>
+    """,
+    css="""
+    :host {
+      display: block;
+      --recent-text: #111827;
+      --recent-muted: rgba(17, 24, 39, 0.72);
+      --recent-border-strong: rgba(49, 51, 63, 0.18);
+      --recent-border-soft: rgba(49, 51, 63, 0.10);
+      --recent-surface-soft: rgba(17, 24, 39, 0.04);
+      --recent-surface-hover: rgba(59, 130, 246, 0.12);
+      --recent-bar-bg: rgba(17, 24, 39, 0.08);
+    }
+    .recent-matches-wrap {
+      overflow-x: auto;
+      margin-top: 0.5rem;
+    }
+    .recent-matches-table {
+      width: 100%;
+      min-width: 860px;
+      border-collapse: collapse;
+      font-size: 0.84rem;
+    }
+    .recent-matches-table th {
+      text-align: left;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--recent-muted);
+      padding: 0.45rem 0.55rem;
+      border-bottom: 1px solid var(--recent-border-strong);
+      white-space: nowrap;
+    }
+    .recent-matches-table td {
+      padding: 0.55rem;
+      border-bottom: 1px solid var(--recent-border-soft);
+      vertical-align: middle;
+      color: var(--recent-text);
+    }
+    .recent-hero-cell {
+      min-width: 150px;
+    }
+    .recent-hero-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+    .recent-hero-icon-wrap {
+      position: relative;
+      width: 38px;
+      height: 38px;
+      flex: 0 0 38px;
+    }
+    .recent-hero-icon-wrap img {
+      width: 38px;
+      height: 38px;
+      border-radius: 6px;
+      display: block;
+    }
+    .recent-hero-level,
+    .recent-hero-variant {
+      position: absolute;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: 999px;
+      font-size: 0.6rem;
+      font-weight: 700;
+      line-height: 16px;
+      text-align: center;
+      color: #fff;
+      background: rgba(17, 24, 39, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+    }
+    .recent-hero-level {
+      top: -5px;
+      left: -5px;
+    }
+    .recent-hero-variant {
+      right: -5px;
+      bottom: -5px;
+    }
+    .recent-hero-name {
+      font-weight: 700;
+      line-height: 1.1;
+      color: var(--recent-text);
+    }
+    .recent-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      margin-top: 0.35rem;
+    }
+    .recent-tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.12rem 0.42rem;
+      border-radius: 999px;
+      font-size: 0.66rem;
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: 0.02em;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      white-space: nowrap;
+    }
+    .recent-tag.mvp {
+      color: #111827;
+      background: rgba(245, 158, 11, 0.96);
+      border-color: rgba(17, 24, 39, 0.2);
+    }
+    .recent-tag.highlight {
+      color: #ecfeff;
+      background: rgba(8, 145, 178, 0.94);
+      border-color: rgba(165, 243, 252, 0.22);
+    }
+    .recent-result {
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .recent-result.win {
+      color: #23a55a;
+    }
+    .recent-result.loss {
+      color: #d9534f;
+    }
+    .recent-when {
+      white-space: nowrap;
+      color: var(--recent-muted);
+      font-size: 0.72rem;
+      margin-top: 0.12rem;
+    }
+    .recent-duration-value,
+    .recent-kda-value,
+    .recent-stat-value {
+      white-space: nowrap;
+      font-weight: 700;
+      color: var(--recent-text);
+    }
+    .recent-bar {
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--recent-bar-bg);
+      margin-top: 0.32rem;
+    }
+    .recent-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #d97706 0%, #f59e0b 100%);
+    }
+    .recent-kda-bar {
+      display: flex;
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--recent-bar-bg);
+      margin-top: 0.32rem;
+    }
+    .recent-kda-kills {
+      background: #c2410c;
+    }
+    .recent-kda-deaths {
+      background: #6b7280;
+    }
+    .recent-kda-assists {
+      background: #15803d;
+    }
+    .recent-items-inline {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.35rem;
+      min-width: 236px;
+    }
+    .recent-items-main {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.35rem;
+      min-width: 0;
+    }
+    .recent-items-buffs {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      gap: 0.35rem;
+      margin-left: auto;
+      min-width: 0;
+    }
+    .recent-items-inline.empty {
+      opacity: 0.65;
+    }
+    .recent-item-inline {
+      position: relative;
+      width: 34px;
+      flex: 0 0 34px;
+      display: inline-flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-bottom: 0.15rem;
+    }
+    .recent-item-inline img {
+      width: 34px;
+      height: auto;
+      border-radius: 5px;
+      display: block;
+      margin: 0 auto;
+    }
+    .recent-item-chip {
+      position: absolute;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: 999px;
+      font-size: 0.6rem;
+      font-weight: 700;
+      line-height: 16px;
+      text-align: center;
+      white-space: nowrap;
+      color: #fff;
+      background: rgba(17, 24, 39, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+    }
+    .recent-item-chip-time {
+      left: -5px;
+      bottom: -5px;
+    }
+    .recent-item-chip-buff {
+      top: -5px;
+      right: -5px;
+      color: #111827;
+      background: rgba(245, 158, 11, 0.96);
+      border-color: rgba(17, 24, 39, 0.2);
+    }
+    .recent-item-chip.na {
+      opacity: 0.58;
+    }
+    .recent-action-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.24rem 0.56rem;
+      border-radius: 0.42rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--recent-text);
+      text-decoration: none;
+      border: 1px solid var(--recent-border-soft);
+      background: var(--recent-surface-soft);
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .recent-action-link:hover {
+      border-color: rgba(96, 165, 250, 0.42);
+      background: var(--recent-surface-hover);
+    }
+    """,
+    js="""
+    function parseRgb(value) {
+      const match = String(value || "").match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);
+      if (!match) {
+        return null;
+      }
+      return [Number(match[1]), Number(match[2]), Number(match[3])];
+    }
+
+    function rgba(rgb, alpha) {
+      if (!rgb) {
+        return null;
+      }
+      return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+    }
+
+    export default function(component) {
+      const { data, parentElement, setTriggerValue } = component;
+      const root = parentElement.host ?? parentElement;
+      const tbody = parentElement.querySelector('#recent-matches-body');
+      if (!tbody) {
+        return;
+      }
+
+      tbody.innerHTML = data.table_rows_html || '';
+
+      try {
+        const themeSource =
+          document.querySelector('[data-testid="stAppViewContainer"]') ||
+          document.querySelector('.stApp') ||
+          document.body;
+        const computed = window.getComputedStyle(themeSource);
+        const textRgb = parseRgb(computed.color) || [17, 24, 39];
+        root.style.setProperty('--recent-text', rgba(textRgb, 1) || '#111827');
+        root.style.setProperty('--recent-muted', rgba(textRgb, 0.72) || 'rgba(17, 24, 39, 0.72)');
+        root.style.setProperty('--recent-border-strong', rgba(textRgb, 0.18) || 'rgba(49, 51, 63, 0.18)');
+        root.style.setProperty('--recent-border-soft', rgba(textRgb, 0.10) || 'rgba(49, 51, 63, 0.10)');
+        root.style.setProperty('--recent-surface-soft', rgba(textRgb, 0.04) || 'rgba(17, 24, 39, 0.04)');
+        root.style.setProperty('--recent-surface-hover', rgba(textRgb, 0.12) || 'rgba(59, 130, 246, 0.12)');
+        root.style.setProperty('--recent-bar-bg', rgba(textRgb, 0.08) || 'rgba(17, 24, 39, 0.08)');
+      } catch (error) {
+        console.debug('recent theme sync skipped', error);
+      }
+
+      parentElement.querySelectorAll('.recent-action-link').forEach((button) => {
+        button.addEventListener('click', () => {
+          setTriggerValue('clicked', button.dataset.matchId);
+        });
+      });
+    }
+    """,
+)
 
 
 def _mark_section_visible(section_name: str, request_key: object) -> None:
@@ -2763,30 +2961,6 @@ if recent_matches_loaded:
     if recent_section_stale:
         st.caption("Recent matches were loaded before the latest dashboard refresh. Use the hero action bar above to rebuild this section from the current dashboard snapshot.")
     recent_rows_by_id = {int(row.match_id): row for row in recent_match_rows}
-    pending_edit_match_id_raw = st.query_params.get(EDIT_MATCH_QUERY_PARAM)
-    pending_edit_match_id: int | None = None
-    try:
-        if pending_edit_match_id_raw is not None and str(pending_edit_match_id_raw).strip():
-            pending_edit_match_id = int(str(pending_edit_match_id_raw))
-    except (TypeError, ValueError):
-        pending_edit_match_id = None
-    if pending_edit_match_id is not None and pending_edit_match_id in recent_rows_by_id:
-        selected_recent_row = recent_rows_by_id[pending_edit_match_id]
-        _edit_match_tags_dialog(
-            player_id=player_id,
-            match_id=int(selected_recent_row.match_id),
-            hero_label=f"{selected_recent_row.hero_name} | Match {selected_recent_row.match_id}",
-            current_tag_labels=tuple(getattr(selected_recent_row, "user_tags", ()) or ()),
-            days=days,
-            active_patches=active_patches,
-            active_start_date=active_start_date,
-            selected_hero_id=selected_hero_id,
-            selected_hero_name=selected_hero_name,
-            current_hero_snapshot_key=current_hero_snapshot_key,
-            current_recent_request_key=current_recent_request_key,
-        )
-    elif pending_edit_match_id is not None:
-        _clear_pending_recent_match_edit()
     st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches)} matches")
 
     table_rows_html = ""
@@ -2851,19 +3025,37 @@ if recent_matches_loaded:
             f'<td><div class="recent-stat-value">{f"{round((row.net_worth or 0) / 1000, 1)}k" if row.net_worth else "-"}</div></td>'
             f'<td><div class="recent-stat-value">{f"{round((row.hero_damage or 0) / 1000, 1)}k" if row.hero_damage else "-"}</div></td>'
             f'<td><div class="recent-items-inline">{item_html}</div></td>'
-            f'<td><button type="button" class="recent-action-link" onclick="editMatchTags({int(row.match_id)}); return false;">Edit Tags</button></td>'
+            f'<td><button type="button" class="recent-action-link" data-match-id="{int(row.match_id)}">Edit Tags</button></td>'
             "</tr>"
         )
 
-    recent_table_html, recent_table_height = _render_recent_matches_table_html(
-        table_rows_html,
-        len(recent_match_rows),
-    )
-    components.html(
-        recent_table_html,
+    recent_table_height = min(220 + max(len(recent_match_rows), 1) * 88, 1600)
+    recent_matches_component = RECENT_MATCHES_TABLE_COMPONENT(
+        key=f"recent_matches_table_{current_recent_request_key}",
+        data={"table_rows_html": table_rows_html},
+        on_clicked_change=lambda: None,
         height=recent_table_height,
-        scrolling=False,
     )
+    clicked_match_id_raw = getattr(recent_matches_component, "clicked", None)
+    try:
+        clicked_match_id = int(clicked_match_id_raw) if clicked_match_id_raw is not None else None
+    except (TypeError, ValueError):
+        clicked_match_id = None
+    if clicked_match_id is not None and clicked_match_id in recent_rows_by_id:
+        selected_recent_row = recent_rows_by_id[clicked_match_id]
+        _edit_match_tags_dialog(
+            player_id=player_id,
+            match_id=int(selected_recent_row.match_id),
+            hero_label=f"{selected_recent_row.hero_name} | Match {selected_recent_row.match_id}",
+            current_tag_labels=tuple(getattr(selected_recent_row, "user_tags", ()) or ()),
+            days=days,
+            active_patches=active_patches,
+            active_start_date=active_start_date,
+            selected_hero_id=selected_hero_id,
+            selected_hero_name=selected_hero_name,
+            current_hero_snapshot_key=current_hero_snapshot_key,
+            current_recent_request_key=current_recent_request_key,
+        )
 
     if visible_recent_matches < len(matches):
         if st.button("Load 10 more matches", key=f"{recent_matches_key}_load_more"):
