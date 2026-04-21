@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import services.analytics_service as analytics_service_module
 from clients.stratz_client import StratzAuthError, StratzRateLimitError
-from models.dtos import MatchSummary, QueryFilters
+from models.dtos import MATCH_USER_TAG_HIGHLIGHT, MATCH_USER_TAG_MVP, MatchSummary, QueryFilters
 from services.analytics_service import DotaAnalyticsService
 from utils.exceptions import OpenDotaRateLimitError
 from utils.match_store import SQLiteMatchStore
@@ -99,6 +99,18 @@ def test_background_sync_run_persists_request_targets_and_data_sources() -> None
 
     assert runs[0]["request_targets"] == "OpenDota, STRATZ"
     assert runs[0]["data_sources"] == "STRATZ"
+
+
+def test_match_store_replaces_match_user_tags_for_one_match() -> None:
+    store = SQLiteMatchStore(":memory:")
+
+    store.replace_match_user_tags(123, 9001, [MATCH_USER_TAG_MVP, MATCH_USER_TAG_HIGHLIGHT])
+    assert store.get_match_user_tags(123, 9001) == [MATCH_USER_TAG_HIGHLIGHT, MATCH_USER_TAG_MVP]
+
+    store.replace_match_user_tags(123, 9001, [MATCH_USER_TAG_MVP])
+
+    assert store.get_match_user_tags(123, 9001) == [MATCH_USER_TAG_MVP]
+    assert store.get_match_user_tags_for_ids(123, [9001, 9999]) == {9001: [MATCH_USER_TAG_MVP]}
 
 
 class _FakeClient:
@@ -196,6 +208,94 @@ def test_service_can_build_cached_turbo_hero_overview_without_api_calls() -> Non
     assert rows[0]["radiant_wr"] == 100.0
     assert rows[0]["dire_wr"] == 0.0
     assert client.calls == 0
+
+
+def test_service_builds_overview_and_detail_tag_counts_from_persistent_match_tags() -> None:
+    client = _FakeClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 10,
+                "start_time": 1771552800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 9,
+                "deaths": 3,
+                "assists": 12,
+                "duration": 1500,
+                "hero_id": 1,
+                "hero_damage": 24000,
+                "net_worth": 21000,
+            },
+            {
+                "match_id": 11,
+                "start_time": 1771466400,
+                "player_slot": 0,
+                "radiant_win": False,
+                "game_mode": 23,
+                "kills": 4,
+                "deaths": 8,
+                "assists": 7,
+                "duration": 1450,
+                "hero_id": 1,
+                "hero_damage": 18000,
+                "net_worth": 17000,
+            },
+        ],
+    )
+    store.upsert_sync_state(123, "gm:23", last_incremental_sync_at="2026-03-15T10:00:00", known_match_count=2)
+    store.replace_match_user_tags(123, 10, [MATCH_USER_TAG_MVP, MATCH_USER_TAG_HIGHLIGHT])
+    store.replace_match_user_tags(123, 11, [MATCH_USER_TAG_HIGHLIGHT])
+
+    matches = service.get_cached_matches(QueryFilters(player_id=123, hero_id=1, game_mode=23, game_mode_name="Turbo"))
+    tag_map = service.get_match_user_tags_map(123, [match.match_id for match in matches])
+    stats = service.build_stats(matches, match_tags_by_match_id=tag_map)
+    overview = service.build_turbo_hero_overview_rows(matches, player_id=123)
+
+    assert stats.matches == 2
+    assert stats.mvp_matches == 1
+    assert stats.highlight_matches == 2
+    assert overview[0]["mvp_matches"] == 1
+    assert overview[0]["highlight_matches"] == 2
+
+
+def test_recent_hero_matches_include_saved_user_tag_labels() -> None:
+    client = _FakeClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+
+    store.upsert_player_matches(
+        123,
+        [
+            {
+                "match_id": 10,
+                "start_time": 1771552800,
+                "player_slot": 0,
+                "radiant_win": True,
+                "game_mode": 23,
+                "kills": 9,
+                "deaths": 3,
+                "assists": 12,
+                "duration": 1500,
+                "hero_id": 1,
+                "hero_damage": 24000,
+                "net_worth": 21000,
+            }
+        ],
+    )
+    store.upsert_sync_state(123, "gm:23", last_incremental_sync_at="2026-03-15T10:00:00", known_match_count=1)
+    store.replace_match_user_tags(123, 10, [MATCH_USER_TAG_MVP, MATCH_USER_TAG_HIGHLIGHT])
+
+    matches = service.get_cached_matches(QueryFilters(player_id=123, hero_id=1, game_mode=23, game_mode_name="Turbo"))
+    recent_rows = service.build_recent_hero_matches(player_id=123, matches=matches, limit=1, allow_detail_fetch=False)
+
+    assert len(recent_rows) == 1
+    assert recent_rows[0].user_tags == ("MVP", "Highlight")
 
 
 def test_cached_turbo_hero_overview_enriches_missing_viper_economy_and_damage_from_cached_details() -> None:

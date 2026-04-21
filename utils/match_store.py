@@ -41,6 +41,9 @@ class MatchStoreProtocol(Protocol):
     ) -> None: ...
     def get_match_detail(self, match_id: int) -> dict[str, Any] | None: ...
     def get_match_details_for_ids(self, match_ids: list[int]) -> dict[int, dict[str, Any]]: ...
+    def get_match_user_tags(self, account_id: int, match_id: int) -> list[str]: ...
+    def get_match_user_tags_for_ids(self, account_id: int, match_ids: list[int]) -> dict[int, list[str]]: ...
+    def replace_match_user_tags(self, account_id: int, match_id: int, tag_keys: list[str]) -> None: ...
     def get_match_ids_without_details(
         self,
         account_id: int,
@@ -155,6 +158,18 @@ class SQLiteMatchStore:
                 payload_json TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS match_user_tags (
+                account_id INTEGER NOT NULL,
+                match_id INTEGER NOT NULL,
+                tag_key TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (account_id, match_id, tag_key)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_match_user_tags_lookup
+            ON match_user_tags (account_id, match_id);
 
             CREATE TABLE IF NOT EXISTS sync_state (
                 account_id INTEGER NOT NULL,
@@ -505,6 +520,58 @@ class SQLiteMatchStore:
             unique_ids,
         ).fetchall()
         return {int(row["match_id"]): self._json_loads(str(row["payload_json"])) for row in rows}
+
+    def get_match_user_tags(self, account_id: int, match_id: int) -> list[str]:
+        rows = self._conn.execute(
+            """
+            SELECT tag_key
+            FROM match_user_tags
+            WHERE account_id = ? AND match_id = ?
+            ORDER BY tag_key ASC
+            """,
+            (int(account_id), int(match_id)),
+        ).fetchall()
+        return [str(row["tag_key"]) for row in rows]
+
+    def get_match_user_tags_for_ids(self, account_id: int, match_ids: list[int]) -> dict[int, list[str]]:
+        unique_ids = sorted({int(match_id) for match_id in match_ids if int(match_id) > 0})
+        if not unique_ids:
+            return {}
+        placeholders = ",".join("?" for _ in unique_ids)
+        rows = self._conn.execute(
+            f"""
+            SELECT match_id, tag_key
+            FROM match_user_tags
+            WHERE account_id = ? AND match_id IN ({placeholders})
+            ORDER BY match_id ASC, tag_key ASC
+            """,
+            [int(account_id), *unique_ids],
+        ).fetchall()
+        tags_by_match_id: dict[int, list[str]] = {}
+        for row in rows:
+            match_id = int(row["match_id"])
+            tags_by_match_id.setdefault(match_id, []).append(str(row["tag_key"]))
+        return tags_by_match_id
+
+    def replace_match_user_tags(self, account_id: int, match_id: int, tag_keys: list[str]) -> None:
+        normalized_tags = sorted({str(tag_key).strip() for tag_key in tag_keys if str(tag_key).strip()})
+        self._conn.execute(
+            "DELETE FROM match_user_tags WHERE account_id = ? AND match_id = ?",
+            (int(account_id), int(match_id)),
+        )
+        if normalized_tags:
+            now_iso = self._now_iso()
+            self._conn.executemany(
+                """
+                INSERT INTO match_user_tags (account_id, match_id, tag_key, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (int(account_id), int(match_id), tag_key, now_iso, now_iso)
+                    for tag_key in normalized_tags
+                ],
+            )
+        self._commit()
 
     def get_match_ids_without_details(
         self,

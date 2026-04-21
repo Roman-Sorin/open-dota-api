@@ -29,6 +29,8 @@ def test_hero_overview_row_uses_short_english_columns_and_formats_kda() -> None:
             "max_hero_damage": 83436,
             "radiant_wr": 61.0,
             "dire_wr": 60.0,
+            "mvp_matches": 7,
+            "highlight_matches": 11,
         }
     )
 
@@ -39,6 +41,8 @@ def test_hero_overview_row_uses_short_english_columns_and_formats_kda() -> None:
     assert row["KDA"] == "3.3"
     assert row["WR"] == "60%"
     assert row["Dur"] == "25:07"
+    assert row["MVP"] == 7
+    assert row["High"] == 11
 
 
 def test_hero_detail_cards_stay_in_same_order_as_shared_overview_metrics() -> None:
@@ -58,6 +62,8 @@ def test_hero_detail_cards_stay_in_same_order_as_shared_overview_metrics() -> No
         "max_hero_damage": 83436,
         "radiant_wr": 61.0,
         "dire_wr": 60.0,
+        "mvp_matches": 7,
+        "highlight_matches": 11,
     }
 
     detail_cards = build_hero_detail_cards(source)
@@ -66,3 +72,5 @@ def test_hero_detail_cards_stay_in_same_order_as_shared_overview_metrics() -> No
     assert detail_cards[0] == ("Matches", "63")
     assert detail_cards[1] == ("Won Matches", "38")
     assert detail_cards[2] == ("Lost Matches", "25")
+    assert detail_cards[-2] == ("MVP Matches", "7")
+    assert detail_cards[-1] == ("Highlight Matches", "11")

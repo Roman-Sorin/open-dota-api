@@ -4,6 +4,18 @@ from enum import Enum
 from typing import Any
 
 
+MATCH_USER_TAG_MVP = "mvp"
+MATCH_USER_TAG_HIGHLIGHT = "highlight"
+MATCH_USER_TAG_LABELS: dict[str, str] = {
+    MATCH_USER_TAG_MVP: "MVP",
+    MATCH_USER_TAG_HIGHLIGHT: "Highlight",
+}
+MATCH_USER_TAG_ORDER: tuple[str, ...] = (
+    MATCH_USER_TAG_MVP,
+    MATCH_USER_TAG_HIGHLIGHT,
+)
+
+
 class Intent(str, Enum):
     STATS = "stats"
     ITEMS = "items"
@@ -82,6 +94,8 @@ class StatsResult:
     max_hero_damage: int
     radiant_wr: float
     dire_wr: float
+    mvp_matches: int
+    highlight_matches: int
 
 
 @dataclass(slots=True)

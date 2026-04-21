@@ -9,7 +9,18 @@ from typing import Any
 
 from clients.opendota_client import OpenDotaClient
 from clients.stratz_client import StratzAuthError, StratzClient, StratzError, StratzRateLimitError
-from models.dtos import ItemStat, ItemsResult, MatchRow, MatchSummary, QueryFilters, StatsResult
+from models.dtos import (
+    ItemStat,
+    ItemsResult,
+    MATCH_USER_TAG_HIGHLIGHT,
+    MATCH_USER_TAG_LABELS,
+    MATCH_USER_TAG_MVP,
+    MATCH_USER_TAG_ORDER,
+    MatchRow,
+    MatchSummary,
+    QueryFilters,
+    StatsResult,
+)
 from parsers.input_parser import HeroParser
 from utils.cache import JsonFileCache
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError
@@ -58,6 +69,7 @@ class RecentHeroMatch:
     net_worth: int | None
     hero_damage: int | None
     items: list[RecentMatchItem]
+    user_tags: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)
@@ -214,6 +226,8 @@ class DotaAnalyticsService:
         2: "ultimate_scepter",
         12: "aghanims_shard",
     }
+    MATCH_USER_TAG_LABELS = MATCH_USER_TAG_LABELS
+    MATCH_USER_TAG_ORDER = MATCH_USER_TAG_ORDER
 
     def __init__(
         self,
@@ -347,6 +361,33 @@ class DotaAnalyticsService:
     def get_patch_options(self) -> list[str]:
         # Newest-first for UI convenience.
         return list(reversed(self._patch_names))
+
+    def normalize_match_user_tags(self, tag_keys: list[str] | tuple[str, ...] | set[str]) -> tuple[str, ...]:
+        normalized = {
+            str(tag_key).strip().lower()
+            for tag_key in tag_keys
+            if str(tag_key).strip().lower() in self.MATCH_USER_TAG_LABELS
+        }
+        return tuple(tag_key for tag_key in self.MATCH_USER_TAG_ORDER if tag_key in normalized)
+
+    def get_match_user_tag_labels(self, tag_keys: list[str] | tuple[str, ...] | set[str]) -> tuple[str, ...]:
+        normalized = self.normalize_match_user_tags(tag_keys)
+        return tuple(self.MATCH_USER_TAG_LABELS[tag_key] for tag_key in normalized)
+
+    def get_match_user_tags_map(self, player_id: int, match_ids: list[int]) -> dict[int, set[str]]:
+        if self.match_store is None:
+            return {}
+        tags_by_match_id = self.match_store.get_match_user_tags_for_ids(player_id, match_ids)
+        return {
+            int(match_id): set(self.normalize_match_user_tags(tag_keys))
+            for match_id, tag_keys in tags_by_match_id.items()
+        }
+
+    def replace_match_user_tags(self, player_id: int, match_id: int, tag_keys: list[str]) -> tuple[str, ...]:
+        normalized = self.normalize_match_user_tags(tag_keys)
+        if self.match_store is not None:
+            self.match_store.replace_match_user_tags(player_id, match_id, list(normalized))
+        return normalized
 
     def _resolve_patch_name_for_start_time(self, start_time: int) -> str | None:
         if not self._patch_starts:
@@ -875,7 +916,12 @@ class DotaAnalyticsService:
             return None
         return ", ".join(normalized)
 
-    def build_stats(self, matches: list[MatchSummary]) -> StatsResult:
+    def build_stats(
+        self,
+        matches: list[MatchSummary],
+        *,
+        match_tags_by_match_id: dict[int, set[str]] | None = None,
+    ) -> StatsResult:
         total = len(matches)
         if total == 0:
             return StatsResult(
@@ -896,10 +942,13 @@ class DotaAnalyticsService:
                 max_hero_damage=0,
                 radiant_wr=0.0,
                 dire_wr=0.0,
+                mvp_matches=0,
+                highlight_matches=0,
             )
 
         wins = sum(1 for m in matches if m.did_win)
         losses = total - wins
+        match_tags_by_match_id = match_tags_by_match_id or {}
 
         kills = sum(m.kills for m in matches)
         deaths = sum(m.deaths for m in matches)
@@ -916,6 +965,16 @@ class DotaAnalyticsService:
         dire_matches = [m for m in matches if m.side == "Dire"]
         radiant_wins = sum(1 for m in radiant_matches if m.did_win)
         dire_wins = sum(1 for m in dire_matches if m.did_win)
+        mvp_matches = sum(
+            1
+            for match in matches
+            if MATCH_USER_TAG_MVP in match_tags_by_match_id.get(int(match.match_id), set())
+        )
+        highlight_matches = sum(
+            1
+            for match in matches
+            if MATCH_USER_TAG_HIGHLIGHT in match_tags_by_match_id.get(int(match.match_id), set())
+        )
 
         avg_k = kills / total
         avg_d = deaths / total
@@ -939,9 +998,20 @@ class DotaAnalyticsService:
             max_hero_damage=max(int(m.hero_damage) for m in matches if m.hero_damage_known) if hero_damage_samples > 0 else 0,
             radiant_wr=winrate_percent(radiant_wins, len(radiant_matches)),
             dire_wr=winrate_percent(dire_wins, len(dire_matches)),
+            mvp_matches=mvp_matches,
+            highlight_matches=highlight_matches,
         )
 
-    def build_turbo_hero_overview_rows(self, matches: list[MatchSummary]) -> list[dict[str, Any]]:
+    def build_turbo_hero_overview_rows(
+        self,
+        matches: list[MatchSummary],
+        *,
+        player_id: int | None = None,
+        match_tags_by_match_id: dict[int, set[str]] | None = None,
+    ) -> list[dict[str, Any]]:
+        if match_tags_by_match_id is None and player_id is not None:
+            match_tags_by_match_id = self.get_match_user_tags_map(player_id, [int(match.match_id) for match in matches])
+        match_tags_by_match_id = match_tags_by_match_id or {}
         grouped: dict[int, list[MatchSummary]] = {}
         for match in matches:
             hero_id = int(match.hero_id or 0)
@@ -951,7 +1021,7 @@ class DotaAnalyticsService:
 
         rows: list[dict[str, Any]] = []
         for hero_id, hero_matches in grouped.items():
-            stats = self.build_stats(hero_matches)
+            stats = self.build_stats(hero_matches, match_tags_by_match_id=match_tags_by_match_id)
             rows.append(
                 {
                     "hero_id": hero_id,
@@ -976,6 +1046,8 @@ class DotaAnalyticsService:
                     "avg_damage": stats.avg_damage,
                     "avg_damage_samples": sum(1 for m in hero_matches if m.hero_damage_known),
                     "kda": stats.kda_ratio,
+                    "mvp_matches": stats.mvp_matches,
+                    "highlight_matches": stats.highlight_matches,
                 }
             )
 
@@ -1388,7 +1460,7 @@ class DotaAnalyticsService:
             max_fallback_detail_calls=max(120, len(matches)),
             allow_detail_fetch=False,
         )
-        overview = self.build_turbo_hero_overview_rows(matches)
+        overview = self.build_turbo_hero_overview_rows(matches, player_id=player_id)
         return TurboOverviewSnapshot(
             matches=matches,
             overview=overview,
@@ -1690,6 +1762,10 @@ class DotaAnalyticsService:
         allow_detail_fetch: bool = True,
     ) -> list[RecentHeroMatch]:
         rows: list[RecentHeroMatch] = []
+        match_tags_by_match_id = self.get_match_user_tags_map(
+            player_id,
+            [int(match.match_id) for match in matches[:limit]],
+        )
 
         for match in matches[:limit]:
             item_ids = self._summary_item_ids(match)
@@ -1730,6 +1806,7 @@ class DotaAnalyticsService:
                         details=details if isinstance(details, dict) else None,
                         player_slot=match.player_slot,
                     ),
+                    user_tags=self.get_match_user_tag_labels(match_tags_by_match_id.get(int(match.match_id), set())),
                 )
             )
 

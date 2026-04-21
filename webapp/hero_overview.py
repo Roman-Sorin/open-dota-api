@@ -22,6 +22,8 @@ HERO_OVERVIEW_COLUMN_ORDER = [
     "Max Dmg",
     "Rad WR",
     "Dire WR",
+    "MVP",
+    "High",
 ]
 HERO_DETAIL_METRIC_ORDER = [
     "Matches",
@@ -37,6 +39,8 @@ HERO_DETAIL_METRIC_ORDER = [
     "Max Damage",
     "Radiant WR",
     "Dire WR",
+    "MVP Matches",
+    "Highlight Matches",
 ]
 
 
@@ -70,6 +74,8 @@ HERO_SHARED_METRICS: list[tuple[str, str, callable]] = [
     ("Max Dmg", "Max Damage", lambda row: int(row.get("max_hero_damage", 0))),
     ("Rad WR", "Radiant WR", lambda row: _format_percent(row.get("radiant_wr", 0.0))),
     ("Dire WR", "Dire WR", lambda row: _format_percent(row.get("dire_wr", 0.0))),
+    ("MVP", "MVP Matches", lambda row: int(row.get("mvp_matches", 0))),
+    ("High", "Highlight Matches", lambda row: int(row.get("highlight_matches", 0))),
 ]
 
 

@@ -19,7 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from clients.opendota_client import OpenDotaClient
-from models.dtos import MatchSummary, QueryFilters
+from models.dtos import MATCH_USER_TAG_HIGHLIGHT, MATCH_USER_TAG_MVP, MatchSummary, QueryFilters
 from services.analytics_service import DotaAnalyticsService
 from utils.cache import JsonFileCache
 from utils.config import get_cache_dir, get_settings, is_persistent_match_store_configured
@@ -43,8 +43,9 @@ from webapp.overview_health import overview_looks_stale
 from webapp.styling import apply_cell_style
 
 
-OVERVIEW_SCHEMA_VERSION = 15
+OVERVIEW_SCHEMA_VERSION = 16
 ITEM_WINRATES_SCHEMA_VERSION = 3
+RECENT_MATCHES_SCHEMA_VERSION = 2
 CONSUMABLE_BUFF_ITEM_KEYS: dict[str, int] = {
     "moon_shard": 247,
     "ultimate_scepter": 108,
@@ -196,6 +197,34 @@ st.markdown(
         opacity: 0.78;
         font-size: 0.72rem;
         margin-top: 0.12rem;
+    }
+    .recent-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+        margin-top: 0.35rem;
+    }
+    .recent-tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.12rem 0.42rem;
+        border-radius: 999px;
+        font-size: 0.66rem;
+        font-weight: 700;
+        line-height: 1.2;
+        letter-spacing: 0.02em;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        white-space: nowrap;
+    }
+    .recent-tag.mvp {
+        color: #111827;
+        background: rgba(245, 158, 11, 0.96);
+        border-color: rgba(17, 24, 39, 0.2);
+    }
+    .recent-tag.highlight {
+        color: #ecfeff;
+        background: rgba(8, 145, 178, 0.94);
+        border-color: rgba(165, 243, 252, 0.22);
     }
     .recent-duration-value,
     .recent-kda-value {
@@ -601,8 +630,8 @@ def _build_patch_options(patch_timeline: list[tuple[int, str]]) -> list[str]:
     return options
 
 
-def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnalyticsService) -> list[dict]:
-    return service.build_turbo_hero_overview_rows(matches)
+def _build_overview_from_matches(matches: list[MatchSummary], service: DotaAnalyticsService, *, player_id: int) -> list[dict]:
+    return service.build_turbo_hero_overview_rows(matches, player_id=player_id)
 
 
 st.title("Turbo Buff")
@@ -628,6 +657,56 @@ except Exception:  # noqa: BLE001
 query_filters_supports_patch = "patch_names" in getattr(QueryFilters, "__dataclass_fields__", {})
 patch_timeline = _load_patch_timeline(service)
 patch_options = _build_patch_options(patch_timeline)
+
+
+def _recent_match_editor_label(row) -> str:
+    return (
+        f"{row.match_id} | {row.result} | {row.kills}/{row.deaths}/{row.assists} | "
+        f"{row.duration} | {format_time_ago(row.started_at)}"
+    )
+
+
+@st.dialog("Edit Match Tags", width="small")
+def _edit_match_tags_dialog(
+    *,
+    player_id: int,
+    match_id: int,
+    hero_label: str,
+    current_tag_labels: tuple[str, ...],
+    days: int | None,
+    active_patches: list[str],
+    active_start_date: date | None,
+    selected_hero_id: int,
+    selected_hero_name: str,
+    current_hero_snapshot_key: tuple[object, ...],
+    current_recent_request_key: tuple[object, ...],
+) -> None:
+    st.caption(hero_label)
+    normalized_current_tags = {str(tag).strip().lower() for tag in current_tag_labels}
+    with st.form(f"match_tags_form_{match_id}"):
+        mvp_selected = st.checkbox("MVP", value="mvp" in normalized_current_tags)
+        highlight_selected = st.checkbox("Highlight", value="highlight" in normalized_current_tags)
+        submitted = st.form_submit_button("Save Tags")
+    if not submitted:
+        return
+    selected_tags: list[str] = []
+    if mvp_selected:
+        selected_tags.append(MATCH_USER_TAG_MVP)
+    if highlight_selected:
+        selected_tags.append(MATCH_USER_TAG_HIGHLIGHT)
+    service.replace_match_user_tags(player_id, match_id, selected_tags)
+    _refresh_match_tag_views(
+        service,
+        player_id=player_id,
+        days=days,
+        active_patches=active_patches,
+        active_start_date=active_start_date,
+        selected_hero_id=selected_hero_id,
+        selected_hero_name=selected_hero_name,
+        current_hero_snapshot_key=current_hero_snapshot_key,
+        current_recent_request_key=current_recent_request_key,
+    )
+    st.rerun()
 
 
 def _clear_detail_sections() -> None:
@@ -703,6 +782,17 @@ def _store_recent_section_snapshot(
     _set_current_section_snapshot("recent", request_key, rows)
 
 
+def _render_match_tag_badges_html(tag_labels: tuple[str, ...] | list[str]) -> str:
+    if not tag_labels:
+        return ""
+    badges: list[str] = []
+    for label in tag_labels:
+        normalized = str(label).strip().lower()
+        css_class = "mvp" if normalized == "mvp" else "highlight"
+        badges.append(f'<span class="recent-tag {css_class}">{html.escape(str(label))}</span>')
+    return f'<div class="recent-tags">{"".join(badges)}</div>'
+
+
 def _mark_section_visible(section_name: str, request_key: object) -> None:
     st.session_state[f"current_{section_name}_visible_request_key"] = request_key
 
@@ -718,6 +808,89 @@ def _ensure_section_visible(section_name: str, request_key: object) -> None:
 
 def _utcnow_iso() -> str:
     return datetime.utcnow().isoformat()
+
+
+def _rebuild_current_overview_from_cache(
+    service: DotaAnalyticsService,
+    *,
+    player_id: int,
+    days: int | None,
+    active_patches: list[str],
+    active_start_date: date | None,
+) -> list[MatchSummary]:
+    if active_patches and not supports_patch_overview:
+        matches = list(st.session_state.get("patch_filtered_matches") or [])
+    else:
+        filters = QueryFilters(
+            player_id=player_id,
+            game_mode=23,
+            game_mode_name="Turbo",
+            days=days,
+            start_date=active_start_date,
+            patch_names=active_patches,
+        )
+        matches = service.get_cached_matches(filters)
+        service.enrich_hero_damage(
+            player_id,
+            matches,
+            max_fallback_detail_calls=max(120, len(matches)),
+            allow_detail_fetch=False,
+        )
+        st.session_state["patch_filtered_matches"] = matches
+    st.session_state["overview"] = service.build_turbo_hero_overview_rows(matches, player_id=player_id)
+    st.session_state["overview_schema_version"] = OVERVIEW_SCHEMA_VERSION
+    return matches
+
+
+def _refresh_match_tag_views(
+    service: DotaAnalyticsService,
+    *,
+    player_id: int,
+    days: int | None,
+    active_patches: list[str],
+    active_start_date: date | None,
+    selected_hero_id: int,
+    selected_hero_name: str,
+    current_hero_snapshot_key: tuple[object, ...],
+    current_recent_request_key: tuple[object, ...],
+) -> None:
+    _rebuild_current_overview_from_cache(
+        service,
+        player_id=player_id,
+        days=days,
+        active_patches=active_patches,
+        active_start_date=active_start_date,
+    )
+    hero_matches = _load_selected_hero_matches(
+        service,
+        player_id,
+        selected_hero_id,
+        selected_hero_name,
+        days,
+        active_patches,
+        active_start_date,
+        current_hero_snapshot_key,
+        force_refresh=True,
+    )
+    visible_recent_matches = int(_cache_get("recent_limit_loaded_by_key", current_recent_request_key) or 0)
+    if visible_recent_matches > 0:
+        recent_rows = service.build_recent_hero_matches(
+            player_id=player_id,
+            matches=hero_matches,
+            limit=min(visible_recent_matches, len(hero_matches)),
+            allow_detail_fetch=False,
+        )
+        recent_rows = _augment_recent_rows_with_cached_buffs(
+            service,
+            player_id=player_id,
+            matches=hero_matches,
+            recent_rows=recent_rows,
+        )
+        _store_recent_section_snapshot(
+            current_recent_request_key,
+            recent_rows,
+            visible_recent_matches=visible_recent_matches,
+        )
 
 
 def _is_section_stale(section_loaded_at: str | None, dashboard_loaded_at: str | None) -> bool:
@@ -900,7 +1073,7 @@ def _get_turbo_overview_snapshot_safe(
             self.overview = rows
             self.matches = matches
             self.is_valid = not overview_looks_stale(rows)
-    return _FallbackSnapshot(service.build_turbo_hero_overview_rows(matches) if matches else [])
+    return _FallbackSnapshot(service.build_turbo_hero_overview_rows(matches, player_id=player_id) if matches else [])
 
 
 def _load_cached_dashboard_snapshot(
@@ -932,7 +1105,7 @@ def _load_cached_dashboard_snapshot(
             max_fallback_detail_calls=max(120, len(patch_filtered_matches)),
             allow_detail_fetch=False,
         )
-        return _build_overview_from_matches(patch_filtered_matches, service), patch_filtered_matches
+        return _build_overview_from_matches(patch_filtered_matches, service, player_id=player_id), patch_filtered_matches
 
     overview_snapshot = _get_turbo_overview_snapshot_safe(
         service,
@@ -1629,7 +1802,7 @@ if load:
                     max_fallback_detail_calls=max(120, len(patch_filtered_matches)),
                     allow_detail_fetch=False,
                 )
-                overview = _build_overview_from_matches(patch_filtered_matches, service)
+                overview = _build_overview_from_matches(patch_filtered_matches, service, player_id=player_id)
             else:
                 overview_snapshot = _get_turbo_overview_snapshot_safe(
                     service,
@@ -1832,9 +2005,10 @@ matchup_request_key = _matchup_cache_key(
     selected_hero_id=selected_hero_id,
 )
 current_item_request_key = (*current_hero_snapshot_key, int(min_item_matches), ITEM_WINRATES_SCHEMA_VERSION)
+current_recent_request_key = (*current_hero_snapshot_key, RECENT_MATCHES_SCHEMA_VERSION)
 _ensure_section_visible("matchup", matchup_request_key)
 _ensure_section_visible("item", current_item_request_key)
-_ensure_section_visible("recent", current_hero_snapshot_key)
+_ensure_section_visible("recent", current_recent_request_key)
 hero_matches = _cache_get("hero_matches_by_key", current_hero_snapshot_key)
 hero_matches_loaded = isinstance(hero_matches, list)
 hero_loaded_at = _cache_get("hero_loaded_at_by_key", current_hero_snapshot_key)
@@ -1903,7 +2077,8 @@ if hero_matches_loaded:
     if matches:
         if hero_section_stale:
             st.caption("Hero details were loaded before the latest dashboard refresh. Use the hero action bar above to rebuild this section from the current dashboard snapshot.")
-        stats = service.build_stats(matches)
+        hero_match_tags = service.get_match_user_tags_map(player_id, [int(match.match_id) for match in matches])
+        stats = service.build_stats(matches, match_tags_by_match_id=hero_match_tags)
         stats_cards = build_hero_detail_cards(
             {
                 "matches": stats.matches,
@@ -1921,6 +2096,8 @@ if hero_matches_loaded:
                 "max_hero_damage": stats.max_hero_damage,
                 "radiant_wr": stats.radiant_wr,
                 "dire_wr": stats.dire_wr,
+                "mvp_matches": stats.mvp_matches,
+                "highlight_matches": stats.highlight_matches,
             }
         )
         stats_html = "".join(
@@ -2240,7 +2417,7 @@ if recent_matches_key not in st.session_state:
 
 if load_all_sections or load_recent_matches:
     try:
-        _mark_section_visible("recent", current_hero_snapshot_key)
+        _mark_section_visible("recent", current_recent_request_key)
         matches = _load_selected_hero_matches(
             service,
             player_id,
@@ -2265,7 +2442,7 @@ if load_all_sections or load_recent_matches:
             recent_rows=recent_rows,
         )
         _store_recent_section_snapshot(
-            current_hero_snapshot_key,
+            current_recent_request_key,
             recent_rows,
             visible_recent_matches=visible_recent_matches,
         )
@@ -2304,9 +2481,9 @@ if repair_recent_item_timings:
             matches=matches,
             recent_rows=recent_match_rows,
         )
-        _mark_section_visible("recent", current_hero_snapshot_key)
+        _mark_section_visible("recent", current_recent_request_key)
         _store_recent_section_snapshot(
-            current_hero_snapshot_key,
+            current_recent_request_key,
             recent_match_rows,
             visible_recent_matches=visible_recent_matches,
         )
@@ -2322,12 +2499,12 @@ if repair_recent_item_timings:
             st.info("Visible recent matches already had all item timings available, or OpenDota has no parseable replay timing data yet.")
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
-recent_match_rows = _cache_get("recent_rows_by_key", current_hero_snapshot_key)
+recent_match_rows = _cache_get("recent_rows_by_key", current_recent_request_key)
 if recent_match_rows is None:
-    recent_match_rows = _get_current_section_snapshot("recent", current_hero_snapshot_key)
+    recent_match_rows = _get_current_section_snapshot("recent", current_recent_request_key)
     if recent_match_rows is not None:
-        _cache_set("recent_rows_by_key", current_hero_snapshot_key, recent_match_rows)
-if (recent_match_rows is None or (load and _is_section_visible("recent", current_hero_snapshot_key))) and _is_section_visible("recent", current_hero_snapshot_key):
+        _cache_set("recent_rows_by_key", current_recent_request_key, recent_match_rows)
+if (recent_match_rows is None or (load and _is_section_visible("recent", current_recent_request_key))) and _is_section_visible("recent", current_recent_request_key):
     try:
         matches = _load_selected_hero_matches(
             service,
@@ -2353,16 +2530,16 @@ if (recent_match_rows is None or (load and _is_section_visible("recent", current
             recent_rows=recent_match_rows,
         )
         _store_recent_section_snapshot(
-            current_hero_snapshot_key,
+            current_recent_request_key,
             recent_match_rows,
             visible_recent_matches=visible_recent_matches,
         )
     except Exception:
         recent_match_rows = None
-recent_loaded_at = _cache_get("recent_loaded_at_by_key", current_hero_snapshot_key)
+recent_loaded_at = _cache_get("recent_loaded_at_by_key", current_recent_request_key)
 recent_matches_loaded = isinstance(recent_match_rows, list)
 visible_recent_matches = int(st.session_state[recent_matches_key])
-loaded_recent_matches = int(_cache_get("recent_limit_loaded_by_key", current_hero_snapshot_key) or 0)
+loaded_recent_matches = int(_cache_get("recent_limit_loaded_by_key", current_recent_request_key) or 0)
 recent_section_stale = _is_section_stale(
     str(recent_loaded_at) if recent_loaded_at is not None else None,
     str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
@@ -2384,7 +2561,7 @@ if recent_matches_loaded and loaded_recent_matches != visible_recent_matches:
             recent_rows=recent_match_rows,
         )
         _store_recent_section_snapshot(
-            current_hero_snapshot_key,
+            current_recent_request_key,
             recent_match_rows,
             visible_recent_matches=visible_recent_matches,
         )
@@ -2397,12 +2574,35 @@ if recent_matches_loaded:
     if recent_section_stale:
         st.caption("Recent matches were loaded before the latest dashboard refresh. Use the hero action bar above to rebuild this section from the current dashboard snapshot.")
     st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches)} matches")
+    recent_rows_by_id = {int(row.match_id): row for row in recent_match_rows}
+    selected_recent_match_id = st.selectbox(
+        "Tag a visible match",
+        options=list(recent_rows_by_id.keys()),
+        format_func=lambda match_id: _recent_match_editor_label(recent_rows_by_id[int(match_id)]),
+        key=f"recent_tag_match_{current_recent_request_key}",
+    )
+    if st.button("Edit Selected Match Tags", key=f"recent_tag_edit_{current_recent_request_key}"):
+        selected_recent_row = recent_rows_by_id[int(selected_recent_match_id)]
+        _edit_match_tags_dialog(
+            player_id=player_id,
+            match_id=int(selected_recent_row.match_id),
+            hero_label=f"{selected_recent_row.hero_name} | Match {selected_recent_row.match_id}",
+            current_tag_labels=tuple(getattr(selected_recent_row, "user_tags", ()) or ()),
+            days=days,
+            active_patches=active_patches,
+            active_start_date=active_start_date,
+            selected_hero_id=selected_hero_id,
+            selected_hero_name=selected_hero_name,
+            current_hero_snapshot_key=current_hero_snapshot_key,
+            current_recent_request_key=current_recent_request_key,
+        )
 
     table_rows_html = ""
     for row in recent_match_rows:
         result_class = "win" if row.result == "Win" else "loss"
         duration_percent = duration_bar_percent(row.duration_seconds)
         kills_pct, deaths_pct, assists_pct = kda_bar_segments(row.kills, row.deaths, row.assists)
+        tag_badges_html = _render_match_tag_badges_html(tuple(getattr(row, "user_tags", ()) or ()))
         regular_item_html = "".join(
             _render_item_icon_html(
                 image_url=item.item_image,
@@ -2436,7 +2636,10 @@ if recent_matches_loaded:
             f'<div class="recent-hero-level">{row.hero_level or "?"}</div>'
             f'<div class="recent-hero-variant">{row.hero_variant or "-"}</div>'
             "</div>"
+            "<div>"
             f'<div class="recent-hero-name">{row.hero_name}</div>'
+            f"{tag_badges_html}"
+            "</div>"
             "</div>"
             "</td>"
             f'<td><div class="recent-result {result_class}">{row.result} Match</div>'
