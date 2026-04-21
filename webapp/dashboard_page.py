@@ -2698,6 +2698,7 @@ if recent_matches_loaded:
                     "</div>"
                     "<div>"
                     f'<div class="recent-hero-name">{row.hero_name}</div>'
+                    f"{tag_badges_html}"
                     "</div>"
                     "</div>"
                 ),
@@ -2740,7 +2741,6 @@ if recent_matches_loaded:
         with row_cols[7]:
             st.markdown(f'<div class="recent-items-inline">{item_html}</div>', unsafe_allow_html=True)
         with row_cols[8]:
-            st.markdown(f'<div class="recent-action-cell">{tag_badges_html}</div>', unsafe_allow_html=True)
             st.button(
                 "Edit Tags",
                 key=f"recent_row_action_{current_recent_request_key}_{int(row.match_id)}",
