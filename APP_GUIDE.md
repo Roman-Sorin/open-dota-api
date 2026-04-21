@@ -65,6 +65,7 @@ The project includes two interfaces:
   - In `All Heroes`, `Player Teammates` default to highest `WR` first and `Player Opponents` default to lowest `WR` first
   - Matchup `WR` stays numeric in the dataframe; percent formatting is applied only at render time so sorting remains correct
   - Adjusting `Min matchup matches` filters the cached matchup rows and does not require a second `Refresh Matchups`
+  - `Min matchup matches` defaults to `4`
   - `Refresh Matchups` uses cached match details only; it will not spend API calls to hydrate missing details
   - If the current snapshot does not yet have cached player-composition detail payloads, Matchups now shows an explicit hint to run `Refresh Turbo Dashboard`
   - Matchup tables keep the current built snapshot across Streamlit reruns, so changing `Min matchup matches` does not discard already built rows

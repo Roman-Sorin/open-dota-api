@@ -62,6 +62,7 @@ Turbo-only dashboard for your account:
   - In `All Heroes`, `Player Teammates` default to highest `WR` first, while `Player Opponents` default to lowest `WR` first
   - Matchup winrates remain numeric under the hood so both built-in sorting and user-click sorting treat `100.00` correctly
   - Changing `Min matchup matches` only filters the already built matchup snapshot; it does not require pressing `Refresh Matchups` again
+  - `Min matchup matches` defaults to `4`
   - `Refresh Matchups` is cache-only for match details and does not call OpenDota for missing details
   - If no cached player-composition details exist for the current snapshot yet, Matchups now says so explicitly and points you to `Refresh Turbo Dashboard`
   - Matchup tables now keep the current built snapshot across Streamlit reruns, so changing `Min matchup matches` does not discard already built rows

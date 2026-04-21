@@ -2029,7 +2029,7 @@ if isinstance(matchup_rows, dict):
         "Min matchup matches",
         min_value=1,
         max_value=20,
-        value=st.session_state.get("min_matchup_matches", 3),
+        value=st.session_state.get("min_matchup_matches", 4),
         step=1,
         key="min_matchup_matches",
     )
