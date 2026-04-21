@@ -16,6 +16,10 @@
   - `Streamlit Cloud` surfaced an `ImportError` from `dashboard_page.py` during deploy.
   - Root cause was a mixed-runtime compatibility hazard: new constants were imported directly from `models.dtos` at import time.
   - Fixed by resolving manual-tag constants through `getattr(..., fallback)` in `webapp/dashboard_page.py` and `services/analytics_service.py`, so older in-process `models.dtos` objects do not crash the app during rollout.
+- Second follow-up hotfix:
+  - after the import fix, deployed runtime hit a `TypeError` while constructing `StatsResult(...)` with the new manual-tag fields.
+  - root cause was the same mixed-runtime pattern, but now on the `StatsResult` dataclass shape.
+  - fixed by routing `build_stats()` through `_make_stats_result()`, which falls back to `SimpleNamespace` when the in-process `StatsResult` class is older than the service code.
 
 ## 2026-04-16
 

@@ -5,6 +5,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 import time as time_module
+from types import SimpleNamespace
 from typing import Any
 
 from clients.opendota_client import OpenDotaClient
@@ -922,6 +923,15 @@ class DotaAnalyticsService:
             return None
         return ", ".join(normalized)
 
+    @staticmethod
+    def _make_stats_result(**fields: Any) -> StatsResult | SimpleNamespace:
+        try:
+            return StatsResult(**fields)
+        except TypeError:
+            # Mixed-runtime deploys can temporarily keep an older StatsResult dataclass
+            # alive in-process while newer service code passes expanded fields.
+            return SimpleNamespace(**fields)
+
     def build_stats(
         self,
         matches: list[MatchSummary],
@@ -930,7 +940,7 @@ class DotaAnalyticsService:
     ) -> StatsResult:
         total = len(matches)
         if total == 0:
-            return StatsResult(
+            return self._make_stats_result(
                 matches=0,
                 wins=0,
                 losses=0,
@@ -986,7 +996,7 @@ class DotaAnalyticsService:
         avg_d = deaths / total
         avg_a = assists / total
 
-        return StatsResult(
+        return self._make_stats_result(
             matches=total,
             wins=wins,
             losses=losses,
