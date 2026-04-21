@@ -19,7 +19,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from clients.opendota_client import OpenDotaClient
-from models.dtos import MATCH_USER_TAG_HIGHLIGHT, MATCH_USER_TAG_MVP, MatchSummary, QueryFilters
+from models import dtos as dtos_module
+from models.dtos import MatchSummary, QueryFilters
 from services.analytics_service import DotaAnalyticsService
 from utils.cache import JsonFileCache
 from utils.config import get_cache_dir, get_settings, is_persistent_match_store_configured
@@ -41,6 +42,9 @@ from webapp.hero_trends import build_daily_trend_points
 from webapp import matchups as matchup_utils
 from webapp.overview_health import overview_looks_stale
 from webapp.styling import apply_cell_style
+
+MATCH_USER_TAG_MVP = getattr(dtos_module, "MATCH_USER_TAG_MVP", "mvp")
+MATCH_USER_TAG_HIGHLIGHT = getattr(dtos_module, "MATCH_USER_TAG_HIGHLIGHT", "highlight")
 
 
 OVERVIEW_SCHEMA_VERSION = 16

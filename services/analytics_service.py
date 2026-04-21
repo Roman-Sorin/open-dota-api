@@ -9,18 +9,8 @@ from typing import Any
 
 from clients.opendota_client import OpenDotaClient
 from clients.stratz_client import StratzAuthError, StratzClient, StratzError, StratzRateLimitError
-from models.dtos import (
-    ItemStat,
-    ItemsResult,
-    MATCH_USER_TAG_HIGHLIGHT,
-    MATCH_USER_TAG_LABELS,
-    MATCH_USER_TAG_MVP,
-    MATCH_USER_TAG_ORDER,
-    MatchRow,
-    MatchSummary,
-    QueryFilters,
-    StatsResult,
-)
+from models import dtos as dtos_module
+from models.dtos import ItemStat, ItemsResult, MatchRow, MatchSummary, QueryFilters, StatsResult
 from parsers.input_parser import HeroParser
 from utils.cache import JsonFileCache
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError
@@ -28,6 +18,22 @@ from utils.helpers import calculate_kda_ratio, format_duration, unix_to_dt, winr
 from utils.match_filters import is_excluded_match_id
 from utils.match_store import MatchStoreProtocol
 from utils.overview_validation import overview_looks_stale
+
+MATCH_USER_TAG_MVP = getattr(dtos_module, "MATCH_USER_TAG_MVP", "mvp")
+MATCH_USER_TAG_HIGHLIGHT = getattr(dtos_module, "MATCH_USER_TAG_HIGHLIGHT", "highlight")
+MATCH_USER_TAG_LABELS = getattr(
+    dtos_module,
+    "MATCH_USER_TAG_LABELS",
+    {
+        MATCH_USER_TAG_MVP: "MVP",
+        MATCH_USER_TAG_HIGHLIGHT: "Highlight",
+    },
+)
+MATCH_USER_TAG_ORDER = getattr(
+    dtos_module,
+    "MATCH_USER_TAG_ORDER",
+    (MATCH_USER_TAG_MVP, MATCH_USER_TAG_HIGHLIGHT),
+)
 
 
 @dataclass(slots=True)

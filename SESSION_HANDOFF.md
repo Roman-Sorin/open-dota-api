@@ -12,6 +12,10 @@
 - Bumped `OVERVIEW_SCHEMA_VERSION` to `16` and added a dedicated recent-section schema key so old in-session rows are not reused after deploy.
 - Added regression coverage in `tests/test_match_store.py` and `tests/test_hero_overview_table.py`.
 - Updated `README.md` and `APP_GUIDE.md` to document the new manual-tag behavior and storage model.
+- Follow-up hotfix:
+  - `Streamlit Cloud` surfaced an `ImportError` from `dashboard_page.py` during deploy.
+  - Root cause was a mixed-runtime compatibility hazard: new constants were imported directly from `models.dtos` at import time.
+  - Fixed by resolving manual-tag constants through `getattr(..., fallback)` in `webapp/dashboard_page.py` and `services/analytics_service.py`, so older in-process `models.dtos` objects do not crash the app during rollout.
 
 ## 2026-04-16
 
