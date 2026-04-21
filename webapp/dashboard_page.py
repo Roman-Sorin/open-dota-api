@@ -3031,12 +3031,11 @@ if recent_matches_loaded:
             "</tr>"
         )
 
-    recent_table_height = min(220 + max(len(recent_match_rows), 1) * 88, 1600)
     recent_matches_component = RECENT_MATCHES_TABLE_COMPONENT(
         key=f"recent_matches_table_{current_recent_request_key}",
         data={"table_rows_html": table_rows_html},
         on_clicked_change=lambda: None,
-        height=recent_table_height,
+        height="content",
     )
     clicked_match_id_raw = getattr(recent_matches_component, "clicked", None)
     try:

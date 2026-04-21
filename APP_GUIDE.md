@@ -117,6 +117,7 @@ The project includes two interfaces:
 - Recent hero matches include `Net Worth` and player `Hero Damage`
 - Recent hero matches show both `K/D/A` and per-match `KDA` rounded to one decimal
 - Recent hero matches support incremental loading via `Load 10 more matches`
+- The `Recent Matches` table uses content height so the `Load 10 more matches` control sits immediately below the visible rows instead of at the bottom of an oversized wrapper
 - Supports player input as account id or OpenDota profile URL
 - Local `SQLite` storage for player match summaries
 - Separate persisted storage for fetched match details

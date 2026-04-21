@@ -29,6 +29,9 @@
 - Fourth follow-up hotfix:
   - the interim iframe/query-param workaround created fragile click behavior and excess vertical whitespace in `Recent Matches`.
   - fixed by removing that path entirely and switching the section to native Streamlit row rendering plus session-state-driven dialog opening.
+- Fifth follow-up hotfix:
+  - the `Recent Matches` bidi component was still mounted with an overestimated fixed pixel height, which left a large blank gap between the last table row and `Load 10 more matches`.
+  - fixed by switching the component mount to `height="content"` so the wrapper collapses to the rendered table height and the button stays directly under the table.
 
 ## 2026-04-16
 

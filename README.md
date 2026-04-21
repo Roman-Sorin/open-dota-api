@@ -102,6 +102,7 @@ Turbo-only dashboard for your account:
 - Recent hero matches include `Net Worth` and player `Hero Damage`
 - Recent hero matches show both `K/D/A` and per-match `KDA` rounded to one decimal
 - Recent hero matches support `Load 10 more matches`
+- The `Recent Matches` table auto-sizes to its rendered rows so the `Load 10 more matches` button stays directly under the table without a stretched blank gap
 - Item winrates are ordered by highest winrate first (then by match count)
 - Default minimum matches per item in the dashboard filter is `1`
 - Dashboard clears stale overview session data when schema changes between app updates
