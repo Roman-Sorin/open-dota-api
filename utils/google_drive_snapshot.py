@@ -7,10 +7,6 @@ from pathlib import Path
 import re
 from typing import Any
 
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
-
 
 class GoogleDriveSnapshotManager:
     def __init__(
@@ -22,6 +18,14 @@ class GoogleDriveSnapshotManager:
         local_db_path: Path,
         min_upload_interval_seconds: int = 60,
     ) -> None:
+        try:
+            from google.oauth2.service_account import Credentials
+            from googleapiclient.discovery import build
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "Google Drive snapshot support requires the optional Google API dependencies."
+            ) from exc
+
         service_account_info = self._parse_service_account_json(service_account_json)
         credentials = Credentials.from_service_account_info(
             service_account_info,
@@ -38,6 +42,8 @@ class GoogleDriveSnapshotManager:
         remote = self._find_snapshot_file()
         if remote is None:
             return False
+        from googleapiclient.http import MediaIoBaseDownload
+
         self._local_db_path.parent.mkdir(parents=True, exist_ok=True)
         request = self._service.files().get_media(fileId=remote["id"])
         with io.FileIO(self._local_db_path, mode="wb") as fh:
@@ -59,6 +65,8 @@ class GoogleDriveSnapshotManager:
             return False
         if not force and not self._upload_is_due():
             return False
+
+        from googleapiclient.http import MediaFileUpload
 
         file_id = self._current_file_id()
         media = MediaFileUpload(str(self._local_db_path), mimetype="application/x-sqlite3", resumable=True)

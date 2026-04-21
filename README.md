@@ -35,6 +35,7 @@ Turbo-only dashboard for your account:
 - `Database` `Sync History` now includes a `Source` column so you can see whether each run was `Manual`, `Auto`, or `Forced`
 - `Database` summary sync now still inspects the newest OpenDota page during long-window cooldowns, so fresh matches show up without waiting for the old 12-hour incremental throttle to expire
 - `Database` background cycles now keep a separate summary head-sync cooldown, so auto-fill can keep working from cached matches/STRATZ without hammering OpenDota summaries on every 15-second rerun
+- Those background summary head-sync checks do not advance the dashboard `last_incremental_sync_at`; only real dashboard refreshes move the main snapshot timestamp
 - `Database` also keeps a separate STRATZ retry window, so a temporary STRATZ `429` no longer causes the app to silently hammer the Stats fallback on every subsequent cycle
 - `Database` background auto-fill now avoids mixing OpenDota and STRATZ work in the same cycle, so one provider's rate limit does not immediately cascade into a second provider attempt with no user-visible progress
 - Parse-only retry cycles no longer start the pending-parse quiet window, so the queue can poll freshly retried jobs on the next cycle instead of self-blocking behind repeated `Waiting...` notes
@@ -71,6 +72,7 @@ Turbo-only dashboard for your account:
 - Hero detail, item stats, and recent matches stay cached per hero/filter in the current session when you switch between heroes
 - Detail-section caches are scoped to the current dashboard snapshot so old hero/recent/item rows are not reused after the overview changes
 - Section caches are invalidated only by real dashboard sync timestamps; local enrichment writes do not count as a new snapshot and must not close already built sections
+- Cached day-based hero snapshots stay anchored to the newest cached match in that snapshot, so wall-clock time alone does not silently shrink an older cached overview between reruns
 - Section actions are refresh actions now; if dashboard data is newer than a section cache, the UI shows a stale hint instead of silently hiding that fact
 - Hero Overview snapshots with suspicious per-hero zero `NW`/`Dmg`/`Max Dmg` rows are auto-invalidated and rebuilt instead of being rendered as valid data
 - Item winrates count only end-of-match inventory items; cached match details add backpack slots, and summary-only fallback uses final slot columns only

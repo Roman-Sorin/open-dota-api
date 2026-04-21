@@ -31,6 +31,7 @@ The project includes two interfaces:
 - `Database` `Sync History` now includes a `Source` column so you can distinguish `Manual`, `Auto`, and `Forced` runs
 - `Database` summary sync now still checks the newest OpenDota page during long-window incremental cooldowns, so newly played matches appear promptly instead of waiting up to 12 hours on a `365`-day window
 - `Database` now keeps a separate summary head-sync cooldown, so auto-fill can keep maintaining cached matches and STRATZ timing recovery without re-hitting the OpenDota summaries endpoint every cycle
+- Those background head-sync checks no longer advance the dashboard `last_incremental_sync_at`; the main dashboard snapshot timestamp changes only on real dashboard syncs
 - `Database` now also keeps a separate STRATZ retry window, so a temporary STRATZ `429` no longer triggers hidden repeated Stats retries on every auto-fill cycle
 - `Database` auto-fill now avoids mixing OpenDota and STRATZ work in one cycle, so a rate limit from one provider does not immediately trigger a second provider attempt in that same run
 - Parse-only retry cycles no longer start the pending-parse quiet window, so freshly retried replay parses can be checked on the very next cycle instead of getting stuck behind repeated `Waiting...` messages
@@ -73,6 +74,7 @@ The project includes two interfaces:
 - When you switch away from a hero and return, already loaded hero details/item stats/recent matches are restored from session cache for that hero/filter combination
 - Detail-section caches are tied to the current dashboard snapshot, so a newer overview will not silently reuse old hero/item/recent rows
 - Section caches are invalidated only by real dashboard sync timestamps; local enrichment writes do not count as a new snapshot and must not close already built sections
+- Cached day-based hero snapshots are anchored to the newest cached match in that snapshot, so a stale cached overview does not silently lose rows just because wall-clock time advanced between reruns
 - If the dashboard was refreshed later than a section, the section shows a hint that it should be rebuilt from the current dashboard snapshot with `Refresh ...`
 - Overview snapshots with suspicious per-hero zero `NW`/`Dmg`/`Max Dmg` rows are treated as stale and rebuilt automatically
 - Most frequent final items

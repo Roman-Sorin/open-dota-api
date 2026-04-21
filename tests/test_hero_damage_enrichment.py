@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, time, timedelta, timezone
 
 from models.dtos import MatchSummary, QueryFilters
 from services.analytics_service import DotaAnalyticsService
@@ -512,6 +512,19 @@ def test_fetch_matches_respects_start_date_filter() -> None:
 
     assert len(rows) == 1
     assert rows[0].match_id == 2
+
+
+def test_min_start_time_uses_calendar_day_boundary_for_days_filter() -> None:
+    now = datetime.now(tz=timezone.utc)
+    boundary_date = now.date() - timedelta(days=60)
+    boundary_start = int(datetime.combine(boundary_date, time(hour=2), tzinfo=timezone.utc).timestamp())
+
+    min_start = DotaAnalyticsService._min_start_time(
+        QueryFilters(player_id=123, game_mode=23, game_mode_name="Turbo", days=60)
+    )
+
+    assert min_start == int(datetime.combine(boundary_date, time.min, tzinfo=timezone.utc).timestamp())
+    assert boundary_start >= min_start
 
 
 def test_fetch_matches_uses_cache_for_historical_query() -> None:

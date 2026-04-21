@@ -406,7 +406,29 @@ class DotaAnalyticsService:
     def _min_start_time(filters: QueryFilters) -> int | None:
         min_start = None
         if filters.days:
-            min_start = int((datetime.now(tz=timezone.utc).timestamp()) - filters.days * 86400)
+            # Treat day filters as whole UTC calendar days so boundary matches from
+            # the earliest included day are not dropped by the current clock time.
+            min_start_date = datetime.now(tz=timezone.utc).date() - timedelta(days=filters.days)
+            min_start = int(datetime.combine(min_start_date, time.min, tzinfo=timezone.utc).timestamp())
+        if filters.start_date:
+            start_date_ts = int(datetime.combine(filters.start_date, time.min, tzinfo=timezone.utc).timestamp())
+            min_start = max(min_start, start_date_ts) if min_start is not None else start_date_ts
+        return min_start
+
+    @staticmethod
+    def _cached_min_start_time(filters: QueryFilters, stored_rows: list[dict[str, Any]]) -> int | None:
+        min_start = None
+        if filters.days and stored_rows:
+            newest_start_time = int(stored_rows[0].get("start_time") or 0)
+            if newest_start_time > 0:
+                newest_match_date = datetime.fromtimestamp(newest_start_time, tz=timezone.utc).date()
+                min_start = int(
+                    datetime.combine(
+                        newest_match_date - timedelta(days=filters.days),
+                        time.min,
+                        tzinfo=timezone.utc,
+                    ).timestamp()
+                )
         if filters.start_date:
             start_date_ts = int(datetime.combine(filters.start_date, time.min, tzinfo=timezone.utc).timestamp())
             min_start = max(min_start, start_date_ts) if min_start is not None else start_date_ts
@@ -468,6 +490,7 @@ class DotaAnalyticsService:
         *,
         force: bool = False,
         check_recent_head_page: bool = False,
+        update_sync_timestamps: bool = True,
     ) -> list[int]:
         if self.match_store is None:
             return []
@@ -524,13 +547,13 @@ class DotaAnalyticsService:
                     break
                 offset += batch_size
 
-            self.match_store.upsert_sync_state(
-                filters.player_id,
-                scope_key,
-                last_incremental_sync_at=now_iso,
-                last_full_sync_at=now_iso,
-                known_match_count=self.match_store.count_player_matches(filters.player_id, filters.game_mode),
-            )
+            update_fields: dict[str, Any] = {
+                "known_match_count": self.match_store.count_player_matches(filters.player_id, filters.game_mode),
+            }
+            if update_sync_timestamps:
+                update_fields["last_incremental_sync_at"] = now_iso
+                update_fields["last_full_sync_at"] = now_iso
+            self.match_store.upsert_sync_state(filters.player_id, scope_key, **update_fields)
             self._flush_persistent_match_store()
             return inserted_match_ids
 
@@ -539,7 +562,7 @@ class DotaAnalyticsService:
             update_fields: dict[str, Any] = {
                 "known_match_count": self.match_store.count_player_matches(filters.player_id, filters.game_mode),
             }
-            if not within_incremental_cooldown:
+            if update_sync_timestamps and not within_incremental_cooldown:
                 update_fields["last_incremental_sync_at"] = now_iso
             self.match_store.upsert_sync_state(filters.player_id, scope_key, **update_fields)
             self._flush_persistent_match_store()
@@ -569,7 +592,7 @@ class DotaAnalyticsService:
         update_fields = {
             "known_match_count": self.match_store.count_player_matches(filters.player_id, filters.game_mode),
         }
-        if not within_incremental_cooldown:
+        if update_sync_timestamps and not within_incremental_cooldown:
             update_fields["last_incremental_sync_at"] = now_iso
         self.match_store.upsert_sync_state(filters.player_id, scope_key, **update_fields)
         self._flush_persistent_match_store()
@@ -646,22 +669,8 @@ class DotaAnalyticsService:
 
         if self.match_store is not None:
             self._sync_player_matches(filters, force=force_sync)
-            stored_rows = self.match_store.query_player_matches(
-                filters.player_id,
-                hero_id=filters.hero_id,
-                game_mode=filters.game_mode,
-                min_start_time=min_start,
-                limit=None,
-            )
-            parsed_store_rows = [
-                match
-                for match in (
-                    self._parse_match_summary_row(row, selected_patches=selected_patches, min_start=min_start)
-                    for row in stored_rows
-                )
-                if match is not None
-            ]
-            return parsed_store_rows[:limit] if limit is not None else parsed_store_rows
+            cached_matches = self.get_cached_matches(filters)
+            return cached_matches[:limit] if limit is not None else cached_matches
 
         cache_policy = self._build_matches_cache_policy(filters, limit)
         cached_matches = self._deserialize_match_summaries(
@@ -732,14 +741,14 @@ class DotaAnalyticsService:
         if self.match_store is None:
             return []
         selected_patches = set(filters.patch_names or [])
-        min_start = self._min_start_time(filters)
         stored_rows = self.match_store.query_player_matches(
             filters.player_id,
             hero_id=filters.hero_id,
             game_mode=filters.game_mode,
-            min_start_time=min_start,
+            min_start_time=None,
             limit=None,
         )
+        min_start = self._cached_min_start_time(filters, stored_rows)
         parsed_store_rows = [
             match
             for match in (
@@ -2476,7 +2485,12 @@ class DotaAnalyticsService:
                 try:
                     request_targets_used.add("OpenDota")
                     opendota_attempted_this_cycle = True
-                    inserted_ids = self._sync_player_matches(filters, force=force, check_recent_head_page=True)
+                    inserted_ids = self._sync_player_matches(
+                        filters,
+                        force=force,
+                        check_recent_head_page=True,
+                        update_sync_timestamps=False,
+                    )
                     summary_new_matches = len(inserted_ids)
                     if summary_new_matches > 0:
                         data_sources_used.add("OpenDota")
