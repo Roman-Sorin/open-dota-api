@@ -821,6 +821,85 @@ def _render_match_tag_badges_html(tag_labels: tuple[str, ...] | list[str]) -> st
     return f'<div class="recent-tags">{"".join(badges)}</div>'
 
 
+def _render_recent_matches_table_html(table_rows_html: str, row_count: int) -> tuple[str, int]:
+    table_html = f"""
+    <html>
+    <head>
+      <style>
+        body {{ margin: 0; font-family: sans-serif; color: inherit; }}
+        .recent-matches-wrap {{ overflow-x: auto; margin-top: 0.5rem; }}
+        .recent-matches-table {{ width: 100%; min-width: 860px; border-collapse: collapse; font-size: 0.84rem; }}
+        .recent-matches-table th {{ text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.72; padding: 0.45rem 0.55rem; border-bottom: 1px solid rgba(49, 51, 63, 0.18); white-space: nowrap; }}
+        .recent-matches-table td {{ padding: 0.55rem; border-bottom: 1px solid rgba(49, 51, 63, 0.1); vertical-align: middle; }}
+        .recent-hero-cell {{ min-width: 150px; }}
+        .recent-hero-wrap {{ display: flex; align-items: center; gap: 0.55rem; }}
+        .recent-hero-icon-wrap {{ position: relative; width: 38px; height: 38px; flex: 0 0 38px; }}
+        .recent-hero-icon-wrap img {{ width: 38px; height: 38px; border-radius: 6px; display: block; }}
+        .recent-hero-level, .recent-hero-variant {{ position: absolute; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; font-size: 0.6rem; font-weight: 700; line-height: 16px; text-align: center; color: #fff; background: rgba(17, 24, 39, 0.92); border: 1px solid rgba(255, 255, 255, 0.16); }}
+        .recent-hero-level {{ top: -5px; left: -5px; }}
+        .recent-hero-variant {{ right: -5px; bottom: -5px; }}
+        .recent-hero-name {{ font-weight: 700; line-height: 1.1; }}
+        .recent-result {{ font-weight: 700; white-space: nowrap; }}
+        .recent-result.win {{ color: #23a55a; }}
+        .recent-result.loss {{ color: #d9534f; }}
+        .recent-when {{ white-space: nowrap; opacity: 0.78; font-size: 0.72rem; margin-top: 0.12rem; }}
+        .recent-tags {{ display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.35rem; }}
+        .recent-tag {{ display: inline-flex; align-items: center; padding: 0.12rem 0.42rem; border-radius: 999px; font-size: 0.66rem; font-weight: 700; line-height: 1.2; letter-spacing: 0.02em; border: 1px solid rgba(255, 255, 255, 0.14); white-space: nowrap; }}
+        .recent-tag.mvp {{ color: #111827; background: rgba(245, 158, 11, 0.96); border-color: rgba(17, 24, 39, 0.2); }}
+        .recent-tag.highlight {{ color: #ecfeff; background: rgba(8, 145, 178, 0.94); border-color: rgba(165, 243, 252, 0.22); }}
+        .recent-action-link {{ display: inline-flex; align-items: center; justify-content: center; padding: 0.24rem 0.56rem; border-radius: 0.42rem; font-size: 0.72rem; font-weight: 700; color: #e5e7eb; text-decoration: none; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.04); white-space: nowrap; cursor: pointer; }}
+        .recent-action-link:hover {{ border-color: rgba(96, 165, 250, 0.42); background: rgba(59, 130, 246, 0.12); }}
+        .recent-duration-value, .recent-kda-value, .recent-stat-value {{ white-space: nowrap; font-weight: 700; }}
+        .recent-bar {{ width: 100%; height: 6px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, 0.08); margin-top: 0.32rem; }}
+        .recent-bar-fill {{ height: 100%; border-radius: 999px; background: linear-gradient(90deg, #d97706 0%, #f59e0b 100%); }}
+        .recent-kda-bar {{ display: flex; width: 100%; height: 6px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, 0.08); margin-top: 0.32rem; }}
+        .recent-kda-kills {{ background: #c2410c; }}
+        .recent-kda-deaths {{ background: #6b7280; }}
+        .recent-kda-assists {{ background: #15803d; }}
+        .recent-items-inline {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 0.35rem; min-width: 236px; }}
+        .recent-items-main {{ display: flex; align-items: flex-start; gap: 0.35rem; min-width: 0; }}
+        .recent-items-buffs {{ display: flex; align-items: flex-start; justify-content: flex-end; gap: 0.35rem; margin-left: auto; min-width: 0; }}
+        .recent-items-inline.empty {{ opacity: 0.65; }}
+        .recent-item-inline {{ position: relative; width: 34px; flex: 0 0 34px; display: inline-flex; align-items: flex-start; justify-content: center; padding-bottom: 0.15rem; }}
+        .recent-item-inline img {{ width: 34px; height: auto; border-radius: 5px; display: block; margin: 0 auto; }}
+        .recent-item-chip {{ position: absolute; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; font-size: 0.6rem; font-weight: 700; line-height: 16px; text-align: center; white-space: nowrap; color: #fff; background: rgba(17, 24, 39, 0.92); border: 1px solid rgba(255, 255, 255, 0.16); }}
+        .recent-item-chip-time {{ left: -5px; bottom: -5px; }}
+        .recent-item-chip-buff {{ top: -5px; right: -5px; color: #111827; background: rgba(245, 158, 11, 0.96); border-color: rgba(17, 24, 39, 0.2); }}
+        .recent-item-chip.na {{ opacity: 0.58; }}
+      </style>
+    </head>
+    <body>
+      <div class="recent-matches-wrap">
+        <table class="recent-matches-table">
+          <thead><tr>
+            <th>Hero</th>
+            <th>Result</th>
+            <th>Duration</th>
+            <th>K/D/A</th>
+            <th>KDA</th>
+            <th>Net Worth</th>
+            <th>Damage</th>
+            <th>Items</th>
+            <th>Tags</th>
+          </tr></thead>
+          <tbody>{table_rows_html}</tbody>
+        </table>
+      </div>
+      <script>
+        function editMatchTags(matchId) {{
+          const targetWindow = window.parent;
+          const nextUrl = new URL(targetWindow.location.href);
+          nextUrl.searchParams.set("{EDIT_MATCH_QUERY_PARAM}", String(matchId));
+          targetWindow.location.href = nextUrl.toString();
+        }}
+      </script>
+    </body>
+    </html>
+    """
+    table_height = min(220 + max(row_count, 1) * 88, 1600)
+    return table_html, table_height
+
+
 def _mark_section_visible(section_name: str, request_key: object) -> None:
     st.session_state[f"current_{section_name}_visible_request_key"] = request_key
 
@@ -2636,7 +2715,7 @@ if recent_matches_loaded:
         kills_pct, deaths_pct, assists_pct = kda_bar_segments(row.kills, row.deaths, row.assists)
         tag_badges_html = _render_match_tag_badges_html(tuple(getattr(row, "user_tags", ()) or ()))
         edit_link_html = (
-            f'<a class="recent-action-link" href="?{EDIT_MATCH_QUERY_PARAM}={int(row.match_id)}">Edit Tags</a>'
+            f'<button type="button" class="recent-action-link" onclick="editMatchTags({int(row.match_id)})">Edit Tags</button>'
         )
         regular_item_html = "".join(
             _render_item_icon_html(
@@ -2699,26 +2778,14 @@ if recent_matches_loaded:
             "</tr>"
         )
 
-    st.markdown(
-        (
-            '<div class="recent-matches-wrap">'
-            '<table class="recent-matches-table">'
-            "<thead><tr>"
-            "<th>Hero</th>"
-            "<th>Result</th>"
-            "<th>Duration</th>"
-            "<th>K/D/A</th>"
-            "<th>KDA</th>"
-            "<th>Net Worth</th>"
-            "<th>Damage</th>"
-            "<th>Items</th>"
-            "<th>Tags</th>"
-            "</tr></thead>"
-            f"<tbody>{table_rows_html}</tbody>"
-            "</table>"
-            "</div>"
-        ),
-        unsafe_allow_html=True,
+    recent_table_html, recent_table_height = _render_recent_matches_table_html(
+        table_rows_html,
+        len(recent_match_rows),
+    )
+    components.html(
+        recent_table_html,
+        height=recent_table_height,
+        scrolling=False,
     )
 
     if visible_recent_matches < len(matches):

@@ -21,6 +21,10 @@
   - after the import fix, deployed runtime hit a `TypeError` while constructing `StatsResult(...)` with the new manual-tag fields.
   - root cause was the same mixed-runtime pattern, but now on the `StatsResult` dataclass shape.
   - fixed by routing `build_stats()` through `_make_stats_result()`, which falls back to `SimpleNamespace` when the in-process `StatsResult` class is older than the service code.
+- Third follow-up hotfix:
+  - the in-table `Edit Tags` action inside `Recent Matches` was rendered through `st.markdown(..., unsafe_allow_html=True)`.
+  - Streamlit treated the anchor as a normal external link and opened a blank `~/+` tab instead of driving the in-app modal flow.
+  - fixed by rendering the recent-match table through `components.html(...)` and using an inline button that updates the current page query param via JavaScript in the same window.
 
 ## 2026-04-16
 
