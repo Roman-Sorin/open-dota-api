@@ -96,6 +96,7 @@ class StatsResult:
     dire_wr: float
     mvp_matches: int
     highlight_matches: int
+    tagged_matches: int
 
 
 @dataclass(slots=True)

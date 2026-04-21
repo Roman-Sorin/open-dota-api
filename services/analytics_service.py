@@ -960,6 +960,7 @@ class DotaAnalyticsService:
                 dire_wr=0.0,
                 mvp_matches=0,
                 highlight_matches=0,
+                tagged_matches=0,
             )
 
         wins = sum(1 for m in matches if m.did_win)
@@ -991,6 +992,7 @@ class DotaAnalyticsService:
             for match in matches
             if MATCH_USER_TAG_HIGHLIGHT in match_tags_by_match_id.get(int(match.match_id), set())
         )
+        tagged_matches = sum(1 for match in matches if match_tags_by_match_id.get(int(match.match_id), set()))
 
         avg_k = kills / total
         avg_d = deaths / total
@@ -1016,6 +1018,7 @@ class DotaAnalyticsService:
             dire_wr=winrate_percent(dire_wins, len(dire_matches)),
             mvp_matches=mvp_matches,
             highlight_matches=highlight_matches,
+            tagged_matches=tagged_matches,
         )
 
     def build_turbo_hero_overview_rows(
@@ -1064,6 +1067,7 @@ class DotaAnalyticsService:
                     "kda": stats.kda_ratio,
                     "mvp_matches": stats.mvp_matches,
                     "highlight_matches": stats.highlight_matches,
+                    "tagged_matches": stats.tagged_matches,
                 }
             )
 

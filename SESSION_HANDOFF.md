@@ -5,9 +5,10 @@
 - Added persistent user-owned match tags (`mvp`, `highlight`) on top of cached OpenDota data instead of mutating summary/detail payload JSON.
 - Added `match_user_tags` storage to both `SQLiteMatchStore` and `PostgresMatchStore`, plus service helpers for normalization, batch lookup, replacement, and label formatting.
 - `Hero Overview` and `Detailed Turbo Stats` now include shared manual-tag counts:
-  - overview columns: `MVP`, `High`
-  - detail cards: `MVP Matches`, `Highlight Matches`
-- `Recent Matches for Hero` now shows saved tag badges inline and adds an `Edit Selected Match Tags` dialog for any currently visible match.
+  - overview columns: `MVP`, `High`, `Tag`
+  - detail cards: `MVP Matches`, `Highlight Matches`, `Tagged Matches`
+  - all three are now rendered as `count (pct%)` against the hero's total matches
+- `Recent Matches for Hero` now shows saved tag badges inline and opens the edit dialog from an in-table `Edit Tags` action on each visible row instead of the old top-of-section selector/button flow.
 - Tag saves rebuild the current overview and recent section from cached matches only; they do not trigger OpenDota sync and do not advance the dashboard snapshot timestamp.
 - Bumped `OVERVIEW_SCHEMA_VERSION` to `16` and added a dedicated recent-section schema key so old in-session rows are not reused after deploy.
 - Added regression coverage in `tests/test_match_store.py` and `tests/test_hero_overview_table.py`.

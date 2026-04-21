@@ -15,7 +15,8 @@ The project includes two interfaces:
 - Hero Overview shows won matches in green and lost matches in red
 - Hero Overview column labels stay short and English-only: `All`, `Won`, `Lost`, `WR`, `Dur`, `NW`, `Dmg`
 - Hero Overview and Detailed Turbo Stats use one shared metric-definition list in UI code, so hero fields stay synchronized between both sections
-- Hero Overview and Detailed Turbo Stats also share manual match-tag metrics: `MVP` / `MVP Matches` and `High` / `Highlight Matches`
+- Hero Overview and Detailed Turbo Stats also share manual match-tag metrics: `MVP`, `High`, and combined `Tag` / `Tagged Matches`
+- Those tag metrics are rendered as `count (pct%)`, where the percent is the rounded share of the hero's total matches
 - Hero Overview rows are also built from the same service-side stats aggregation used by Detailed Turbo Stats, so `Radiant WR` / `Dire WR` and other hero metrics stay consistent
 - Dashboard table styling uses a pandas-compatibility helper (`Styler.map` with `applymap` fallback) so cloud/runtime package drift does not break Hero Overview or Item Winrates rendering
 - All winrate values in the UI use the same colors: below `50%` red, exactly `50%` yellow, above `50%` green
@@ -102,7 +103,7 @@ The project includes two interfaces:
 - Dashboard filter `Min matches per hero` defaults to `4`
 - Dashboard filter `Min matches per item` defaults to `4`
 - Recent hero matches are displayed as a compact table below the item table
-- Recent hero matches show saved manual match tags inline and include an `Edit Selected Match Tags` action for any currently visible match
+- Recent hero matches show saved manual match tags inline and include an in-table `Edit Tags` action on each visible match row
 - Manual match tags are persisted as separate user data in the match store, not embedded into OpenDota summary/detail payloads
 - Recent hero matches show final item slots only; timings are attached only to those final items when available from match details
 - Recent hero matches also show consumable buffs from cached match details (for example consumed `Aghanim's Scepter`), marked with a small `buff` chip and ordered alongside timed final items

@@ -230,6 +230,24 @@ st.markdown(
         background: rgba(8, 145, 178, 0.94);
         border-color: rgba(165, 243, 252, 0.22);
     }
+    .recent-action-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.24rem 0.56rem;
+        border-radius: 0.42rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #e5e7eb;
+        text-decoration: none;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.04);
+        white-space: nowrap;
+    }
+    .recent-action-link:hover {
+        border-color: rgba(96, 165, 250, 0.42);
+        background: rgba(59, 130, 246, 0.12);
+    }
     .recent-duration-value,
     .recent-kda-value {
         white-space: nowrap;
@@ -661,6 +679,7 @@ except Exception:  # noqa: BLE001
 query_filters_supports_patch = "patch_names" in getattr(QueryFilters, "__dataclass_fields__", {})
 patch_timeline = _load_patch_timeline(service)
 patch_options = _build_patch_options(patch_timeline)
+EDIT_MATCH_QUERY_PARAM = "edit_match_id"
 
 
 def _recent_match_editor_label(row) -> str:
@@ -670,7 +689,11 @@ def _recent_match_editor_label(row) -> str:
     )
 
 
-@st.dialog("Edit Match Tags", width="small")
+def _clear_pending_recent_match_edit() -> None:
+    st.query_params.pop(EDIT_MATCH_QUERY_PARAM, None)
+
+
+@st.dialog("Edit Match Tags", width="small", on_dismiss=_clear_pending_recent_match_edit)
 def _edit_match_tags_dialog(
     *,
     player_id: int,
@@ -699,6 +722,7 @@ def _edit_match_tags_dialog(
     if highlight_selected:
         selected_tags.append(MATCH_USER_TAG_HIGHLIGHT)
     service.replace_match_user_tags(player_id, match_id, selected_tags)
+    st.query_params.pop(EDIT_MATCH_QUERY_PARAM, None)
     _refresh_match_tag_views(
         service,
         player_id=player_id,
@@ -2102,6 +2126,7 @@ if hero_matches_loaded:
                 "dire_wr": stats.dire_wr,
                 "mvp_matches": stats.mvp_matches,
                 "highlight_matches": stats.highlight_matches,
+                "tagged_matches": stats.tagged_matches,
             }
         )
         stats_html = "".join(
@@ -2579,14 +2604,15 @@ if recent_matches_loaded:
         st.caption("Recent matches were loaded before the latest dashboard refresh. Use the hero action bar above to rebuild this section from the current dashboard snapshot.")
     st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches)} matches")
     recent_rows_by_id = {int(row.match_id): row for row in recent_match_rows}
-    selected_recent_match_id = st.selectbox(
-        "Tag a visible match",
-        options=list(recent_rows_by_id.keys()),
-        format_func=lambda match_id: _recent_match_editor_label(recent_rows_by_id[int(match_id)]),
-        key=f"recent_tag_match_{current_recent_request_key}",
-    )
-    if st.button("Edit Selected Match Tags", key=f"recent_tag_edit_{current_recent_request_key}"):
-        selected_recent_row = recent_rows_by_id[int(selected_recent_match_id)]
+    pending_edit_match_id_raw = st.query_params.get(EDIT_MATCH_QUERY_PARAM)
+    pending_edit_match_id: int | None = None
+    try:
+        if pending_edit_match_id_raw is not None and str(pending_edit_match_id_raw).strip():
+            pending_edit_match_id = int(str(pending_edit_match_id_raw))
+    except (TypeError, ValueError):
+        pending_edit_match_id = None
+    if pending_edit_match_id is not None and pending_edit_match_id in recent_rows_by_id:
+        selected_recent_row = recent_rows_by_id[pending_edit_match_id]
         _edit_match_tags_dialog(
             player_id=player_id,
             match_id=int(selected_recent_row.match_id),
@@ -2600,6 +2626,8 @@ if recent_matches_loaded:
             current_hero_snapshot_key=current_hero_snapshot_key,
             current_recent_request_key=current_recent_request_key,
         )
+    elif pending_edit_match_id is not None:
+        _clear_pending_recent_match_edit()
 
     table_rows_html = ""
     for row in recent_match_rows:
@@ -2607,6 +2635,9 @@ if recent_matches_loaded:
         duration_percent = duration_bar_percent(row.duration_seconds)
         kills_pct, deaths_pct, assists_pct = kda_bar_segments(row.kills, row.deaths, row.assists)
         tag_badges_html = _render_match_tag_badges_html(tuple(getattr(row, "user_tags", ()) or ()))
+        edit_link_html = (
+            f'<a class="recent-action-link" href="?{EDIT_MATCH_QUERY_PARAM}={int(row.match_id)}">Edit Tags</a>'
+        )
         regular_item_html = "".join(
             _render_item_icon_html(
                 image_url=item.item_image,
@@ -2664,6 +2695,7 @@ if recent_matches_loaded:
             f'<td><div class="recent-stat-value">{f"{round((row.net_worth or 0) / 1000, 1)}k" if row.net_worth else "-"}</div></td>'
             f'<td><div class="recent-stat-value">{f"{round((row.hero_damage or 0) / 1000, 1)}k" if row.hero_damage else "-"}</div></td>'
             f'<td><div class="recent-items-inline">{item_html}</div></td>'
+            f"<td>{edit_link_html}</td>"
             "</tr>"
         )
 
@@ -2680,6 +2712,7 @@ if recent_matches_loaded:
             "<th>Net Worth</th>"
             "<th>Damage</th>"
             "<th>Items</th>"
+            "<th>Tags</th>"
             "</tr></thead>"
             f"<tbody>{table_rows_html}</tbody>"
             "</table>"

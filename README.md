@@ -20,7 +20,8 @@ Turbo-only dashboard for your account:
 - Hero Overview column labels stay short and English-only: `All`, `Won`, `Lost`, `WR`, `Dur`, `NW`, `Dmg`
 - All winrates in the UI use the same colors: below `50%` red, exactly `50%` yellow, above `50%` green
 - Hero overview and detailed hero stats now share one metric-definition source in the UI, so added hero fields stay aligned in both places
-- Hero Overview and Detailed Turbo Stats now also include manual match-tag counts: `MVP` / `MVP Matches` and `High` / `Highlight Matches`
+- Hero Overview and Detailed Turbo Stats now also include manual match-tag stats: `MVP`, `High`, and combined `Tag` / `Tagged Matches`
+- Those tag stats are rendered as `count (pct%)`, where the percent is the rounded share of that hero's total matches
 - Hero overview aggregation now also comes from one shared service-side stats source, so values like `Rad WR` and `Dire WR` stay identical between overview and detailed hero stats
 - Dashboard dataframe styling now uses a pandas compatibility helper that prefers `Styler.map` and falls back to `applymap`, preventing cloud/runtime pandas changes from crashing Hero Overview or Item Winrates
 - When Turbo match rows miss `hero_damage` or `net_worth`, the app enriches overview/detail stats from match details stored locally
@@ -92,7 +93,7 @@ Turbo-only dashboard for your account:
 - Item winrates UI has a safe legacy fallback, so mixed deploy/runtime restarts do not crash if an older service object is still alive during a rerun
 - Item winrates no longer show Avg K/D/A or derived KDA columns
 - Recent hero matches shown as a compact one-row-per-match table under the item table
-- Recent hero matches now show saved manual match tags inline and let you edit tags for any currently visible row via `Edit Selected Match Tags`
+- Recent hero matches now show saved manual match tags inline and let you edit tags directly from each visible row via an in-table `Edit Tags` action
 - Manual match tags are persisted separately from OpenDota payloads as user-owned data, so dashboard sync/detail refreshes do not overwrite them
 - Recent hero matches show only final slots, and item timings are shown only when the final item completion time is available
 - Recent hero matches also show consumable buffs from cached match details and mark them with a small `buff` chip

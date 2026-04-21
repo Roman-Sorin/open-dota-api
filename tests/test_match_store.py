@@ -260,8 +260,10 @@ def test_service_builds_overview_and_detail_tag_counts_from_persistent_match_tag
     assert stats.matches == 2
     assert stats.mvp_matches == 1
     assert stats.highlight_matches == 2
+    assert stats.tagged_matches == 2
     assert overview[0]["mvp_matches"] == 1
     assert overview[0]["highlight_matches"] == 2
+    assert overview[0]["tagged_matches"] == 2
 
 
 def test_recent_hero_matches_include_saved_user_tag_labels() -> None:

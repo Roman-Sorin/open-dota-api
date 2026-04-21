@@ -24,6 +24,7 @@ HERO_OVERVIEW_COLUMN_ORDER = [
     "Dire WR",
     "MVP",
     "High",
+    "Tag",
 ]
 HERO_DETAIL_METRIC_ORDER = [
     "Matches",
@@ -41,6 +42,7 @@ HERO_DETAIL_METRIC_ORDER = [
     "Dire WR",
     "MVP Matches",
     "Highlight Matches",
+    "Tagged Matches",
 ]
 
 
@@ -60,6 +62,13 @@ def _format_percent(value: object) -> str:
     return f"{round(float(value or 0.0))}%"
 
 
+def _format_count_pct(row: dict[str, object], field_name: str) -> str:
+    count = int(row.get(field_name, 0) or 0)
+    matches = int(row.get("matches", 0) or 0)
+    pct = round((count / matches * 100.0)) if matches > 0 else 0
+    return f"{count} ({pct}%)"
+
+
 HERO_SHARED_METRICS: list[tuple[str, str, callable]] = [
     (HERO_MATCHES_COLUMN, "Matches", lambda row: int(row.get("matches", 0))),
     (HERO_WINS_COLUMN, "Won Matches", lambda row: int(row.get("wins", 0))),
@@ -74,8 +83,9 @@ HERO_SHARED_METRICS: list[tuple[str, str, callable]] = [
     ("Max Dmg", "Max Damage", lambda row: int(row.get("max_hero_damage", 0))),
     ("Rad WR", "Radiant WR", lambda row: _format_percent(row.get("radiant_wr", 0.0))),
     ("Dire WR", "Dire WR", lambda row: _format_percent(row.get("dire_wr", 0.0))),
-    ("MVP", "MVP Matches", lambda row: int(row.get("mvp_matches", 0))),
-    ("High", "Highlight Matches", lambda row: int(row.get("highlight_matches", 0))),
+    ("MVP", "MVP Matches", lambda row: _format_count_pct(row, "mvp_matches")),
+    ("High", "Highlight Matches", lambda row: _format_count_pct(row, "highlight_matches")),
+    ("Tag", "Tagged Matches", lambda row: _format_count_pct(row, "tagged_matches")),
 ]
 
 
