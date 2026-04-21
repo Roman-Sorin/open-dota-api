@@ -171,15 +171,16 @@ st.markdown(
     }
     .recent-hero-icon-wrap {
         position: relative;
-        width: 38px;
-        height: 38px;
-        flex: 0 0 38px;
+        width: 56px;
+        aspect-ratio: 16 / 9;
+        flex: 0 0 56px;
     }
     .recent-hero-icon-wrap img {
-        width: 38px;
-        height: 38px;
+        width: 100%;
+        height: 100%;
         border-radius: 6px;
         display: block;
+        object-fit: cover;
     }
     .recent-hero-level,
     .recent-hero-variant {
