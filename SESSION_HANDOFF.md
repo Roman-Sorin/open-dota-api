@@ -851,3 +851,21 @@ CLI remains available as a secondary interface.
   - `README.md`
   - `APP_GUIDE.md`
   - `DEPLOY.md`
+
+## 2026-05-04 mixed-runtime UI follow-up: exception classification by name
+
+- Follow-up production symptom after build `174addf`:
+  - dashboard no longer crashed on startup, but a temporary OpenDota `HTTP 522` during refresh still showed as `Unexpected error: OpenDota temporarily unavailable (HTTP 522)`
+  - the page still rendered cached stats below the error, which confirmed the problem was UI classification rather than total failure
+- Root cause:
+  - `webapp/dashboard_page.py` imported `OpenDotaError` classes at module load time
+  - `webapp/app_runtime.py` reloads service/client/exception modules when building the runtime service
+  - after a mixed deploy/runtime reload, service code could raise a fresh `OpenDotaRateLimitError` class object that failed `isinstance(...)` checks against the older page-imported class
+  - the page then missed both the rate-limit handler and the cached-refresh fallback `except OpenDotaError` branch, dropping into generic `Unexpected error`
+- Fix:
+  - added `webapp/error_classification.py`
+  - page-level error handling now classifies OpenDota/validation exceptions by MRO class-name matching instead of strict class identity
+  - updated `show_error(...)`, `run_with_rate_limit_retry(...)`, initial cached autoload validation handling, and the main refresh fallback branch in `webapp/dashboard_page.py`
+- Regression coverage:
+  - added `tests/test_error_classification.py`
+  - test reloads `utils.exceptions` and verifies fresh exception instances are still recognized by the new classifier helpers

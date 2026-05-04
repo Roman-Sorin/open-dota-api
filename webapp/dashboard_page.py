@@ -29,6 +29,12 @@ from utils.helpers import format_duration, parse_player_id
 from webapp.app_runtime import build_service, get_app_version, get_store_warning
 from webapp.dashboard_state import build_hero_snapshot_request_key
 from webapp.filter_defaults import default_patch_selection
+from webapp.error_classification import (
+    is_opendota_error,
+    is_opendota_not_found_error,
+    is_opendota_rate_limit_error,
+    is_validation_error,
+)
 from webapp.hero_defaults import default_hero_id
 from webapp.hero_overview import (
     HERO_DETAIL_METRIC_ORDER,
@@ -540,13 +546,13 @@ WINRATE_CARD_LABELS = {"Winrate", "Radiant WR", "Dire WR"}
 
 
 def show_error(exc: Exception) -> None:
-    if isinstance(exc, OpenDotaNotFoundError):
+    if is_opendota_not_found_error(exc):
         st.error("Player was not found in OpenDota.")
-    elif isinstance(exc, OpenDotaRateLimitError):
+    elif is_opendota_rate_limit_error(exc):
         st.error("OpenDota rate limit reached. Retry later or configure OPENDOTA_API_KEY.")
-    elif isinstance(exc, ValidationError):
+    elif is_validation_error(exc):
         st.error(str(exc))
-    elif isinstance(exc, OpenDotaError):
+    elif is_opendota_error(exc):
         st.error(str(exc))
     else:
         st.error(f"Unexpected error: {exc}")
@@ -562,9 +568,11 @@ def run_with_rate_limit_retry(
     while True:
         try:
             return operation()
-        except OpenDotaRateLimitError:
-            if attempt >= retries:
+        except Exception as exc:
+            if not is_opendota_rate_limit_error(exc):
                 raise
+            if attempt >= retries:
+                raise exc
             attempt += 1
             status = st.empty()
             progress = st.progress(0)
@@ -2135,7 +2143,9 @@ if "overview" not in st.session_state:
                     loaded_at_value=str(_coalesce_dashboard_cache_timestamp(cached_sync_state) or _utcnow_iso()),
                     cache_only=True,
                 )
-    except ValidationError:
+    except Exception as exc:
+        if not is_validation_error(exc):
+            raise
         pass
 
 if load:
@@ -2197,7 +2207,9 @@ if load:
                 )
                 overview = overview_snapshot.overview
                 patch_filtered_matches = None
-        except OpenDotaError as exc:
+        except Exception as exc:
+            if not is_opendota_error(exc):
+                raise
             if not had_cached_matches:
                 raise
             refresh_notice = f"{exc} Showing cached dashboard data."

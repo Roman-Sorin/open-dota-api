@@ -55,6 +55,7 @@ Turbo-only dashboard for your account:
 - If that bounded OpenDota head-sync is rate-limited or temporarily unavailable, the dashboard keeps rendering the cached snapshot instead of failing the whole page
 - Dashboard refresh no longer requires a fresh OpenDota player-profile lookup when the selected player's Turbo cache already exists locally
 - Service startup also falls back to a checked-in compact OpenDota reference snapshot for heroes, items, and patches when live constants are temporarily unavailable, so Streamlit Cloud cold starts still render
+- Mixed deploy/runtime Streamlit sessions now also classify temporary OpenDota errors by exception name instead of raw class identity, so a `522` during refresh falls back to cached-data warnings instead of surfacing as `Unexpected error`
 - If the current cached snapshot still lacks required match details for some heroes, the app does not render that overview as valid data and tells you to rebuild the snapshot
 - Detailed hero section in Turbo includes avg duration, avg damage, avg net worth, max kills, and max hero damage
 - Selected-hero section refreshes are grouped into one action bar above the sections (`Hero Details`, `Matchups`, `Item Winrates`, `Recent Matches`)
