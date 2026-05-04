@@ -72,6 +72,7 @@ Notes:
 - The app now includes a multipage `Database` view for cache coverage / backlog monitoring.
 - Streamlit Community Cloud still does not provide a true always-on background worker inside the app process. The `Database` page can advance the queue while open, but 24/7 cache filling still needs an external runner plus shared persistent storage.
 - Streamlit Community Cloud local files are ephemeral. Without Google Drive snapshot storage or another external backend, a reboot/redeploy can wipe the local SQLite cache and force the app to rebuild match history from OpenDota.
+- Cold-start service boot no longer depends entirely on live OpenDota constants: the repo now ships a compact checked-in fallback for heroes, items, and patches so temporary upstream `429`/`522` responses do not blank the whole app before first render.
 
 Current deployed app:
 - https://open-dota-api-kzxvl2fznpz4cwwpfk2jmp.streamlit.app/

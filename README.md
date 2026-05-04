@@ -54,6 +54,7 @@ Turbo-only dashboard for your account:
 - `Refresh Turbo Dashboard` is now cache-first: it rebuilds the dashboard from the local match cache and only performs one bounded OpenDota head-sync to check for newer matches
 - If that bounded OpenDota head-sync is rate-limited or temporarily unavailable, the dashboard keeps rendering the cached snapshot instead of failing the whole page
 - Dashboard refresh no longer requires a fresh OpenDota player-profile lookup when the selected player's Turbo cache already exists locally
+- Service startup also falls back to a checked-in compact OpenDota reference snapshot for heroes, items, and patches when live constants are temporarily unavailable, so Streamlit Cloud cold starts still render
 - If the current cached snapshot still lacks required match details for some heroes, the app does not render that overview as valid data and tells you to rebuild the snapshot
 - Detailed hero section in Turbo includes avg duration, avg damage, avg net worth, max kills, and max hero damage
 - Selected-hero section refreshes are grouped into one action bar above the sections (`Hero Details`, `Matchups`, `Item Winrates`, `Recent Matches`)
@@ -220,6 +221,7 @@ tests/
 - Provider backoff is now asymmetric on the `Database` page: a pending-parse OpenDota `429` stretches the next pending poll window to several minutes, and a STRATZ `429` stretches the next STRATZ retry window to roughly fifteen minutes. This prevents the page from self-spamming both providers every minute after one bad cycle.
 - STRATZ `401/403` responses are now treated as auth/config blocks instead of silent empty fallback misses. The `Database` page persists the real provider error string and renders it in the UI so token/IP problems are visible directly on the page.
 - Temporary OpenDota upstream outages like HTTP `522` are now retried once and then folded into the same cooldown-style handling as other transient OpenDota availability problems, instead of surfacing as a hard sync error immediately.
+- If OpenDota constants are temporarily unavailable during app startup, the service now falls back to a checked-in compact reference snapshot and caches it locally so the whole dashboard does not fail before rendering.
 - Streamlit Community Cloud does not provide a true always-on worker inside the page process. The `Database` page can keep advancing the backlog while it stays open, but a real 24/7 worker still requires an external runner with shared persistent storage.
 
 ## Timing backfill job

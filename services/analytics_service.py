@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 import time as time_module
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Callable
 
 from clients.opendota_client import OpenDotaClient
 from clients.stratz_client import StratzAuthError, StratzClient, StratzError, StratzRateLimitError
@@ -14,6 +14,7 @@ from models import dtos as dtos_module
 from models.dtos import ItemStat, ItemsResult, MatchRow, MatchSummary, QueryFilters, StatsResult
 from parsers.input_parser import HeroParser
 from utils.cache import JsonFileCache
+from utils.bundled_reference_data import load_bundled_reference_payload
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError
 from utils.helpers import calculate_kda_ratio, format_duration, unix_to_dt, winrate_percent
 from utils.match_filters import is_excluded_match_id
@@ -259,15 +260,17 @@ class DotaAnalyticsService:
                 return path
             return f"https://cdn.cloudflare.steamstatic.com{path}"
 
-        heroes = self.cache.get("constants_heroes")
-        if heroes is None:
-            heroes = self.client.get_constants_heroes()
-            self.cache.set("constants_heroes", heroes)
+        heroes = self._load_reference_payload(
+            cache_key="constants_heroes",
+            bundle_name="constants_heroes.min.json",
+            fetcher=self.client.get_constants_heroes,
+        )
 
-        items = self.cache.get("constants_items")
-        if items is None:
-            items = self.client.get_constants_items()
-            self.cache.set("constants_items", items)
+        items = self._load_reference_payload(
+            cache_key="constants_items",
+            bundle_name="constants_items.min.json",
+            fetcher=self.client.get_constants_items,
+        )
 
         hero_parser = HeroParser.from_constants(heroes)
         hero_images_by_id: dict[int, str] = {}
@@ -300,6 +303,33 @@ class DotaAnalyticsService:
             item_ids_by_key=item_ids_by_key,
             item_keys_by_id=item_keys_by_id,
         )
+
+    def _load_reference_payload(
+        self,
+        *,
+        cache_key: str,
+        bundle_name: str,
+        fetcher: Callable[[], Any],
+    ) -> Any:
+        cached = self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        try:
+            payload = fetcher()
+        except OpenDotaError:
+            payload = load_bundled_reference_payload(bundle_name)
+            if payload is None:
+                raise
+        else:
+            if not payload:
+                payload = load_bundled_reference_payload(bundle_name)
+
+        if payload:
+            self.cache.set(cache_key, payload)
+            return payload
+
+        raise OpenDotaError(f"Unable to load reference data for {cache_key}")
 
     def _load_patch_timeline(self) -> tuple[list[int], list[str]]:
         timeline: list[tuple[int, str]] = []
@@ -337,10 +367,11 @@ class DotaAnalyticsService:
                 timeline = []
 
         if not timeline:
-            patches = self.cache.get("constants_patch")
-            if patches is None:
-                patches = self.client.get_constants_patch()
-                self.cache.set("constants_patch", patches)
+            patches = self._load_reference_payload(
+                cache_key="constants_patch",
+                bundle_name="constants_patch.min.json",
+                fetcher=self.client.get_constants_patch,
+            )
 
             if isinstance(patches, list):
                 for row in patches:

@@ -829,3 +829,25 @@ CLI remains available as a secondary interface.
   - dashboard now sets `Turbo Buff - Dashboard`
   - database now sets `Turbo Buff - Database`
   - purpose: Chrome tabs for the two pages are now distinguishable instead of both showing the same shared title
+
+## 2026-05-04 startup resilience: bundled OpenDota constants fallback
+
+- User-reported production failure:
+  - deployed app crashed during service construction before any dashboard render
+  - stack trace showed `get_constants_heroes()` failing on startup constants with temporary OpenDota upstream errors (`HTTP 522`; earlier report also showed rate-limit failure)
+- Root cause:
+  - `DotaAnalyticsService._load_references()` and the patch-timeline fallback path required live OpenDota constants on cold start when the local JSON cache was empty
+  - Streamlit Cloud redeploy/reboot plus transient OpenDota unavailability could therefore break the whole app without any code change
+- Fix:
+  - added checked-in compact reference snapshots under `reference_data/` for heroes, items, and patches
+  - added `utils/bundled_reference_data.py`
+  - `services/analytics_service.py` now loads those datasets from cache first, then live OpenDota, then bundled fallback on temporary OpenDota failure or empty constants payloads
+  - successful bundled fallback is written back into the JSON cache so later service builds stay cache-first and do not keep hitting OpenDota on the same cold start
+- Regression coverage:
+  - added `tests/test_reference_data_fallback.py`
+  - covers the cold-start failure shape where constants endpoints raise `OpenDotaRateLimitError`
+  - covers cross-path cache reuse: first boot populates cache from bundled data, second boot reuses cache without new network calls
+- Docs updated:
+  - `README.md`
+  - `APP_GUIDE.md`
+  - `DEPLOY.md`

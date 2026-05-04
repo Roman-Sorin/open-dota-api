@@ -53,6 +53,7 @@ The project includes two interfaces:
 - `Refresh Turbo Dashboard` is cache-first: it rebuilds the hero overview from the local cache and then does one bounded OpenDota head-sync only to check whether newer matches exist
 - `Refresh Turbo Dashboard` and the dedicated `Database` page are the only UI actions that may talk to OpenDota
 - If that bounded OpenDota check is rate-limited or temporarily unavailable, the dashboard keeps showing the cached snapshot and warns instead of failing the whole page
+- Service startup also falls back to a checked-in compact OpenDota reference snapshot for heroes, items, and patches when live constants are temporarily unavailable, so Streamlit Cloud cold starts still render
 - If the player's Turbo cache already exists locally, dashboard refresh no longer requires a separate OpenDota player-profile lookup before rebuilding the view
 - If the current cached snapshot still lacks required match details for some heroes, the app does not render that overview as valid data and tells you to rebuild the snapshot
 - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild the selected hero sections from the currently loaded dashboard snapshot
