@@ -103,8 +103,8 @@ The project includes two interfaces:
 - Item winrates section has a safe legacy fallback path so mixed deploy/runtime restarts do not crash the section if the process still holds an older service object
 - Item winrate table no longer shows Avg K/D/A or derived KDA columns
 - Item winrate table is sorted by highest item winrate first (ties by larger sample)
-- Dashboard filter `Min matches per hero` defaults to `4`
-- Dashboard filter `Min matches per item` defaults to `4`
+- Dashboard filter `Min matches per hero` defaults to `6`
+- Dashboard filter `Min matches per item` defaults to `6`
 - Recent hero matches are displayed as a compact table below the item table
 - Recent hero matches show saved manual match tags inline and include an in-table native `Edit Tags` button on each visible match row
 - Manual match tags are persisted as separate user data in the match store, not embedded into OpenDota summary/detail payloads

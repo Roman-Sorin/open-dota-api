@@ -108,6 +108,7 @@ CLI remains available as a secondary interface.
 - Included quick free phone access workflow via LocalTunnel.
 - Included permanent free hosting workflow via Streamlit Community Cloud.
 - Added hero-level filter in dashboard: `Min matches per hero`.
+- Dashboard defaults now set both `Min matches per hero` and `Min matches per item` to `6`.
 - Hero table and hero selector now respect hero minimum matches threshold.
 - Added UX handling for empty hero set after hero threshold filter.
 - Updated `.gitignore` with `.runlogs/` and `.streamlit/secrets.toml`.

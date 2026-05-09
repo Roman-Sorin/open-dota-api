@@ -2071,14 +2071,14 @@ with st.sidebar:
         "Min matches per hero",
         min_value=1,
         max_value=50,
-        value=st.session_state.get("min_hero_matches", 4),
+        value=st.session_state.get("min_hero_matches", 6),
         step=1,
     )
     min_item_matches = st.slider(
         "Min matches per item",
         min_value=1,
         max_value=30,
-        value=st.session_state.get("min_item_matches", 4),
+        value=st.session_state.get("min_item_matches", 6),
         step=1,
     )
     load = st.button("Refresh Turbo Dashboard", type="primary")
