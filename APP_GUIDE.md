@@ -125,7 +125,6 @@ The project includes two interfaces:
 - Separate persisted storage for fetched match details
 - Separate persisted storage for background sync state, sync-cycle history, and replay-parse request tracking
 - On startup, the local SQLite/Postgres match store auto-migrates legacy cache tables that predate summary/detail/tag timestamp columns so cached dashboard restore does not crash on older persisted databases
-- If the local SQLite cache file itself is corrupted, app startup now quarantines that file, attempts snapshot recovery when configured, and otherwise recreates a fresh local cache instead of crashing the whole dashboard
 - Optional Google Drive snapshot persistence for the critical match cache so cached matches/details survive app restarts and redeploys while the app still reads from local SQLite
 - Optional Postgres-backed durable store remains supported as a secondary backend path
 - Incremental summary sync to avoid repeated full-history calls
