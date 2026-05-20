@@ -165,3 +165,41 @@ def test_build_match_store_falls_back_to_sqlite_when_postgres_connect_fails(tmp_
 
     assert len(rows) == 1
     assert "Failed to connect to DATABASE_URL" in (get_last_store_warning() or "")
+
+
+def test_build_match_store_recovers_from_corrupt_local_sqlite(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    cache_dir = tmp_path / ".cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    db_path = cache_dir / "matches.sqlite3"
+    db_path.write_bytes(b"not a sqlite database")
+
+    store = build_match_store(_Settings(database_url=None))
+    try:
+        store.upsert_player_matches(
+            123,
+            [
+                {
+                    "match_id": 8760879094,
+                    "start_time": 1775500000,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "kills": 13,
+                    "deaths": 6,
+                    "assists": 17,
+                    "duration": 1645,
+                    "hero_id": 67,
+                    "game_mode": 23,
+                }
+            ],
+        )
+        rows = store.query_player_matches(123, game_mode=23)
+    finally:
+        store.close()
+
+    quarantined = list(cache_dir.glob("matches.corrupt-*.sqlite3"))
+
+    assert len(rows) == 1
+    assert rows[0]["match_id"] == 8760879094
+    assert quarantined
+    assert "corrupted local SQLite cache" in (get_last_store_warning() or "")

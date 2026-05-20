@@ -119,7 +119,12 @@ class SQLiteMatchStore:
         self._conn.row_factory = sqlite3.Row
         self._commit_hook = commit_hook
         self._close_hook = close_hook
-        self._init_schema()
+        try:
+            self._init_schema()
+            self._validate_integrity()
+        except Exception:
+            self._conn.close()
+            raise
 
     def _init_schema(self) -> None:
         self._conn.executescript(
@@ -317,6 +322,14 @@ class SQLiteMatchStore:
         self._conn.commit()
         if callable(self._commit_hook):
             self._commit_hook()
+
+    def _validate_integrity(self) -> None:
+        row = self._conn.execute("PRAGMA quick_check").fetchone()
+        if row is None:
+            return
+        result = str(row[0] if 0 in row.keys() else row[0]).strip()
+        if result.lower() != "ok":
+            raise sqlite3.DatabaseError(f"SQLite integrity check failed: {result}")
 
     def close(self) -> None:
         if callable(self._close_hook):
