@@ -253,6 +253,30 @@ class SQLiteMatchStore:
             ON match_parse_requests (account_id, status, requested_at DESC);
             """
         )
+        self._ensure_sqlite_column(
+            "player_matches",
+            "updated_at",
+            "TEXT",
+            backfill_sql="UPDATE player_matches SET updated_at = ? WHERE updated_at IS NULL",
+        )
+        self._ensure_sqlite_column(
+            "match_details",
+            "updated_at",
+            "TEXT",
+            backfill_sql="UPDATE match_details SET updated_at = ? WHERE updated_at IS NULL",
+        )
+        self._ensure_sqlite_column(
+            "match_user_tags",
+            "created_at",
+            "TEXT",
+            backfill_sql="UPDATE match_user_tags SET created_at = ? WHERE created_at IS NULL",
+        )
+        self._ensure_sqlite_column(
+            "match_user_tags",
+            "updated_at",
+            "TEXT",
+            backfill_sql="UPDATE match_user_tags SET updated_at = ? WHERE updated_at IS NULL",
+        )
         columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(background_sync_runs)").fetchall()}
         if "run_source" not in columns:
             self._conn.execute("ALTER TABLE background_sync_runs ADD COLUMN run_source TEXT NOT NULL DEFAULT 'manual'")
@@ -273,6 +297,21 @@ class SQLiteMatchStore:
         if "request_reason" not in parse_columns:
             self._conn.execute("ALTER TABLE match_parse_requests ADD COLUMN request_reason TEXT")
         self._commit()
+
+    def _ensure_sqlite_column(
+        self,
+        table_name: str,
+        column_name: str,
+        column_definition: str,
+        *,
+        backfill_sql: str | None = None,
+    ) -> None:
+        columns = {str(row["name"]) for row in self._conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+        if column_name not in columns:
+            self._conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")
+            columns.add(column_name)
+        if backfill_sql is not None and column_name in columns:
+            self._conn.execute(backfill_sql, (self._now_iso(),))
 
     def _commit(self) -> None:
         self._conn.commit()

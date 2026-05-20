@@ -107,6 +107,14 @@ class PostgresMatchStore:
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_match_user_tags_lookup ON match_user_tags (account_id, match_id)"
             )
+            cur.execute("ALTER TABLE player_matches ADD COLUMN IF NOT EXISTS updated_at TEXT")
+            cur.execute("UPDATE player_matches SET updated_at = %s WHERE updated_at IS NULL", (self._now_iso(),))
+            cur.execute("ALTER TABLE match_details ADD COLUMN IF NOT EXISTS updated_at TEXT")
+            cur.execute("UPDATE match_details SET updated_at = %s WHERE updated_at IS NULL", (self._now_iso(),))
+            cur.execute("ALTER TABLE match_user_tags ADD COLUMN IF NOT EXISTS created_at TEXT")
+            cur.execute("UPDATE match_user_tags SET created_at = %s WHERE created_at IS NULL", (self._now_iso(),))
+            cur.execute("ALTER TABLE match_user_tags ADD COLUMN IF NOT EXISTS updated_at TEXT")
+            cur.execute("UPDATE match_user_tags SET updated_at = %s WHERE updated_at IS NULL", (self._now_iso(),))
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sync_state (

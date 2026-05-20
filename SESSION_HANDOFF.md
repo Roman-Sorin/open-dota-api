@@ -678,6 +678,14 @@ CLI remains available as a secondary interface.
 ## 2026-04-04 recent-match item timing legacy-cache fix
 
 - Root cause: some cached `match_details` rows existed but were legacy/incomplete for the selected player because they lacked `purchase_log`; recent matches and item coverage then treated those rows as complete and rendered `-` timings indefinitely.
+
+## 2026-05-20 cached-sync legacy schema migration fix
+
+- Fixed a deployed dashboard boot crash in `get_cached_sync_state(...)` for older SQLite caches whose `player_matches` table predated the `updated_at` column.
+- Root cause: `SQLiteMatchStore._init_schema()` created missing tables and migrated newer worker metadata tables, but it did not backfill legacy core-cache columns on already-existing `player_matches`, `match_details`, and `match_user_tags` tables.
+- Added startup schema migration/backfill for those legacy timestamp columns in `utils/match_store.py`.
+- Added matching low-risk timestamp-column migration/backfill in `utils/postgres_match_store.py` so the secondary durable backend path stays aligned.
+- Added regression coverage in `tests/test_match_store.py` that creates a pre-migration SQLite database file with the old `player_matches` schema, opens it through `SQLiteMatchStore`, and verifies `service.get_cached_sync_state(1233793238, game_mode=23)` succeeds and exposes `latest_match_update_at`.
 - Added centralized detail-hydration targeting in `services/analytics_service.py` so main dashboard refreshes re-fetch both truly missing details and legacy cached rows missing the selected-player `purchase_log`.
 - Added regression coverage in `tests/test_match_store.py` for the reported Spectre-style timing case (`Phylactery 8m`, `Orchid 12m`, `Manta 15m`, `Aegis 17m`, `Skadi 20m`) plus a cache-path `load_match_snapshot(..., hydrate_details=True)` test proving stale stored details are repaired from cache-backed snapshots too.
 - Updated `APP_GUIDE.md` to document that a main dashboard refresh can repair legacy cached item timings without hidden section-level detail fetches.

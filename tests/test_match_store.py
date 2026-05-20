@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import sqlite3
 
 import services.analytics_service as analytics_service_module
 from clients.stratz_client import StratzAuthError, StratzRateLimitError
@@ -459,6 +461,99 @@ def test_cached_sync_state_exposes_latest_match_update_timestamp() -> None:
     assert state is not None
     assert state["known_match_count"] == 1
     assert state["latest_match_update_at"]
+
+
+def test_legacy_sqlite_store_migrates_missing_updated_at_columns_for_cached_sync_state(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy_matches.sqlite3"
+    conn = sqlite3.connect(str(db_path))
+    conn.executescript(
+        """
+        CREATE TABLE player_matches (
+            account_id INTEGER NOT NULL,
+            match_id INTEGER NOT NULL,
+            start_time INTEGER NOT NULL,
+            player_slot INTEGER NOT NULL,
+            radiant_win INTEGER NOT NULL,
+            kills INTEGER NOT NULL,
+            deaths INTEGER NOT NULL,
+            assists INTEGER NOT NULL,
+            duration INTEGER NOT NULL,
+            hero_id INTEGER,
+            game_mode INTEGER,
+            net_worth INTEGER,
+            hero_damage INTEGER,
+            lane_efficiency_pct REAL,
+            item_0 INTEGER NOT NULL DEFAULT 0,
+            item_1 INTEGER NOT NULL DEFAULT 0,
+            item_2 INTEGER NOT NULL DEFAULT 0,
+            item_3 INTEGER NOT NULL DEFAULT 0,
+            item_4 INTEGER NOT NULL DEFAULT 0,
+            item_5 INTEGER NOT NULL DEFAULT 0,
+            payload_json TEXT NOT NULL,
+            PRIMARY KEY (account_id, match_id)
+        );
+
+        CREATE TABLE match_details (
+            match_id INTEGER PRIMARY KEY,
+            payload_json TEXT NOT NULL
+        );
+
+        CREATE TABLE match_user_tags (
+            account_id INTEGER NOT NULL,
+            match_id INTEGER NOT NULL,
+            tag_key TEXT NOT NULL,
+            PRIMARY KEY (account_id, match_id, tag_key)
+        );
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO player_matches (
+            account_id, match_id, start_time, player_slot, radiant_win, kills, deaths, assists,
+            duration, hero_id, game_mode, net_worth, hero_damage, lane_efficiency_pct,
+            item_0, item_1, item_2, item_3, item_4, item_5, payload_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            1233793238,
+            101,
+            1738540800,
+            0,
+            1,
+            5,
+            2,
+            9,
+            1800,
+            1,
+            23,
+            0,
+            0,
+            None,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            '{"match_id": 101, "start_time": 1738540800, "player_slot": 0, "radiant_win": true, "game_mode": 23, "kills": 5, "deaths": 2, "assists": 9, "duration": 1800, "hero_id": 1}',
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    store = SQLiteMatchStore(str(db_path))
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache(), match_store=store)
+
+    state = service.get_cached_sync_state(1233793238, game_mode=23)
+    columns = {
+        str(row["name"]): row
+        for row in store._conn.execute("PRAGMA table_info(player_matches)").fetchall()  # noqa: SLF001
+    }
+
+    assert state is not None
+    assert state["known_match_count"] == 1
+    assert state["latest_match_update_at"]
+    assert "updated_at" in columns
 
 
 def test_force_sync_checks_only_new_matches_even_when_incremental_interval_has_not_elapsed() -> None:
