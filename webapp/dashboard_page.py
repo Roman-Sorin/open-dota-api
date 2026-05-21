@@ -751,6 +751,7 @@ def _edit_match_tags_dialog(
     if highlight_selected:
         selected_tags.append(MATCH_USER_TAG_HIGHLIGHT)
     service.replace_match_user_tags(player_id, match_id, selected_tags)
+    service.flush_persistent_snapshot(force=True)
     st.query_params.pop(EDIT_MATCH_QUERY_PARAM, None)
     _refresh_match_tag_views(
         service,
