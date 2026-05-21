@@ -36,6 +36,17 @@
   - file id from local snapshot meta
   - local SQLite modified time and file size
 - `Refresh Turbo Dashboard` now forces `flush_persistent_snapshot(force=True)` after a successful refresh so newly synced matches and user-owned cache state are uploaded immediately.
+
+## 2026-05-21 storage incident lessons / permanent rules
+
+- User-owned cached data such as `match_user_tags` (`mvp` / `highlight`) must be treated as sacred, non-reconstructible state unless a verified backup explicitly proves otherwise.
+- For future storage incidents, the required order is:
+  1. read-only diagnosis
+  2. verify external snapshot status/history
+  3. create a timestamped local backup of the current DB
+  4. only then perform a targeted repair/import with explicit user approval for any destructive step
+- Do not assume `sqlite3.DatabaseError` means a safe-to-replace corrupted cache. The full error, active persistence backend, and available snapshot history must be confirmed first.
+- Do not deploy production logic that silently falls back to a fresh empty DB/cache when persisted storage fails unless the user explicitly asked for that availability-over-data tradeoff.
 - Third follow-up hotfix:
   - the first in-table `Edit Tags` action inside `Recent Matches` was rendered through `st.markdown(..., unsafe_allow_html=True)`.
   - Streamlit treated the anchor as a normal external link and opened a blank `~/+` tab instead of driving the in-app modal flow.
