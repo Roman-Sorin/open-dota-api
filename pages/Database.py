@@ -20,7 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from utils.exceptions import OpenDotaError, OpenDotaRateLimitError, ValidationError
 from utils.config import is_persistent_match_store_configured
 from utils.helpers import format_duration, parse_player_id, unix_to_dt
-from webapp.app_runtime import build_service, get_app_version, get_store_warning
+from webapp.app_runtime import build_service, get_app_version, get_google_drive_snapshot_status, get_store_warning
 
 ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 DATABASE_UI_VERSION = "v3"
@@ -105,6 +105,51 @@ def _metric_card(label: str, value: str) -> str:
         f'<div style="font-size:1.05rem;font-weight:700;margin-top:0.2rem;">{value}</div>'
         "</div>"
     )
+
+
+def _format_local_timestamp(value: float | None) -> str:
+    if value is None:
+        return "-"
+    return datetime.fromtimestamp(float(value), tz=timezone.utc).astimezone(ISRAEL_TZ).strftime("%Y-%m-%d %H:%M Israel")
+
+
+def _render_snapshot_status() -> None:
+    status = get_google_drive_snapshot_status()
+    with st.expander("Google Drive Snapshot Status", expanded=True):
+        if not bool(status.get("google_drive_configured")):
+            st.warning(
+                "Google Drive snapshot storage is not configured in this runtime. "
+                "In this state the app uses only local SQLite, so reboot/redeploy can lose cached data."
+            )
+        cards = [
+            _metric_card("Google Drive Configured", "Yes" if bool(status.get("google_drive_configured")) else "No"),
+            _metric_card("Snapshot Name", html.escape(str(status.get("snapshot_name") or "matches.sqlite3"))),
+            _metric_card("Upload Throttle", f"{int(status.get('min_upload_interval_seconds') or 0)} sec"),
+            _metric_card("Last Snapshot Upload", html.escape(_format_datetime(str(status.get("last_uploaded_at") or None)))),
+            _metric_card("Snapshot File ID", html.escape(str(status.get("file_id") or "-"))),
+            _metric_card("Local DB Modified", html.escape(_format_local_timestamp(status.get("db_last_modified_at")))),
+            _metric_card("Local DB Size", f"{int(status.get('db_size_bytes') or 0):,} bytes"),
+        ]
+        st.markdown(
+            f'<div style="display:flex;flex-wrap:wrap;gap:0.55rem;margin:0.4rem 0 1rem 0;">{"".join(cards)}</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "Important: the 60-second Google Drive setting is only an upload throttle, not a scheduler. "
+            "A snapshot upload happens only after SQLite writes or an explicit forced flush. "
+            "`Refresh Turbo Dashboard` now forces a snapshot upload after a successful refresh."
+        )
+        st.code(
+            "\n".join(
+                [
+                    f"Local DB path: {status.get('db_path')}",
+                    f"Local meta path: {status.get('meta_path')}",
+                    f"Meta file present: {'yes' if bool(status.get('meta_exists')) else 'no'}",
+                    f"Meta snapshot name: {status.get('meta_snapshot_name') or '-'}",
+                    f"DATABASE_URL configured: {'yes' if bool(status.get('database_url_configured')) else 'no'}",
+                ]
+            )
+        )
 
 
 def _render_metrics(coverage: Any, state: dict[str, object] | None) -> None:
@@ -215,6 +260,7 @@ if not is_persistent_match_store_configured():
         "App reboot or redeploy can reset the local cache until Google Drive snapshot storage "
         "or DATABASE_URL is connected."
     )
+_render_snapshot_status()
 with st.expander("How to use this page", expanded=True):
     st.markdown(
         """

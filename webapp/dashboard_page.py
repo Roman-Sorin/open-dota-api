@@ -2230,6 +2230,11 @@ if load:
                 "(for example zero NW/Dmg/Max Dmg rows). The invalid snapshot was not rendered."
             )
         else:
+            snapshot_notice: str | None = None
+            try:
+                service.flush_persistent_snapshot(force=True)
+            except Exception as snapshot_exc:  # noqa: BLE001
+                snapshot_notice = f"Google Drive snapshot upload after dashboard refresh failed: {snapshot_exc}"
             _store_dashboard_state(
                 player_raw_value=player_raw,
                 player_id=player_id,
@@ -2247,7 +2252,14 @@ if load:
                 loaded_at_value=str(_coalesce_dashboard_cache_timestamp(service.get_cached_sync_state(player_id, game_mode=23)) or _utcnow_iso()),
                 cache_only=refresh_notice is not None,
             )
-            st.session_state["dashboard_refresh_notice"] = refresh_notice
+            combined_notice = refresh_notice
+            if snapshot_notice:
+                combined_notice = (
+                    f"{combined_notice} {snapshot_notice}".strip()
+                    if combined_notice
+                    else snapshot_notice
+                )
+            st.session_state["dashboard_refresh_notice"] = combined_notice
     except Exception as exc:  # noqa: BLE001
         show_error(exc)
 

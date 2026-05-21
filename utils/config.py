@@ -46,5 +46,10 @@ def get_match_store_path() -> Path:
     return get_cache_dir() / "matches.sqlite3"
 
 
+def get_match_store_meta_path() -> Path:
+    db_path = get_match_store_path()
+    return db_path.with_suffix(f"{db_path.suffix}.gdrive-meta.json")
+
+
 def is_persistent_match_store_configured() -> bool:
     return bool(os.getenv("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON") and os.getenv("GOOGLE_DRIVE_FOLDER_ID")) or bool(os.getenv("DATABASE_URL"))

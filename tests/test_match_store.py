@@ -161,6 +161,15 @@ class _FakeCache:
         self._store[key] = value
 
 
+class _FlushTrackingStore(SQLiteMatchStore):
+    def __init__(self) -> None:
+        super().__init__(":memory:")
+        self.flush_calls: list[bool] = []
+
+    def flush_persistent_snapshot(self, *, force: bool = False) -> None:
+        self.flush_calls.append(bool(force))
+
+
 def test_service_fetch_matches_uses_sqlite_store_between_calls() -> None:
     client = _FakeClient()
     store = SQLiteMatchStore(":memory:")
@@ -173,6 +182,14 @@ def test_service_fetch_matches_uses_sqlite_store_between_calls() -> None:
     assert len(first) == 1
     assert len(second) == 1
     assert client.calls == 1
+
+
+def test_service_can_force_flush_persistent_snapshot() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache(), match_store=_FlushTrackingStore())
+
+    service.flush_persistent_snapshot(force=True)
+
+    assert service.match_store.flush_calls == [True]
 
 
 def test_service_can_build_cached_turbo_hero_overview_without_api_calls() -> None:

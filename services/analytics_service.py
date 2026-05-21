@@ -947,6 +947,9 @@ class DotaAnalyticsService:
         if callable(flush):
             flush(force=force)
 
+    def flush_persistent_snapshot(self, *, force: bool = False) -> None:
+        self._flush_persistent_match_store(force=force)
+
     @staticmethod
     def _format_provider_summary(values: set[str]) -> str | None:
         normalized = sorted({value for value in values if value})

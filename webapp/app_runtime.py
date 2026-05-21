@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -56,6 +57,37 @@ def build_service():
 def get_store_warning() -> str | None:
     store_factory_module = importlib.import_module("utils.store_factory")
     return store_factory_module.get_last_store_warning()
+
+
+def get_google_drive_snapshot_status() -> dict[str, object]:
+    config_module = importlib.import_module("utils.config")
+    config_module = importlib.reload(config_module)
+    settings = config_module.get_settings()
+    db_path = config_module.get_match_store_path()
+    meta_path = config_module.get_match_store_meta_path()
+
+    meta: dict[str, object] = {}
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            meta = {}
+
+    return {
+        "google_drive_configured": bool(settings.google_drive_service_account_json and settings.google_drive_folder_id),
+        "database_url_configured": bool(settings.database_url),
+        "snapshot_name": settings.google_drive_snapshot_name or "matches.sqlite3",
+        "min_upload_interval_seconds": int(settings.google_drive_min_upload_interval_seconds),
+        "db_path": str(db_path),
+        "db_exists": db_path.exists(),
+        "db_size_bytes": db_path.stat().st_size if db_path.exists() else 0,
+        "db_last_modified_at": db_path.stat().st_mtime if db_path.exists() else None,
+        "meta_path": str(meta_path),
+        "meta_exists": meta_path.exists(),
+        "file_id": str(meta.get("file_id") or ""),
+        "last_uploaded_at": str(meta.get("last_uploaded_at") or ""),
+        "meta_snapshot_name": str(meta.get("snapshot_name") or ""),
+    }
 
 
 def get_app_version() -> str:

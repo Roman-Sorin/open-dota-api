@@ -125,6 +125,8 @@ The project includes two interfaces:
 - Separate persisted storage for fetched match details
 - Separate persisted storage for background sync state, sync-cycle history, and replay-parse request tracking
 - Optional Google Drive snapshot persistence for the critical match cache so cached matches/details survive app restarts and redeploys while the app still reads from local SQLite
+- The `Database` page now shows Google Drive snapshot status (`configured`, last uploaded time, file id, local DB modified time, local DB size) so you can tell whether external persistence is actually active
+- `Refresh Turbo Dashboard` now forces a Google Drive snapshot flush after a successful refresh, so newly synced matches and user-owned cache state are pushed immediately instead of waiting for a later write hook
 - Optional Postgres-backed durable store remains supported as a secondary backend path
 - Incremental summary sync to avoid repeated full-history calls
 - Match details can be backfilled later without rebuilding summary history

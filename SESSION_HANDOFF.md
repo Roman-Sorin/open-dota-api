@@ -23,6 +23,19 @@
   - after the import fix, deployed runtime hit a `TypeError` while constructing `StatsResult(...)` with the new manual-tag fields.
   - root cause was the same mixed-runtime pattern, but now on the `StatsResult` dataclass shape.
   - fixed by routing `build_stats()` through `_make_stats_result()`, which falls back to `SimpleNamespace` when the in-process `StatsResult` class is older than the service code.
+
+## 2026-05-21 Google Drive snapshot visibility and forced dashboard flush
+
+- Clarified an important persistence detail: `GOOGLE_DRIVE_MIN_UPLOAD_INTERVAL_SECONDS` is only an upload throttle, not a background scheduler.
+- Google Drive snapshot upload happens only after SQLite writes or an explicit forced flush.
+- Added a `Google Drive Snapshot Status` section on the `Database` page that shows:
+  - whether Google Drive snapshot storage is configured in the current runtime
+  - snapshot name
+  - upload throttle interval
+  - last uploaded time from local snapshot meta
+  - file id from local snapshot meta
+  - local SQLite modified time and file size
+- `Refresh Turbo Dashboard` now forces `flush_persistent_snapshot(force=True)` after a successful refresh so newly synced matches and user-owned cache state are uploaded immediately.
 - Third follow-up hotfix:
   - the first in-table `Edit Tags` action inside `Recent Matches` was rendered through `st.markdown(..., unsafe_allow_html=True)`.
   - Streamlit treated the anchor as a normal external link and opened a blank `~/+` tab instead of driving the in-app modal flow.
