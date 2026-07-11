@@ -1034,7 +1034,7 @@ RECENT_MATCHES_TABLE_COMPONENT = st.components.v2.component(
         headers=RECENT_MATCH_HEADERS,
         body_html="",
     ),
-    css=f"""
+    css="""
     :host {
       display: block;
       --recent-text: #111827;
@@ -1045,7 +1045,9 @@ RECENT_MATCHES_TABLE_COMPONENT = st.components.v2.component(
       --recent-surface-hover: rgba(59, 130, 246, 0.12);
       --recent-bar-bg: rgba(17, 24, 39, 0.08);
     }
-    {build_shared_table_css(min_width_px=980).replace(":root", ":host").replace(".shared-data-table", ".shared-data-table")}
+    """
+    + build_shared_table_css(min_width_px=980).replace(":root", ":host")
+    + """
     .shared-data-table td {
       color: var(--recent-text);
     }
