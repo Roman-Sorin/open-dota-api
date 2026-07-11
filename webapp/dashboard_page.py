@@ -25,7 +25,7 @@ from services.analytics_service import DotaAnalyticsService
 from utils.cache import JsonFileCache
 from utils.config import get_cache_dir, get_settings, is_persistent_match_store_configured
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError, ValidationError
-from utils.helpers import format_duration, parse_player_id, round_minutes_half_up, round_seconds_to_minutes
+from utils import helpers as helpers_module
 from webapp.app_runtime import build_service, get_app_version, get_store_warning
 from webapp.dashboard_state import build_hero_snapshot_request_key
 from webapp.filter_defaults import default_patch_selection, expand_selected_patch_names
@@ -51,6 +51,22 @@ from webapp.styling import apply_cell_style
 
 MATCH_USER_TAG_MVP = getattr(dtos_module, "MATCH_USER_TAG_MVP", "mvp")
 MATCH_USER_TAG_HIGHLIGHT = getattr(dtos_module, "MATCH_USER_TAG_HIGHLIGHT", "highlight")
+format_duration = helpers_module.format_duration
+parse_player_id = helpers_module.parse_player_id
+
+
+def round_minutes_half_up(minutes: float | int) -> int:
+    helper = getattr(helpers_module, "round_minutes_half_up", None)
+    if callable(helper):
+        return int(helper(minutes))
+    return max(int(float(minutes) + 0.5), 0)
+
+
+def round_seconds_to_minutes(total_seconds: float | int) -> int:
+    helper = getattr(helpers_module, "round_seconds_to_minutes", None)
+    if callable(helper):
+        return int(helper(total_seconds))
+    return max(int((float(total_seconds) / 60.0) + 0.5), 0)
 
 
 OVERVIEW_SCHEMA_VERSION = 17

@@ -16,10 +16,22 @@ from parsers.input_parser import HeroParser
 from utils.cache import JsonFileCache
 from utils.bundled_reference_data import load_bundled_reference_payload
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError
-from utils.helpers import calculate_kda_ratio, format_duration, round_seconds_to_minutes, unix_to_dt, winrate_percent
+from utils import helpers as helpers_module
 from utils.match_filters import is_excluded_match_id
 from utils.match_store import MatchStoreProtocol
 from utils.overview_validation import overview_looks_stale
+
+calculate_kda_ratio = helpers_module.calculate_kda_ratio
+format_duration = helpers_module.format_duration
+unix_to_dt = helpers_module.unix_to_dt
+winrate_percent = helpers_module.winrate_percent
+
+
+def round_seconds_to_minutes(total_seconds: float | int) -> int:
+    helper = getattr(helpers_module, "round_seconds_to_minutes", None)
+    if callable(helper):
+        return int(helper(total_seconds))
+    return max(int((float(total_seconds) / 60.0) + 0.5), 0)
 
 MATCH_USER_TAG_MVP = getattr(dtos_module, "MATCH_USER_TAG_MVP", "mvp")
 MATCH_USER_TAG_HIGHLIGHT = getattr(dtos_module, "MATCH_USER_TAG_HIGHLIGHT", "highlight")
