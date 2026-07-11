@@ -18,6 +18,7 @@ Turbo-only dashboard for your account:
 - Hero overview in Turbo (matches, won matches, lost matches, WR, avg K/D/A, avg duration, avg net worth, avg damage, KDA, max kills, max hero damage)
 - Hero overview highlights won matches in green and lost matches in red
 - Hero Overview column labels stay short and English-only: `All`, `Won`, `Lost`, `WR`, `Dur`, `NW`, `Dmg`
+- Hero portraits in `Hero Overview` and `Matchups` stay aligned with `Recent Matches`: larger rectangular `16:9` portraits with `object-fit: cover`, not tiny thumbnail icons
 - All winrates in the UI use the same colors: below `50%` red, exactly `50%` yellow, above `50%` green
 - Hero overview and detailed hero stats now share one metric-definition source in the UI, so added hero fields stay aligned in both places
 - Hero Overview and Detailed Turbo Stats now also include manual match-tag stats: `MVP`, `High`, and combined `Tag` / `Tagged Matches`

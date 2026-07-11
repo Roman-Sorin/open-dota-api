@@ -14,6 +14,7 @@ The project includes two interfaces:
 - Turbo-only hero overview (matches, won matches, lost matches, winrate, avg duration, avg net worth, avg damage, max kills, max hero damage)
 - Hero Overview shows won matches in green and lost matches in red
 - Hero Overview column labels stay short and English-only: `All`, `Won`, `Lost`, `WR`, `Dur`, `NW`, `Dmg`
+- Hero portraits in `Hero Overview` and `Matchups` must stay visually aligned with `Recent Matches`: large rectangular `16:9` portraits, about `56px` wide, `object-fit: cover`, and not tiny square thumbnails
 - Hero Overview and Detailed Turbo Stats use one shared metric-definition list in UI code, so hero fields stay synchronized between both sections
 - Hero Overview and Detailed Turbo Stats also share manual match-tag metrics: `MVP`, `High`, and combined `Tag` / `Tagged Matches`
 - The top dashboard summary cards also show overall `MVP`, `Highlighted`, and `Tag` totals formatted as `count (pct%)`

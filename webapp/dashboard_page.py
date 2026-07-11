@@ -46,6 +46,14 @@ from webapp.hero_overview import (
 )
 from webapp.hero_trends import build_daily_trend_points
 from webapp import matchups as matchup_utils
+from webapp.fallback_tables import (
+    HERO_PORTRAIT_COLUMN_WIDTH_PX,
+    HERO_TABLE_ROW_HEIGHT_PX,
+    build_hero_portrait_html,
+    build_sortable_html_table,
+    hero_overview_fallback_headers,
+    matchup_fallback_headers,
+)
 from webapp.overview_health import overview_looks_stale
 from webapp.styling import apply_cell_style
 
@@ -125,12 +133,23 @@ st.markdown(
         font-weight: 700;
         background: rgba(255, 255, 255, 0.04);
     }
-    .fallback-table img {
+    .fallback-table .hero-portrait-cell {
+        width: 72px;
+        min-width: 72px;
+    }
+    .fallback-table .hero-portrait-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        aspect-ratio: 16 / 9;
+    }
+    .fallback-table .hero-portrait-wrap img {
         display: block;
-        width: 32px;
-        height: 18px;
+        width: 56px;
+        height: 100%;
         object-fit: cover;
-        border-radius: 0.25rem;
+        border-radius: 6px;
     }
     .fallback-table td.num {
         text-align: right;
@@ -601,61 +620,86 @@ def _parse_percent_text(value: object) -> float | None:
         return None
 
 
-def _render_html_table(headers: list[str], rows_html: list[str]) -> None:
-    header_html = "".join(f"<th>{html.escape(header)}</th>" for header in headers)
-    table_html = (
-        '<div class="fallback-table-wrap">'
-        '<table class="fallback-table">'
-        f"<thead><tr>{header_html}</tr></thead>"
-        f"<tbody>{''.join(rows_html)}</tbody>"
-        "</table>"
-        "</div>"
+def _render_hero_overview_table_html(hero_source_rows: list[dict[str, object]]) -> None:
+    headers = hero_overview_fallback_headers(
+        hero_matches_column=HERO_MATCHES_COLUMN,
+        hero_wins_column=HERO_WINS_COLUMN,
+        hero_losses_column=HERO_LOSSES_COLUMN,
     )
-    st.markdown(table_html, unsafe_allow_html=True)
+    rows: list[list[dict[str, object]]] = []
+    for source_row in hero_source_rows:
+        overview_row = build_hero_overview_row(source_row)
+        duration_sort = int(round(float(source_row.get("avg_duration_seconds", 0.0) or 0.0)))
+        row_cells = [
+            {
+                "display_html": build_hero_portrait_html(str(overview_row.get("Icon", "")), str(overview_row.get("Hero", "Hero"))),
+                "sort_value": str(overview_row.get("Hero", "")),
+                "class_name": "hero-portrait-cell",
+            },
+            {"display_html": html.escape(str(overview_row.get("Hero", ""))), "sort_value": str(overview_row.get("Hero", ""))},
+            {"display_html": html.escape(str(overview_row.get(HERO_MATCHES_COLUMN, ""))), "sort_value": int(source_row.get("matches", 0) or 0), "class_name": "num"},
+            {
+                "display_html": colored_metric_html(html.escape(str(overview_row.get(HERO_WINS_COLUMN, ""))), "#23a55a"),
+                "sort_value": int(source_row.get("wins", 0) or 0),
+                "class_name": "num",
+            },
+            {
+                "display_html": colored_metric_html(html.escape(str(overview_row.get(HERO_LOSSES_COLUMN, ""))), "#d9534f"),
+                "sort_value": int(source_row.get("losses", 0) or 0),
+                "class_name": "num",
+            },
+            {
+                "display_html": colored_metric_html(html.escape(str(overview_row.get("WR", ""))), winrate_color(float(source_row.get("winrate", 0.0) or 0.0))),
+                "sort_value": float(source_row.get("winrate", 0.0) or 0.0),
+                "class_name": "num",
+            },
+            {"display_html": html.escape(str(overview_row.get("Avg K/D/A", ""))), "sort_value": str(overview_row.get("Avg K/D/A", ""))},
+            {"display_html": html.escape(str(overview_row.get("KDA", ""))), "sort_value": float(source_row.get("kda", 0.0) or 0.0), "class_name": "num"},
+            {"display_html": html.escape(str(overview_row.get("Dur", ""))), "sort_value": duration_sort, "class_name": "num"},
+            {"display_html": html.escape(str(overview_row.get("NW", ""))), "sort_value": float(source_row.get("avg_net_worth", 0.0) or 0.0), "class_name": "num"},
+            {"display_html": html.escape(str(overview_row.get("Dmg", ""))), "sort_value": float(source_row.get("avg_damage", 0.0) or 0.0), "class_name": "num"},
+            {"display_html": html.escape(str(overview_row.get("Max K", ""))), "sort_value": int(source_row.get("max_kills", 0) or 0), "class_name": "num"},
+            {"display_html": html.escape(str(overview_row.get("Max Dmg", ""))), "sort_value": int(source_row.get("max_hero_damage", 0) or 0), "class_name": "num"},
+            {
+                "display_html": colored_metric_html(html.escape(str(overview_row.get("Rad WR", ""))), winrate_color(float(source_row.get("radiant_wr", 0.0) or 0.0))),
+                "sort_value": float(source_row.get("radiant_wr", 0.0) or 0.0),
+                "class_name": "num",
+            },
+            {
+                "display_html": colored_metric_html(html.escape(str(overview_row.get("Dire WR", ""))), winrate_color(float(source_row.get("dire_wr", 0.0) or 0.0))),
+                "sort_value": float(source_row.get("dire_wr", 0.0) or 0.0),
+                "class_name": "num",
+            },
+            {"display_html": html.escape(str(overview_row.get("MVP", ""))), "sort_value": int(source_row.get("mvp_matches", 0) or 0), "class_name": "num"},
+            {"display_html": html.escape(str(overview_row.get("High", ""))), "sort_value": int(source_row.get("highlight_matches", 0) or 0), "class_name": "num"},
+            {"display_html": html.escape(str(overview_row.get("Tag", ""))), "sort_value": int(source_row.get("tagged_matches", 0) or 0), "class_name": "num"},
+        ]
+        rows.append(row_cells)
+    table_html, table_height = build_sortable_html_table(table_id="hero-overview-fallback", headers=headers, rows=rows)
+    components.html(table_html, height=table_height)
 
 
-def _render_hero_overview_table_html(hero_table_rows: list[dict[str, object]]) -> None:
-    rows_html: list[str] = []
-    for row in hero_table_rows:
-        cells: list[str] = []
-        for column in HERO_OVERVIEW_COLUMN_ORDER:
-            value = row.get(column, "")
-            css_class = "num" if column not in {"Icon", "Hero", "Avg K/D/A"} else ""
-            if column == "Icon":
-                cell_html = f'<img src="{html.escape(str(value))}" alt="{html.escape(str(row.get("Hero", "Hero")))}"/>'
-            elif column in {HERO_WINS_COLUMN}:
-                cell_html = colored_metric_html(html.escape(str(value)), "#23a55a")
-            elif column in {HERO_LOSSES_COLUMN}:
-                cell_html = colored_metric_html(html.escape(str(value)), "#d9534f")
-            elif column in {"WR", "Rad WR", "Dire WR"}:
-                numeric_value = _parse_percent_text(value)
-                cell_html = (
-                    colored_metric_html(html.escape(str(value)), winrate_color(numeric_value))
-                    if numeric_value is not None
-                    else html.escape(str(value))
-                )
-            else:
-                cell_html = html.escape(str(value))
-            cells.append(f'<td class="{css_class}">{cell_html}</td>')
-        rows_html.append(f"<tr>{''.join(cells)}</tr>")
-    _render_html_table(HERO_OVERVIEW_COLUMN_ORDER, rows_html)
-
-
-def _render_matchup_table_html(summary_df: pd.DataFrame) -> None:
-    rows_html: list[str] = []
+def _render_matchup_table_html(summary_df: pd.DataFrame, *, table_id: str) -> None:
+    headers = matchup_fallback_headers()
+    rows: list[list[dict[str, object]]] = []
     for row in summary_df.to_dict(orient="records"):
         wr_value = float(row.get("WR", 0.0) or 0.0)
-        rows_html.append(
-            "<tr>"
-            f'<td><img src="{html.escape(str(row.get("Icon", "")))}" alt="{html.escape(str(row.get("Hero", "Hero")))}"/></td>'
-            f'<td>{html.escape(str(row.get("Hero", "")))}</td>'
-            f'<td class="num">{colored_metric_html(f"{wr_value:.2f}%", winrate_color(wr_value))}</td>'
-            f'<td class="num">{int(row.get("Matches", 0) or 0)}</td>'
-            f'<td class="num">{int(row.get("Won", 0) or 0)}</td>'
-            f'<td class="num">{int(row.get("Lost", 0) or 0)}</td>'
-            "</tr>"
+        rows.append(
+            [
+                {
+                    "display_html": build_hero_portrait_html(str(row.get("Icon", "")), str(row.get("Hero", "Hero"))),
+                    "sort_value": str(row.get("Hero", "")),
+                    "class_name": "hero-portrait-cell",
+                },
+                {"display_html": html.escape(str(row.get("Hero", ""))), "sort_value": str(row.get("Hero", ""))},
+                {"display_html": colored_metric_html(f"{wr_value:.2f}%", winrate_color(wr_value)), "sort_value": wr_value, "class_name": "num"},
+                {"display_html": str(int(row.get("Matches", 0) or 0)), "sort_value": int(row.get("Matches", 0) or 0), "class_name": "num"},
+                {"display_html": str(int(row.get("Won", 0) or 0)), "sort_value": int(row.get("Won", 0) or 0), "class_name": "num"},
+                {"display_html": str(int(row.get("Lost", 0) or 0)), "sort_value": int(row.get("Lost", 0) or 0), "class_name": "num"},
+            ]
         )
-    _render_html_table(["Icon", "Hero", "WR", "Matches", "Won", "Lost"], rows_html)
+    table_html, table_height = build_sortable_html_table(table_id=table_id, headers=headers, rows=rows)
+    components.html(table_html, height=table_height)
 
 
 WINRATE_CARD_LABELS = {"Winrate", "Radiant WR", "Dire WR"}
@@ -2488,8 +2532,9 @@ else:
         hero_table_styler,
         width="stretch",
         hide_index=True,
+        row_height=HERO_TABLE_ROW_HEIGHT_PX,
         column_config={
-            "Icon": st.column_config.ImageColumn("Hero", help="Hero icon", width="small"),
+            "Icon": st.column_config.ImageColumn("Hero", help="Hero icon", width=HERO_PORTRAIT_COLUMN_WIDTH_PX),
         },
     )
 
@@ -2754,7 +2799,7 @@ if isinstance(matchup_rows, dict):
     )
     selected_tab, global_tab = st.tabs([f"{selected_hero_name}", "All Heroes"])
     matchup_column_config = {
-        "Icon": st.column_config.ImageColumn("Hero", width="small"),
+        "Icon": st.column_config.ImageColumn("Hero", width=HERO_PORTRAIT_COLUMN_WIDTH_PX),
         "WR": st.column_config.NumberColumn("WR", format="%.2f%%"),
         "Won": st.column_config.NumberColumn("Won", format="%d"),
         "Lost": st.column_config.NumberColumn("Lost", format="%d"),
@@ -2780,6 +2825,7 @@ if isinstance(matchup_rows, dict):
                         matchup_utils.build_matchup_styler(sorted_selected_with),
                         width="stretch",
                         hide_index=True,
+                        row_height=HERO_TABLE_ROW_HEIGHT_PX,
                         column_config=matchup_column_config,
                     )
             else:
@@ -2795,6 +2841,7 @@ if isinstance(matchup_rows, dict):
                         matchup_utils.build_matchup_styler(sorted_selected_against),
                         width="stretch",
                         hide_index=True,
+                        row_height=HERO_TABLE_ROW_HEIGHT_PX,
                         column_config=matchup_column_config,
                     )
             else:
@@ -2819,6 +2866,7 @@ if isinstance(matchup_rows, dict):
                         matchup_utils.build_matchup_styler(sorted_global_with),
                         width="stretch",
                         hide_index=True,
+                        row_height=HERO_TABLE_ROW_HEIGHT_PX,
                         column_config=matchup_column_config,
                     )
             else:
@@ -2834,6 +2882,7 @@ if isinstance(matchup_rows, dict):
                         matchup_utils.build_matchup_styler(sorted_global_against),
                         width="stretch",
                         hide_index=True,
+                        row_height=HERO_TABLE_ROW_HEIGHT_PX,
                         column_config=matchup_column_config,
                     )
             else:
