@@ -28,7 +28,7 @@ from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateL
 from utils.helpers import format_duration, parse_player_id
 from webapp.app_runtime import build_service, get_app_version, get_store_warning
 from webapp.dashboard_state import build_hero_snapshot_request_key
-from webapp.filter_defaults import default_patch_selection
+from webapp.filter_defaults import default_patch_selection, expand_selected_patch_names
 from webapp.error_classification import (
     is_opendota_error,
     is_opendota_not_found_error,
@@ -2110,7 +2110,9 @@ if "overview" in st.session_state:
 if "overview" not in st.session_state:
     try:
         active_days = days if time_filter_mode == "Days" else None
-        active_patches = selected_patches if time_filter_mode == "Patches" else []
+        active_patches = (
+            expand_selected_patch_names(selected_patches, patch_timeline) if time_filter_mode == "Patches" else []
+        )
         active_start_date = start_date_value if time_filter_mode == "Start Date" else None
         player_id = parse_player_id(player_raw)
         cached_sync_state = service.get_cached_sync_state(player_id, game_mode=23)
@@ -2156,7 +2158,9 @@ if load:
             st.stop()
 
         active_days = days if time_filter_mode == "Days" else None
-        active_patches = selected_patches if time_filter_mode == "Patches" else []
+        active_patches = (
+            expand_selected_patch_names(selected_patches, patch_timeline) if time_filter_mode == "Patches" else []
+        )
         active_start_date = start_date_value if time_filter_mode == "Start Date" else None
 
         player_id = parse_player_id(player_raw)
@@ -2279,14 +2283,15 @@ player_id = st.session_state["player_id"]
 days = st.session_state.get("active_days")
 active_start_date = st.session_state.get("active_start_date")
 active_patches = st.session_state.get("active_patches", [])
+selected_patches = st.session_state.get("selected_patches", [])
 overview = st.session_state["overview"]
 overview_cache_only = bool(st.session_state.get("overview_cache_only"))
 min_hero_matches = st.session_state.get("min_hero_matches", min_hero_matches)
 min_item_matches = st.session_state.get("min_item_matches", min_item_matches)
 effective_start_date = get_effective_start_date(days, active_start_date)
 
-if active_patches:
-    selected_filter_text = f"Patches: {', '.join(active_patches)}"
+if selected_patches:
+    selected_filter_text = f"Patches: {', '.join(selected_patches)}"
     if effective_start_date:
         selected_filter_text += f" | Since {effective_start_date.isoformat()}"
 elif effective_start_date:
