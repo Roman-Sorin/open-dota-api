@@ -85,7 +85,7 @@ Turbo-only dashboard for your account:
 - Item winrates use a dedicated section-schema cache key so legacy session payloads from the old purchase-log behavior are not reused after updates
 - Item winrates also self-rebuild from cached final inventory/backpack data when a mixed-runtime session still exposes a legacy purchase-based snapshot after deploy
 - Item winrates include average timing as a small badge on the item icon, sourced from cached timing data for matches where the item remains in the final inventory/backpack snapshot
-- Item timing chips are rounded to whole minutes and item icons keep their original aspect ratio instead of being forced into square thumbnails
+- Item timing chips are rounded to whole minutes with standard half-up rounding from the underlying seconds, and item icons keep their original aspect ratio instead of being forced into square thumbnails
 - `Item Winrates` now reuses the same table shell styling as `Recent Matches`, so borders, header rhythm, and row dividers stay visually aligned
 - `Item Winrates` is rendered through the same Streamlit markdown-table path as `Recent Matches`, avoiding wrapper-level style drift between `stHtml` and markdown containers
 - `Item Winrates` header cells are sortable again via click without dropping item icon chips, timings, or buff badges

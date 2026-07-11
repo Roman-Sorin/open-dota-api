@@ -16,7 +16,7 @@ from parsers.input_parser import HeroParser
 from utils.cache import JsonFileCache
 from utils.bundled_reference_data import load_bundled_reference_payload
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError
-from utils.helpers import calculate_kda_ratio, format_duration, unix_to_dt, winrate_percent
+from utils.helpers import calculate_kda_ratio, format_duration, round_seconds_to_minutes, unix_to_dt, winrate_percent
 from utils.match_filters import is_excluded_match_id
 from utils.match_store import MatchStoreProtocol
 from utils.overview_validation import overview_looks_stale
@@ -1192,7 +1192,7 @@ class DotaAnalyticsService:
                     continue
                 grant_time = buff.get("grant_time")
                 try:
-                    by_item_id[item_id] = max(int(grant_time) // 60, 0)
+                    by_item_id[item_id] = round_seconds_to_minutes(int(grant_time))
                 except (TypeError, ValueError):
                     by_item_id[item_id] = None
 
@@ -1214,7 +1214,7 @@ class DotaAnalyticsService:
                 if item_key not in first_purchase_time:
                     continue
                 try:
-                    by_item_id[item_id] = max(int(first_purchase_time[item_key]) // 60, 0)
+                    by_item_id[item_id] = round_seconds_to_minutes(int(first_purchase_time[item_key]))
                 except (TypeError, ValueError):
                     by_item_id[item_id] = None
 
@@ -1741,7 +1741,9 @@ class DotaAnalyticsService:
                 item_id = self.references.item_ids_by_key.get(key)
                 if not item_id:
                     continue
-                purchase_times_by_item.setdefault(item_id, []).append(max(int(event.get("time") or 0) // 60, 0))
+                purchase_times_by_item.setdefault(item_id, []).append(
+                    round_seconds_to_minutes(int(event.get("time") or 0))
+                )
         first_purchase_time = player_row.get("first_purchase_time") if isinstance(player_row, dict) else None
         if isinstance(first_purchase_time, dict):
             for key, value in first_purchase_time.items():
@@ -1751,7 +1753,7 @@ class DotaAnalyticsService:
                 if item_id in purchase_times_by_item:
                     continue
                 try:
-                    purchase_times_by_item[item_id] = [max(int(value) // 60, 0)]
+                    purchase_times_by_item[item_id] = [round_seconds_to_minutes(int(value))]
                 except (TypeError, ValueError):
                     continue
         if 117 in final_item_ids and 117 not in purchase_times_by_item and isinstance(details, dict):
@@ -1765,7 +1767,7 @@ class DotaAnalyticsService:
                     if player_slot is not None and int(event.get("player_slot") or -1) != int(player_slot):
                         continue
                     try:
-                        purchase_times_by_item[117] = [max(int(event.get("time") or 0) // 60, 0)]
+                        purchase_times_by_item[117] = [round_seconds_to_minutes(int(event.get("time") or 0))]
                     except (TypeError, ValueError):
                         pass
                     break

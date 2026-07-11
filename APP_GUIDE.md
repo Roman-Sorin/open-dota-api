@@ -91,7 +91,7 @@ The project includes two interfaces:
 - Item winrates use a dedicated section-schema cache key so older session payloads built from legacy purchase-log logic are not reused after deploys
 - Item winrates self-rebuild from cached final inventory/backpack data in the UI if a mixed-runtime session still surfaces a legacy purchase-based snapshot after deploy
 - Item winrates show average timing as a small badge on the item icon, using cached item timing data (`purchase_log` / `first_purchase_time` / Aegis objective time when available) for matches where the item is part of the end-of-match inventory snapshot
-- Item timing chips round to whole minutes, and item thumbnails preserve the original Dota item aspect ratio instead of being forced into square boxes
+- Item timing chips round to whole minutes with standard half-up rounding from the underlying seconds (`:00`-`:29` down, `:30`-`:59` up), and item thumbnails preserve the original Dota item aspect ratio instead of being forced into square boxes
 - `Item Winrates` reuses the same table shell styling as `Recent Matches`, keeping borders, row dividers, and spacing consistent across both sections
 - `Item Winrates` now renders through the same Streamlit markdown container path as `Recent Matches`, so wrapper-level border/padding differences from `stHtml` no longer apply
 - `Item Winrates` column headers are clickable again for client-side sorting while preserving item icon chips, timings, and buff badges

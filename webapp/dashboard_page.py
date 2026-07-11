@@ -25,7 +25,7 @@ from services.analytics_service import DotaAnalyticsService
 from utils.cache import JsonFileCache
 from utils.config import get_cache_dir, get_settings, is_persistent_match_store_configured
 from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateLimitError, ValidationError
-from utils.helpers import format_duration, parse_player_id
+from utils.helpers import format_duration, parse_player_id, round_minutes_half_up, round_seconds_to_minutes
 from webapp.app_runtime import build_service, get_app_version, get_store_warning
 from webapp.dashboard_state import build_hero_snapshot_request_key
 from webapp.filter_defaults import default_patch_selection, expand_selected_patch_names
@@ -67,6 +67,7 @@ PERMANENT_BUFF_ITEM_KEYS: dict[int, str] = {
     12: "aghanims_shard",
 }
 DEFAULT_FILTER_BASELINE_DATE = date(2026, 3, 24)
+USE_HTML_TABLE_FALLBACK = sys.version_info >= (3, 14)
 
 st.markdown(
     """
@@ -83,6 +84,40 @@ st.markdown(
         border-radius: 0.5rem;
         padding: 0.6rem 0.7rem;
         background: rgba(255, 255, 255, 0.02);
+    }
+    .fallback-table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        margin: 0.35rem 0 0.8rem 0;
+        border: 1px solid rgba(49, 51, 63, 0.2);
+        border-radius: 0.5rem;
+    }
+    .fallback-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.92rem;
+    }
+    .fallback-table th,
+    .fallback-table td {
+        padding: 0.45rem 0.55rem;
+        border-bottom: 1px solid rgba(127, 127, 127, 0.14);
+        white-space: nowrap;
+        text-align: left;
+        vertical-align: middle;
+    }
+    .fallback-table th {
+        font-weight: 700;
+        background: rgba(255, 255, 255, 0.04);
+    }
+    .fallback-table img {
+        display: block;
+        width: 32px;
+        height: 18px;
+        object-fit: cover;
+        border-radius: 0.25rem;
+    }
+    .fallback-table td.num {
+        text-align: right;
     }
     .metric-label {
         font-size: 0.78rem;
@@ -540,6 +575,71 @@ def _style_winrate_cell(value: object) -> str:
     except ValueError:
         return ""
     return f"color: {winrate_color(numeric_value)}; font-weight: 700;"
+
+
+def _parse_percent_text(value: object) -> float | None:
+    text = str(value).strip().replace("%", "")
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _render_html_table(headers: list[str], rows_html: list[str]) -> None:
+    header_html = "".join(f"<th>{html.escape(header)}</th>" for header in headers)
+    table_html = (
+        '<div class="fallback-table-wrap">'
+        '<table class="fallback-table">'
+        f"<thead><tr>{header_html}</tr></thead>"
+        f"<tbody>{''.join(rows_html)}</tbody>"
+        "</table>"
+        "</div>"
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
+def _render_hero_overview_table_html(hero_table_rows: list[dict[str, object]]) -> None:
+    rows_html: list[str] = []
+    for row in hero_table_rows:
+        cells: list[str] = []
+        for column in HERO_OVERVIEW_COLUMN_ORDER:
+            value = row.get(column, "")
+            css_class = "num" if column not in {"Icon", "Hero", "Avg K/D/A"} else ""
+            if column == "Icon":
+                cell_html = f'<img src="{html.escape(str(value))}" alt="{html.escape(str(row.get("Hero", "Hero")))}"/>'
+            elif column in {HERO_WINS_COLUMN}:
+                cell_html = colored_metric_html(html.escape(str(value)), "#23a55a")
+            elif column in {HERO_LOSSES_COLUMN}:
+                cell_html = colored_metric_html(html.escape(str(value)), "#d9534f")
+            elif column in {"WR", "Rad WR", "Dire WR"}:
+                numeric_value = _parse_percent_text(value)
+                cell_html = (
+                    colored_metric_html(html.escape(str(value)), winrate_color(numeric_value))
+                    if numeric_value is not None
+                    else html.escape(str(value))
+                )
+            else:
+                cell_html = html.escape(str(value))
+            cells.append(f'<td class="{css_class}">{cell_html}</td>')
+        rows_html.append(f"<tr>{''.join(cells)}</tr>")
+    _render_html_table(HERO_OVERVIEW_COLUMN_ORDER, rows_html)
+
+
+def _render_matchup_table_html(summary_df: pd.DataFrame) -> None:
+    rows_html: list[str] = []
+    for row in summary_df.to_dict(orient="records"):
+        wr_value = float(row.get("WR", 0.0) or 0.0)
+        rows_html.append(
+            "<tr>"
+            f'<td><img src="{html.escape(str(row.get("Icon", "")))}" alt="{html.escape(str(row.get("Hero", "Hero")))}"/></td>'
+            f'<td>{html.escape(str(row.get("Hero", "")))}</td>'
+            f'<td class="num">{colored_metric_html(f"{wr_value:.2f}%", winrate_color(wr_value))}</td>'
+            f'<td class="num">{int(row.get("Matches", 0) or 0)}</td>'
+            f'<td class="num">{int(row.get("Won", 0) or 0)}</td>'
+            f'<td class="num">{int(row.get("Lost", 0) or 0)}</td>'
+            "</tr>"
+        )
+    _render_html_table(["Icon", "Hero", "WR", "Matches", "Won", "Lost"], rows_html)
 
 
 WINRATE_CARD_LABELS = {"Winrate", "Radiant WR", "Dire WR"}
@@ -1530,7 +1630,9 @@ def _build_item_purchase_times_by_item(
             item_id = service.references.item_ids_by_key.get(str(event.get("key") or ""))
             if not item_id or item_id not in tracked_item_ids:
                 continue
-            purchase_times_by_item.setdefault(item_id, []).append(max(int(event.get("time") or 0) // 60, 0))
+            purchase_times_by_item.setdefault(item_id, []).append(
+                round_seconds_to_minutes(int(event.get("time") or 0))
+            )
 
     first_purchase_time = player_row.get("first_purchase_time")
     if isinstance(first_purchase_time, dict):
@@ -1539,7 +1641,7 @@ def _build_item_purchase_times_by_item(
             if not item_id or item_id not in tracked_item_ids or item_id in purchase_times_by_item:
                 continue
             try:
-                purchase_times_by_item[item_id] = [max(int(value) // 60, 0)]
+                purchase_times_by_item[item_id] = [round_seconds_to_minutes(int(value))]
             except (TypeError, ValueError):
                 continue
 
@@ -1554,7 +1656,7 @@ def _build_item_purchase_times_by_item(
                 if player_slot is not None and int(event.get("player_slot") or -1) != int(player_slot):
                     continue
                 try:
-                    purchase_times_by_item[117] = [max(int(event.get("time") or 0) // 60, 0)]
+                    purchase_times_by_item[117] = [round_seconds_to_minutes(int(event.get("time") or 0))]
                 except (TypeError, ValueError):
                     pass
                 break
@@ -1578,7 +1680,7 @@ def _player_row_buff_items_local(service: DotaAnalyticsService, player_row: dict
             item_id = CONSUMABLE_BUFF_ITEM_KEYS[item_key]
             grant_time = buff.get("grant_time")
             try:
-                by_item_id[item_id] = max(int(grant_time) // 60, 0)
+                by_item_id[item_id] = round_seconds_to_minutes(int(grant_time))
             except (TypeError, ValueError):
                 by_item_id[item_id] = None
 
@@ -1600,7 +1702,7 @@ def _player_row_buff_items_local(service: DotaAnalyticsService, player_row: dict
             if item_key not in first_purchase_time:
                 continue
             try:
-                by_item_id[item_id] = max(int(first_purchase_time[item_key]) // 60, 0)
+                by_item_id[item_id] = round_seconds_to_minutes(int(first_purchase_time[item_key]))
             except (TypeError, ValueError):
                 by_item_id[item_id] = None
 
@@ -1867,7 +1969,7 @@ def _get_item_winrate_snapshot_safe(
 def _format_item_timing_label(timing_min: float | None) -> str:
     if timing_min is None:
         return "-"
-    return f"{int(round(float(timing_min)))}m"
+    return f"{round_minutes_half_up(float(timing_min))}m"
 
 
 def _render_item_icon_html(*, image_url: str, item_name: str, timing_min: float | int | None, is_buff: bool) -> str:
@@ -2344,33 +2446,36 @@ hero_table = [build_hero_overview_row(row) for row in filtered_overview]
 hero_rows_by_id = {int(row["hero_id"]): row for row in filtered_overview}
 hero_ids = list(hero_rows_by_id.keys())
 
-hero_table_df = pd.DataFrame(hero_table, columns=HERO_OVERVIEW_COLUMN_ORDER)
-hero_table_styler = hero_table_df.style
-if not hero_table_df.empty:
-    hero_table_styler = apply_cell_style(
-        hero_table_styler,
-        lambda _: "color: #23a55a; font-weight: 700;",
-        subset=[HERO_WINS_COLUMN],
-    )
-    hero_table_styler = apply_cell_style(
-        hero_table_styler,
-        lambda _: "color: #d9534f; font-weight: 700;",
-        subset=[HERO_LOSSES_COLUMN],
-    )
-    hero_table_styler = apply_cell_style(
-        hero_table_styler,
-        _style_winrate_cell,
-        subset=["WR", "Rad WR", "Dire WR"],
-    )
+if USE_HTML_TABLE_FALLBACK:
+    _render_hero_overview_table_html(hero_table)
+else:
+    hero_table_df = pd.DataFrame(hero_table, columns=HERO_OVERVIEW_COLUMN_ORDER)
+    hero_table_styler = hero_table_df.style
+    if not hero_table_df.empty:
+        hero_table_styler = apply_cell_style(
+            hero_table_styler,
+            lambda _: "color: #23a55a; font-weight: 700;",
+            subset=[HERO_WINS_COLUMN],
+        )
+        hero_table_styler = apply_cell_style(
+            hero_table_styler,
+            lambda _: "color: #d9534f; font-weight: 700;",
+            subset=[HERO_LOSSES_COLUMN],
+        )
+        hero_table_styler = apply_cell_style(
+            hero_table_styler,
+            _style_winrate_cell,
+            subset=["WR", "Rad WR", "Dire WR"],
+        )
 
-st.dataframe(
-    hero_table_styler,
-    width="stretch",
-    hide_index=True,
-    column_config={
-        "Icon": st.column_config.ImageColumn("Hero", help="Hero icon", width="small"),
-    },
-)
+    st.dataframe(
+        hero_table_styler,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Icon": st.column_config.ImageColumn("Hero", help="Hero icon", width="small"),
+        },
+    )
 
 
 def _hero_option_label(hero_id: int) -> str:
@@ -2651,27 +2756,31 @@ if isinstance(matchup_rows, dict):
         with selected_with_col:
             if not selected_with.empty:
                 st.caption("Hero Teammates")
-                st.dataframe(
-                    matchup_utils.build_matchup_styler(
-                        matchup_utils.sort_matchup_summary_dataframe(selected_with, best_first=True)
-                    ),
-                    width="stretch",
-                    hide_index=True,
-                    column_config=matchup_column_config,
-                )
+                sorted_selected_with = matchup_utils.sort_matchup_summary_dataframe(selected_with, best_first=True)
+                if USE_HTML_TABLE_FALLBACK:
+                    _render_matchup_table_html(sorted_selected_with)
+                else:
+                    st.dataframe(
+                        matchup_utils.build_matchup_styler(sorted_selected_with),
+                        width="stretch",
+                        hide_index=True,
+                        column_config=matchup_column_config,
+                    )
             else:
                 st.info("No selected-hero teammate rows for current filter.")
         with selected_against_col:
             if not selected_against.empty:
                 st.caption("Hero Opponents")
-                st.dataframe(
-                    matchup_utils.build_matchup_styler(
-                        matchup_utils.sort_matchup_summary_dataframe(selected_against, best_first=False)
-                    ),
-                    width="stretch",
-                    hide_index=True,
-                    column_config=matchup_column_config,
-                )
+                sorted_selected_against = matchup_utils.sort_matchup_summary_dataframe(selected_against, best_first=False)
+                if USE_HTML_TABLE_FALLBACK:
+                    _render_matchup_table_html(sorted_selected_against)
+                else:
+                    st.dataframe(
+                        matchup_utils.build_matchup_styler(sorted_selected_against),
+                        width="stretch",
+                        hide_index=True,
+                        column_config=matchup_column_config,
+                    )
             else:
                 st.info("No selected-hero opponent matchup rows for current filter.")
 
@@ -2686,27 +2795,31 @@ if isinstance(matchup_rows, dict):
         with global_with_col:
             if not global_with_summary.empty:
                 st.caption("Player Teammates")
-                st.dataframe(
-                    matchup_utils.build_matchup_styler(
-                        matchup_utils.sort_matchup_summary_dataframe(global_with_summary, best_first=True)
-                    ),
-                    width="stretch",
-                    hide_index=True,
-                    column_config=matchup_column_config,
-                )
+                sorted_global_with = matchup_utils.sort_matchup_summary_dataframe(global_with_summary, best_first=True)
+                if USE_HTML_TABLE_FALLBACK:
+                    _render_matchup_table_html(sorted_global_with)
+                else:
+                    st.dataframe(
+                        matchup_utils.build_matchup_styler(sorted_global_with),
+                        width="stretch",
+                        hide_index=True,
+                        column_config=matchup_column_config,
+                    )
             else:
                 st.info("No global teammate rows for current filter.")
         with global_against_col:
             if not global_matchup_summary.empty:
                 st.caption("Player Opponents")
-                st.dataframe(
-                    matchup_utils.build_matchup_styler(
-                        matchup_utils.sort_matchup_summary_dataframe(global_matchup_summary, best_first=False)
-                    ),
-                    width="stretch",
-                    hide_index=True,
-                    column_config=matchup_column_config,
-                )
+                sorted_global_against = matchup_utils.sort_matchup_summary_dataframe(global_matchup_summary, best_first=False)
+                if USE_HTML_TABLE_FALLBACK:
+                    _render_matchup_table_html(sorted_global_against)
+                else:
+                    st.dataframe(
+                        matchup_utils.build_matchup_styler(sorted_global_against),
+                        width="stretch",
+                        hide_index=True,
+                        column_config=matchup_column_config,
+                    )
             else:
                 st.info("No global opponent matchup rows for current filter.")
     if (

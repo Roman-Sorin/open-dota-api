@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import math
 import re
 
 
@@ -74,6 +75,14 @@ def format_duration(seconds: int) -> str:
     minutes = seconds // 60
     sec = seconds % 60
     return f"{minutes:02d}:{sec:02d}"
+
+
+def round_minutes_half_up(minutes: float | int) -> int:
+    return max(int(math.floor(float(minutes) + 0.5)), 0)
+
+
+def round_seconds_to_minutes(total_seconds: float | int) -> int:
+    return round_minutes_half_up(float(total_seconds) / 60.0)
 
 
 def unix_to_dt(ts: int) -> datetime:

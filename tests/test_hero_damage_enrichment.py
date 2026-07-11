@@ -740,6 +740,58 @@ def test_recent_hero_matches_include_consumed_buff_items() -> None:
     assert rows[0].items[0].is_buff is True
 
 
+def test_recent_hero_match_item_timings_round_seconds_half_up() -> None:
+    service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
+    matches = [
+        MatchSummary(
+            match_id=105,
+            start_time=0,
+            player_slot=0,
+            radiant_win=True,
+            kills=5,
+            deaths=4,
+            assists=11,
+            duration=2100,
+            hero_id=1,
+            item_0=63,
+            item_1=114,
+            item_2=151,
+            item_3=1,
+            item_4=250,
+            item_5=160,
+        )
+    ]
+
+    service._get_match_details_cached = lambda _: {  # type: ignore[method-assign]
+        "players": [
+            {
+                "account_id": 123,
+                "player_slot": 0,
+                "level": 25,
+                "hero_variant": 0,
+                "item_0": 63,
+                "item_1": 114,
+                "item_2": 151,
+                "item_3": 1,
+                "item_4": 250,
+                "item_5": 160,
+                "purchase_log": [
+                    {"key": "power_treads", "time": 29},
+                    {"key": "armlet", "time": 570},
+                    {"key": "orchid", "time": 569},
+                    {"key": "blink", "time": 589},
+                    {"key": "heart", "time": 590},
+                    {"key": "skadi", "time": 30},
+                ],
+            }
+        ]
+    }
+
+    rows = service.build_recent_hero_matches(player_id=123, matches=matches, limit=10)
+
+    assert [item.purchase_time_min for item in rows[0].items] == [0, 1, 9, 10, 10, 10]
+
+
 def test_recent_hero_matches_do_not_mark_unconsumed_moon_shard_as_buff() -> None:
     service = DotaAnalyticsService(client=_FakeClient(), cache=_FakeCache())
     matches = [
