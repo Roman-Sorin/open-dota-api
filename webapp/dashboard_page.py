@@ -2508,7 +2508,7 @@ hero_rows_by_id = {int(row["hero_id"]): row for row in filtered_overview}
 hero_ids = list(hero_rows_by_id.keys())
 
 if USE_HTML_TABLE_FALLBACK:
-    _render_hero_overview_table_html(hero_table)
+    _render_hero_overview_table_html(filtered_overview)
 else:
     hero_table_df = pd.DataFrame(hero_table, columns=HERO_OVERVIEW_COLUMN_ORDER)
     hero_table_styler = hero_table_df.style
