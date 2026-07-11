@@ -39,6 +39,7 @@ from webapp.hero_defaults import default_hero_id
 from webapp.hero_overview import (
     HERO_DETAIL_METRIC_ORDER,
     HERO_LOSSES_COLUMN,
+    HERO_MATCHES_COLUMN,
     HERO_OVERVIEW_COLUMN_ORDER,
     HERO_WINS_COLUMN,
     build_hero_detail_cards,
