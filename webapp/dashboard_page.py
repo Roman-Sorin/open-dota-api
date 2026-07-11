@@ -1,6 +1,6 @@
 from pathlib import Path
 from bisect import bisect_right
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import html
 import inspect
 import re
@@ -1198,7 +1198,7 @@ def _ensure_section_visible(section_name: str, request_key: object) -> None:
 
 
 def _utcnow_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now(tz=timezone.utc).isoformat()
 
 
 def _rebuild_current_overview_from_cache(
@@ -2360,7 +2360,7 @@ if not hero_table_df.empty:
 
 st.dataframe(
     hero_table_styler,
-    use_container_width=True,
+    width="stretch",
     hide_index=True,
     column_config={
         "Icon": st.column_config.ImageColumn("Hero", help="Hero icon", width="small"),
@@ -2650,7 +2650,7 @@ if isinstance(matchup_rows, dict):
                     matchup_utils.build_matchup_styler(
                         matchup_utils.sort_matchup_summary_dataframe(selected_with, best_first=True)
                     ),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config=matchup_column_config,
                 )
@@ -2663,7 +2663,7 @@ if isinstance(matchup_rows, dict):
                     matchup_utils.build_matchup_styler(
                         matchup_utils.sort_matchup_summary_dataframe(selected_against, best_first=False)
                     ),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config=matchup_column_config,
                 )
@@ -2685,7 +2685,7 @@ if isinstance(matchup_rows, dict):
                     matchup_utils.build_matchup_styler(
                         matchup_utils.sort_matchup_summary_dataframe(global_with_summary, best_first=True)
                     ),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config=matchup_column_config,
                 )
@@ -2698,7 +2698,7 @@ if isinstance(matchup_rows, dict):
                     matchup_utils.build_matchup_styler(
                         matchup_utils.sort_matchup_summary_dataframe(global_matchup_summary, best_first=False)
                     ),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config=matchup_column_config,
                 )
@@ -3126,8 +3126,8 @@ with st.expander("Experimental: Hero Trends", expanded=False):
                         trend_df[column] = trend_df[column].round(0)
                 if "Dur" in trend_df.columns:
                     trend_df["Dur"] = trend_df["Dur"].round(1)
-                st.line_chart(trend_df, use_container_width=True)
-                st.dataframe(trend_df, use_container_width=True)
+                st.line_chart(trend_df, width="stretch")
+                st.dataframe(trend_df, width="stretch")
         else:
             st.info("No matches available for hero trends with current filter.")
     else:

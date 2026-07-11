@@ -493,7 +493,7 @@ st.subheader("Sync History")
 if recent_runs_df.empty:
     st.info("No sync cycles recorded yet.")
 else:
-    st.dataframe(recent_runs_df, use_container_width=True, hide_index=True)
+    st.dataframe(recent_runs_df, width="stretch", hide_index=True)
     rate_limited_runs = sum(1 for row in runs if int(row.get("rate_limited") or 0))
     detail_total = sum(int(row.get("detail_completed") or 0) for row in runs)
     parse_total = sum(int(row.get("parse_requested") or 0) for row in runs)

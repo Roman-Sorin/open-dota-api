@@ -143,6 +143,7 @@ The project includes two interfaces:
 - Python 3.12+
 - Internet access
 - Dependencies are pinned exactly in [requirements.txt](/C:/development/projects/open-dota-api/requirements.txt) so deployed Streamlit environments do not drift across restarts
+- Streamlit UI containers now use the `width` API (`"stretch"` / `"content"`) instead of deprecated `use_container_width`, and dashboard-generated UTC timestamps are timezone-aware to stay compatible with current Streamlit/Python runtimes
 
 ## Setup
 
