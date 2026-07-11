@@ -1,5 +1,15 @@
 ﻿# Application Handoff Notes
 
+## 2026-07-11 shared table UI standardization
+
+- Reworked the dashboard and database table presentation around one shared renderer in `webapp/fallback_tables.py` instead of keeping separate CSS/markup variants per section.
+- Added reusable typed columns for `icon`, `hero`, `item`, `integer`, `percentage`, `duration`, `kda_text`, `kda`, `currency`, `damage`, `status`, and `action`.
+- Shared table behavior now applies across `Hero Overview`, all four `Matchups` tables, `Item Winrates`, `Recent Matches`, and the `Database` page match table.
+- The shared renderer now keeps fixed hero portrait width aligned with the approved `Recent Matches` portrait size, content-driven widths, numeric right alignment, text left alignment, centered K/D/A summary columns, sticky headers, restrained hover state, and horizontal scroll for wide tables.
+- Preserved existing business logic, sorting semantics, filter behavior, win/loss colors, and numeric sort values underneath rendered percentages.
+- Added regression coverage in `tests/test_fallback_tables.py`.
+- Updated `README.md` and `APP_GUIDE.md` to document the shared table system and scope.
+
 ## 2026-04-21 manual match tags
 
 - Added persistent user-owned match tags (`mvp`, `highlight`) on top of cached OpenDota data instead of mutating summary/detail payload JSON.

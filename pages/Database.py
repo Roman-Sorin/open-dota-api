@@ -21,6 +21,7 @@ from utils.exceptions import OpenDotaError, OpenDotaRateLimitError, ValidationEr
 from utils.config import is_persistent_match_store_configured
 from utils.helpers import format_duration, parse_player_id, unix_to_dt
 from webapp.app_runtime import build_service, get_app_version, get_google_drive_snapshot_status, get_store_warning
+from webapp.fallback_tables import build_shared_table_css, build_table_fragment
 
 ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 DATABASE_UI_VERSION = "v3"
@@ -182,6 +183,18 @@ def _render_metrics(coverage: Any, state: dict[str, object] | None) -> None:
 
 
 def _render_match_table(rows: list[Any], service) -> None:
+    headers = [
+        {"label": "Match ID", "type": "integer"},
+        {"label": "Played", "type": "datetime"},
+        {"label": "Hero", "type": "hero"},
+        {"label": "Result", "type": "result"},
+        {"label": "K/D/A", "type": "kda_text"},
+        {"label": "Duration", "type": "duration"},
+        {"label": "Detail", "type": "status"},
+        {"label": "Timings", "type": "status"},
+        {"label": "Summary Cached", "type": "datetime"},
+        {"label": "Detail Cached", "type": "datetime"},
+    ]
     table_rows: list[str] = []
     for row in rows:
         hero_name = html.escape(service.resolve_hero_name(row.hero_id))
@@ -191,55 +204,28 @@ def _render_match_table(rows: list[Any], service) -> None:
         )
         table_rows.append(
             "<tr>"
-            f"<td>{row.match_id}</td>"
-            f"<td>{html.escape(_format_match_time(row.start_time))}</td>"
-            f"<td>{hero_name}</td>"
-            f"<td>{result_html}</td>"
-            f"<td>{row.kills}/{row.deaths}/{row.assists}</td>"
-            f"<td>{html.escape(format_duration(row.duration))}</td>"
-            f"<td>{_detail_chip(row)}</td>"
-            f"<td>{_timing_chip(row)}</td>"
-            f"<td>{html.escape(_format_datetime(row.summary_updated_at))}</td>"
-            f"<td>{html.escape(_format_datetime(row.detail_updated_at))}</td>"
+            f'<td class="col-num">{row.match_id}</td>'
+            f'<td class="col-datetime">{html.escape(_format_match_time(row.start_time))}</td>'
+            f'<td class="col-hero">{hero_name}</td>'
+            f'<td class="col-result">{result_html}</td>'
+            f'<td class="col-kda-text">{row.kills}/{row.deaths}/{row.assists}</td>'
+            f'<td class="col-duration">{html.escape(format_duration(row.duration))}</td>'
+            f'<td class="col-status">{_detail_chip(row)}</td>'
+            f'<td class="col-status">{_timing_chip(row)}</td>'
+            f'<td class="col-datetime">{html.escape(_format_datetime(row.summary_updated_at))}</td>'
+            f'<td class="col-datetime">{html.escape(_format_datetime(row.detail_updated_at))}</td>'
             "</tr>"
         )
 
     st.markdown(
-        """
+        f"""
         <style>
-        .db-table-wrap { overflow-x: auto; }
-        .db-table { width: 100%; min-width: 980px; border-collapse: collapse; font-size: 0.84rem; }
-        .db-table th {
-            text-align: left;
-            font-size: 0.72rem;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            opacity: 0.72;
-            padding: 0.48rem 0.55rem;
-            border-bottom: 1px solid rgba(49, 51, 63, 0.18);
-            white-space: nowrap;
-        }
-        .db-table td {
-            padding: 0.55rem;
-            border-bottom: 1px solid rgba(49, 51, 63, 0.1);
-            vertical-align: middle;
-            white-space: nowrap;
-        }
+        {build_shared_table_css(table_class="db-table", min_width_px=980)}
         </style>
         """,
         unsafe_allow_html=True,
     )
-    st.markdown(
-        (
-            '<div class="db-table-wrap"><table class="db-table"><thead><tr>'
-            "<th>Match ID</th><th>Played</th><th>Hero</th><th>Result</th><th>K/D/A</th><th>Duration</th>"
-            "<th>Detail</th><th>Timings</th><th>Summary Cached</th><th>Detail Cached</th>"
-            "</tr></thead><tbody>"
-            + "".join(table_rows)
-            + "</tbody></table></div>"
-        ),
-        unsafe_allow_html=True,
-    )
+    st.markdown(build_table_fragment(table_id="db-match-table", headers=headers, body_html="".join(table_rows), table_class="db-table"), unsafe_allow_html=True)
 
 
 service = build_service()

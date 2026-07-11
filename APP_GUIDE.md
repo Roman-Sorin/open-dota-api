@@ -15,6 +15,8 @@ The project includes two interfaces:
 - Hero Overview shows won matches in green and lost matches in red
 - Hero Overview column labels stay short and English-only: `All`, `Won`, `Lost`, `WR`, `Dur`, `NW`, `Dmg`
 - Hero portraits in `Hero Overview` and `Matchups` must stay visually aligned with `Recent Matches`: large rectangular `16:9` portraits, about `56px` wide, `object-fit: cover`, and not tiny square thumbnails
+- Dashboard tables now use one shared HTML table system with typed columns (`icon`, `hero`, `item`, `integer`, `percentage`, `duration`, `kda`, `currency`, `damage`, `status`, `action`) instead of per-section ad hoc CSS
+- That shared table system keeps text columns left-aligned, numeric columns right-aligned, K/D/A summary columns centered, fixed-width portrait columns, content-driven widths, sticky headers, and horizontal scroll for genuinely wide tables
 - Hero Overview and Detailed Turbo Stats use one shared metric-definition list in UI code, so hero fields stay synchronized between both sections
 - Hero Overview and Detailed Turbo Stats also share manual match-tag metrics: `MVP`, `High`, and combined `Tag` / `Tagged Matches`
 - The top dashboard summary cards also show overall `MVP`, `Highlighted`, and `Tag` totals formatted as `count (pct%)`
@@ -70,6 +72,7 @@ The project includes two interfaces:
   - Both `Selected Hero` and `All Heroes` use `Hero Icon / Hero / WR / Matches / Won / Lost`
   - Matchup tables intentionally omit `Avg K/D/A` and `KDA`
   - In Matchups, only `WR` uses semantic color; `Won` and `Lost` stay neutral
+  - Matchup tables now use the same shared compact table widths/alignment rules as Hero Overview, Item Winrates, and Recent Matches
   - In `All Heroes`, `Player Teammates` default to highest `WR` first and `Player Opponents` default to lowest `WR` first
   - Matchup `WR` stays numeric in the dataframe; percent formatting is applied only at render time so sorting remains correct
   - Adjusting `Min matchup matches` filters the cached matchup rows and does not require a second `Refresh Matchups`
@@ -94,6 +97,7 @@ The project includes two interfaces:
 - Item winrates show average timing as a small badge on the item icon, using cached item timing data (`purchase_log` / `first_purchase_time` / Aegis objective time when available) for matches where the item is part of the end-of-match inventory snapshot
 - Item timing chips round to whole minutes with standard half-up rounding from the underlying seconds (`:00`-`:29` down, `:30`-`:59` up), and item thumbnails preserve the original Dota item aspect ratio instead of being forced into square boxes
 - `Item Winrates` reuses the same table shell styling as `Recent Matches`, keeping borders, row dividers, and spacing consistent across both sections
+- `Hero Overview`, all four `Matchups` tables, `Item Winrates`, `Recent Matches`, and the `Database` match table now all use the same shared table shell and column-type alignment rules
 - `Item Winrates` now renders through the same Streamlit markdown container path as `Recent Matches`, so wrapper-level border/padding differences from `stHtml` no longer apply
 - `Item Winrates` column headers are clickable again for client-side sorting while preserving item icon chips, timings, and buff badges
 - In `Item Winrates`, the `Item` header sorts by average item timing instead of alphabetic item name order
@@ -109,6 +113,7 @@ The project includes two interfaces:
 - Dashboard filter `Min matches per item` defaults to `6`
 - Recent hero matches are displayed as a compact table below the item table
 - Recent hero matches show saved manual match tags inline and include an in-table native `Edit Tags` button on each visible match row
+- `Recent Matches` uses the shared compact table density too, so headers stay visually attached to row values instead of drifting apart on wide screens
 - Manual match tags are persisted as separate user data in the match store, not embedded into OpenDota summary/detail payloads
 - Recent hero matches show final item slots only; timings are attached only to those final items when available from match details
 - Recent hero matches also show consumable buffs from cached match details (for example consumed `Aghanim's Scepter`), marked with a small `buff` chip and ordered alongside timed final items

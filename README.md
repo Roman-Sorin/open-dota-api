@@ -19,6 +19,7 @@ Turbo-only dashboard for your account:
 - Hero overview highlights won matches in green and lost matches in red
 - Hero Overview column labels stay short and English-only: `All`, `Won`, `Lost`, `WR`, `Dur`, `NW`, `Dmg`
 - Hero portraits in `Hero Overview` and `Matchups` stay aligned with `Recent Matches`: larger rectangular `16:9` portraits with `object-fit: cover`, not tiny thumbnail icons
+- Dashboard tables now share one typed HTML table system with fixed portrait columns, content-aware widths, compact numeric columns, consistent left/right alignment, sticky headers, and horizontal scrolling for truly wide datasets
 - All winrates in the UI use the same colors: below `50%` red, exactly `50%` yellow, above `50%` green
 - Hero overview and detailed hero stats now share one metric-definition source in the UI, so added hero fields stay aligned in both places
 - Hero Overview and Detailed Turbo Stats now also include manual match-tag stats: `MVP`, `High`, and combined `Tag` / `Tagged Matches`
@@ -88,6 +89,7 @@ Turbo-only dashboard for your account:
 - Item winrates include average timing as a small badge on the item icon, sourced from cached timing data for matches where the item remains in the final inventory/backpack snapshot
 - Item timing chips are rounded to whole minutes with standard half-up rounding from the underlying seconds, and item icons keep their original aspect ratio instead of being forced into square thumbnails
 - `Item Winrates` now reuses the same table shell styling as `Recent Matches`, so borders, header rhythm, and row dividers stay visually aligned
+- `Hero Overview`, all `Matchups` tables, `Item Winrates`, `Recent Matches`, and the `Database` match table now use that same shared table shell so header/value spacing and alignment stay consistent across the app
 - `Item Winrates` is rendered through the same Streamlit markdown-table path as `Recent Matches`, avoiding wrapper-level style drift between `stHtml` and markdown containers
 - `Item Winrates` header cells are sortable again via click without dropping item icon chips, timings, or buff badges
 - Clicking the `Item` header in `Item Winrates` now sorts by average item timing rather than alphabetically

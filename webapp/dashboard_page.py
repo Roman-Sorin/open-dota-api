@@ -51,7 +51,9 @@ from webapp.fallback_tables import (
     HERO_PORTRAIT_COLUMN_WIDTH_PX,
     HERO_TABLE_ROW_HEIGHT_PX,
     build_hero_portrait_html,
+    build_shared_table_css,
     build_sortable_html_table,
+    build_table_fragment,
     hero_overview_fallback_headers,
     matchup_fallback_headers,
 )
@@ -635,45 +637,45 @@ def _render_hero_overview_table_html(hero_source_rows: list[dict[str, object]]) 
             {
                 "display_html": build_hero_portrait_html(str(overview_row.get("Icon", "")), str(overview_row.get("Hero", "Hero"))),
                 "sort_value": str(overview_row.get("Hero", "")),
-                "class_name": "hero-portrait-cell",
+                "type": "icon",
             },
-            {"display_html": html.escape(str(overview_row.get("Hero", ""))), "sort_value": str(overview_row.get("Hero", ""))},
-            {"display_html": html.escape(str(overview_row.get(HERO_MATCHES_COLUMN, ""))), "sort_value": int(source_row.get("matches", 0) or 0), "class_name": "num"},
+            {"display_html": html.escape(str(overview_row.get("Hero", ""))), "sort_value": str(overview_row.get("Hero", "")), "type": "hero"},
+            {"display_html": html.escape(str(overview_row.get(HERO_MATCHES_COLUMN, ""))), "sort_value": int(source_row.get("matches", 0) or 0), "type": "integer"},
             {
                 "display_html": colored_metric_html(html.escape(str(overview_row.get(HERO_WINS_COLUMN, ""))), "#23a55a"),
                 "sort_value": int(source_row.get("wins", 0) or 0),
-                "class_name": "num",
+                "type": "integer",
             },
             {
                 "display_html": colored_metric_html(html.escape(str(overview_row.get(HERO_LOSSES_COLUMN, ""))), "#d9534f"),
                 "sort_value": int(source_row.get("losses", 0) or 0),
-                "class_name": "num",
+                "type": "integer",
             },
             {
                 "display_html": colored_metric_html(html.escape(str(overview_row.get("WR", ""))), winrate_color(float(source_row.get("winrate", 0.0) or 0.0))),
                 "sort_value": float(source_row.get("winrate", 0.0) or 0.0),
-                "class_name": "num",
+                "type": "percentage",
             },
-            {"display_html": html.escape(str(overview_row.get("Avg K/D/A", ""))), "sort_value": str(overview_row.get("Avg K/D/A", ""))},
-            {"display_html": html.escape(str(overview_row.get("KDA", ""))), "sort_value": float(source_row.get("kda", 0.0) or 0.0), "class_name": "num"},
-            {"display_html": html.escape(str(overview_row.get("Dur", ""))), "sort_value": duration_sort, "class_name": "num"},
-            {"display_html": html.escape(str(overview_row.get("NW", ""))), "sort_value": float(source_row.get("avg_net_worth", 0.0) or 0.0), "class_name": "num"},
-            {"display_html": html.escape(str(overview_row.get("Dmg", ""))), "sort_value": float(source_row.get("avg_damage", 0.0) or 0.0), "class_name": "num"},
-            {"display_html": html.escape(str(overview_row.get("Max K", ""))), "sort_value": int(source_row.get("max_kills", 0) or 0), "class_name": "num"},
-            {"display_html": html.escape(str(overview_row.get("Max Dmg", ""))), "sort_value": int(source_row.get("max_hero_damage", 0) or 0), "class_name": "num"},
+            {"display_html": html.escape(str(overview_row.get("Avg K/D/A", ""))), "sort_value": str(overview_row.get("Avg K/D/A", "")), "type": "kda_text"},
+            {"display_html": html.escape(str(overview_row.get("KDA", ""))), "sort_value": float(source_row.get("kda", 0.0) or 0.0), "type": "kda"},
+            {"display_html": html.escape(str(overview_row.get("Dur", ""))), "sort_value": duration_sort, "type": "duration"},
+            {"display_html": html.escape(str(overview_row.get("NW", ""))), "sort_value": float(source_row.get("avg_net_worth", 0.0) or 0.0), "type": "currency"},
+            {"display_html": html.escape(str(overview_row.get("Dmg", ""))), "sort_value": float(source_row.get("avg_damage", 0.0) or 0.0), "type": "damage"},
+            {"display_html": html.escape(str(overview_row.get("Max K", ""))), "sort_value": int(source_row.get("max_kills", 0) or 0), "type": "integer"},
+            {"display_html": html.escape(str(overview_row.get("Max Dmg", ""))), "sort_value": int(source_row.get("max_hero_damage", 0) or 0), "type": "damage"},
             {
                 "display_html": colored_metric_html(html.escape(str(overview_row.get("Rad WR", ""))), winrate_color(float(source_row.get("radiant_wr", 0.0) or 0.0))),
                 "sort_value": float(source_row.get("radiant_wr", 0.0) or 0.0),
-                "class_name": "num",
+                "type": "percentage",
             },
             {
                 "display_html": colored_metric_html(html.escape(str(overview_row.get("Dire WR", ""))), winrate_color(float(source_row.get("dire_wr", 0.0) or 0.0))),
                 "sort_value": float(source_row.get("dire_wr", 0.0) or 0.0),
-                "class_name": "num",
+                "type": "percentage",
             },
-            {"display_html": html.escape(str(overview_row.get("MVP", ""))), "sort_value": int(source_row.get("mvp_matches", 0) or 0), "class_name": "num"},
-            {"display_html": html.escape(str(overview_row.get("High", ""))), "sort_value": int(source_row.get("highlight_matches", 0) or 0), "class_name": "num"},
-            {"display_html": html.escape(str(overview_row.get("Tag", ""))), "sort_value": int(source_row.get("tagged_matches", 0) or 0), "class_name": "num"},
+            {"display_html": html.escape(str(overview_row.get("MVP", ""))), "sort_value": int(source_row.get("mvp_matches", 0) or 0), "type": "integer"},
+            {"display_html": html.escape(str(overview_row.get("High", ""))), "sort_value": int(source_row.get("highlight_matches", 0) or 0), "type": "integer"},
+            {"display_html": html.escape(str(overview_row.get("Tag", ""))), "sort_value": int(source_row.get("tagged_matches", 0) or 0), "type": "integer"},
         ]
         rows.append(row_cells)
     table_html, table_height = build_sortable_html_table(table_id="hero-overview-fallback", headers=headers, rows=rows)
@@ -690,13 +692,13 @@ def _render_matchup_table_html(summary_df: pd.DataFrame, *, table_id: str) -> No
                 {
                     "display_html": build_hero_portrait_html(str(row.get("Icon", "")), str(row.get("Hero", "Hero"))),
                     "sort_value": str(row.get("Hero", "")),
-                    "class_name": "hero-portrait-cell",
+                    "type": "icon",
                 },
-                {"display_html": html.escape(str(row.get("Hero", ""))), "sort_value": str(row.get("Hero", ""))},
-                {"display_html": colored_metric_html(f"{wr_value:.2f}%", winrate_color(wr_value)), "sort_value": wr_value, "class_name": "num"},
-                {"display_html": str(int(row.get("Matches", 0) or 0)), "sort_value": int(row.get("Matches", 0) or 0), "class_name": "num"},
-                {"display_html": str(int(row.get("Won", 0) or 0)), "sort_value": int(row.get("Won", 0) or 0), "class_name": "num"},
-                {"display_html": str(int(row.get("Lost", 0) or 0)), "sort_value": int(row.get("Lost", 0) or 0), "class_name": "num"},
+                {"display_html": html.escape(str(row.get("Hero", ""))), "sort_value": str(row.get("Hero", "")), "type": "hero"},
+                {"display_html": colored_metric_html(f"{wr_value:.2f}%", winrate_color(wr_value)), "sort_value": wr_value, "type": "percentage"},
+                {"display_html": str(int(row.get("Matches", 0) or 0)), "sort_value": int(row.get("Matches", 0) or 0), "type": "integer"},
+                {"display_html": str(int(row.get("Won", 0) or 0)), "sort_value": int(row.get("Won", 0) or 0), "type": "integer"},
+                {"display_html": str(int(row.get("Lost", 0) or 0)), "sort_value": int(row.get("Lost", 0) or 0), "type": "integer"},
             ]
         )
     table_html, table_height = build_sortable_html_table(table_id=table_id, headers=headers, rows=rows)
@@ -1012,29 +1014,27 @@ def _render_match_tag_badges_html(tag_labels: tuple[str, ...] | list[str]) -> st
     return f'<div class="recent-tags">{"".join(badges)}</div>'
 
 
+RECENT_MATCH_HEADERS = [
+    {"label": "Hero", "type": "hero"},
+    {"label": "Result", "type": "result"},
+    {"label": "Duration", "type": "duration"},
+    {"label": "K/D/A", "type": "kda_text"},
+    {"label": "KDA", "type": "kda"},
+    {"label": "Net Worth", "type": "currency"},
+    {"label": "Damage", "type": "damage"},
+    {"label": "Items", "type": "items"},
+    {"label": "Tags", "type": "action"},
+]
+
+
 RECENT_MATCHES_TABLE_COMPONENT = st.components.v2.component(
     "recent_matches_table",
-    html="""
-    <div class="recent-matches-wrap">
-      <table class="recent-matches-table">
-        <thead>
-          <tr>
-            <th>Hero</th>
-            <th>Result</th>
-            <th>Duration</th>
-            <th>K/D/A</th>
-            <th>KDA</th>
-            <th>Net Worth</th>
-            <th>Damage</th>
-            <th>Items</th>
-            <th>Tags</th>
-          </tr>
-        </thead>
-        <tbody id="recent-matches-body"></tbody>
-      </table>
-    </div>
-    """,
-    css="""
+    html=build_table_fragment(
+        table_id="recent-matches-table",
+        headers=RECENT_MATCH_HEADERS,
+        body_html="",
+    ),
+    css=f"""
     :host {
       display: block;
       --recent-text: #111827;
@@ -1045,30 +1045,8 @@ RECENT_MATCHES_TABLE_COMPONENT = st.components.v2.component(
       --recent-surface-hover: rgba(59, 130, 246, 0.12);
       --recent-bar-bg: rgba(17, 24, 39, 0.08);
     }
-    .recent-matches-wrap {
-      overflow-x: auto;
-      margin-top: 0.5rem;
-    }
-    .recent-matches-table {
-      width: 100%;
-      min-width: 860px;
-      border-collapse: collapse;
-      font-size: 0.84rem;
-    }
-    .recent-matches-table th {
-      text-align: left;
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--recent-muted);
-      padding: 0.45rem 0.55rem;
-      border-bottom: 1px solid var(--recent-border-strong);
-      white-space: nowrap;
-    }
-    .recent-matches-table td {
-      padding: 0.55rem;
-      border-bottom: 1px solid var(--recent-border-soft);
-      vertical-align: middle;
+    {build_shared_table_css(min_width_px=980).replace(":root", ":host").replace(".shared-data-table", ".shared-data-table")}
+    .shared-data-table td {
       color: var(--recent-text);
     }
     .recent-hero-cell {
@@ -1310,7 +1288,7 @@ RECENT_MATCHES_TABLE_COMPONENT = st.components.v2.component(
     export default function(component) {
       const { data, parentElement, setTriggerValue } = component;
       const root = parentElement.host ?? parentElement;
-      const tbody = parentElement.querySelector('#recent-matches-body');
+      const tbody = parentElement.querySelector('.shared-data-table tbody');
       if (!tbody) {
         return;
       }
@@ -2063,20 +2041,20 @@ def _render_sortable_item_winrates_table(item_wr_rows: list[dict[str, object]]) 
         )
         rows_html += (
             f'<tr data-item="{html.escape(item_name.lower())}" data-timing="{timing_sort_value}" data-wr="{item_wr}" data-matches="{matches}" data-won="{won}" data-lost="{lost}">'
-            "<td>"
+            '<td class="col-item">'
             '<div class="item-winrate-item-cell">'
             f"{icon_html}"
             f'<div class="item-winrate-item-name">{html.escape(item_name)}</div>'
             "</div>"
             "</td>"
-            f'<td><span class="item-winrate-num" style="color:{winrate_color(item_wr)};">{round(item_wr)}%</span></td>'
-            f'<td><span class="item-winrate-num">{matches}</span></td>'
-            f'<td><span class="item-winrate-win">{won}</span></td>'
-            f'<td><span class="item-winrate-loss">{lost}</span></td>'
+            f'<td class="col-pct"><span class="item-winrate-num" style="color:{winrate_color(item_wr)};">{round(item_wr)}%</span></td>'
+            f'<td class="col-num"><span class="item-winrate-num">{matches}</span></td>'
+            f'<td class="col-num"><span class="item-winrate-win">{won}</span></td>'
+            f'<td class="col-num"><span class="item-winrate-loss">{lost}</span></td>'
             "</tr>"
         )
 
-    table_height = min(max(180, 88 + (len(item_wr_rows) * 42)), 980)
+    table_height = min(max(200, 88 + (len(item_wr_rows) * 42)), 980)
     return f"""
     <html>
     <head>
@@ -2089,10 +2067,7 @@ def _render_sortable_item_winrates_table(item_wr_rows: list[dict[str, object]]) 
           color: rgba(250, 250, 250, 0.92);
           font-family: sans-serif;
         }}
-        .recent-matches-wrap{{overflow-x:auto;margin-top:0.5rem;}}
-        .recent-matches-table{{width:100%;min-width:640px;border-collapse:collapse;font-size:0.84rem;}}
-        .recent-matches-table th{{text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;opacity:0.72;padding:0.45rem 0.55rem;border-bottom:1px solid rgba(49,51,63,0.18);white-space:nowrap;cursor:pointer;user-select:none;}}
-        .recent-matches-table td{{padding:0.55rem;border-bottom:1px solid rgba(49,51,63,0.1);vertical-align:middle;}}
+        {build_shared_table_css(min_width_px=620)}
         .item-winrate-item-cell{{display:flex;align-items:center;gap:0.6rem;min-width:220px;}}
         .item-winrate-item-name{{font-weight:700;line-height:1.1;}}
         .item-winrate-num{{white-space:nowrap;font-weight:700;}}
@@ -2108,15 +2083,15 @@ def _render_sortable_item_winrates_table(item_wr_rows: list[dict[str, object]]) 
       </style>
     </head>
     <body>
-      <div class="recent-matches-wrap">
-        <table class="recent-matches-table" id="item-winrates-table">
+      <div class="table-shell">
+        <table class="shared-data-table" id="item-winrates-table">
           <thead>
             <tr>
-              <th data-sort-key="timing" data-default-dir="asc">Item<span class="sort-indicator"></span></th>
-              <th data-sort-key="wr" data-default-dir="desc">WR<span class="sort-indicator">v</span></th>
-              <th data-sort-key="matches" data-default-dir="desc">Matches<span class="sort-indicator"></span></th>
-              <th data-sort-key="won" data-default-dir="desc">Won<span class="sort-indicator"></span></th>
-              <th data-sort-key="lost" data-default-dir="desc">Lost<span class="sort-indicator"></span></th>
+              <th class="col-item sortable" data-sort-key="timing" data-default-dir="asc">Item<span class="sort-indicator"></span></th>
+              <th class="col-pct sortable" data-sort-key="wr" data-default-dir="desc">WR<span class="sort-indicator">v</span></th>
+              <th class="col-num sortable" data-sort-key="matches" data-default-dir="desc">Matches<span class="sort-indicator"></span></th>
+              <th class="col-num sortable" data-sort-key="won" data-default-dir="desc">Won<span class="sort-indicator"></span></th>
+              <th class="col-num sortable" data-sort-key="lost" data-default-dir="desc">Lost<span class="sort-indicator"></span></th>
             </tr>
           </thead>
           <tbody>
@@ -3206,7 +3181,7 @@ if recent_matches_loaded:
         ) if (regular_item_html or buff_item_html) else '<div class="recent-items-inline empty">No item data</div>'
         table_rows_html += (
             "<tr>"
-            '<td class="recent-hero-cell">'
+            '<td class="col-hero recent-hero-cell">'
             '<div class="recent-hero-wrap">'
             '<div class="recent-hero-icon-wrap">'
             f'<img src="{row.hero_image}" alt="{row.hero_name}"/>'
@@ -3219,12 +3194,12 @@ if recent_matches_loaded:
             "</div>"
             "</div>"
             "</td>"
-            f'<td><div class="recent-result {result_class}">{row.result} Match</div><div class="recent-when">{format_time_ago(row.started_at)}</div></td>'
-            '<td>'
+            f'<td class="col-result"><div class="recent-result {result_class}">{row.result} Match</div><div class="recent-when">{format_time_ago(row.started_at)}</div></td>'
+            '<td class="col-duration">'
             f'<div class="recent-duration-value">{row.duration}</div>'
             f'<div class="recent-bar"><div class="recent-bar-fill" style="width:{duration_percent:.1f}%"></div></div>'
             "</td>"
-            '<td>'
+            '<td class="col-kda-text">'
             f'<div class="recent-kda-value">{row.kills}/{row.deaths}/{row.assists}</div>'
             '<div class="recent-kda-bar">'
             f'<div class="recent-kda-kills" style="width:{kills_pct:.1f}%"></div>'
@@ -3232,11 +3207,11 @@ if recent_matches_loaded:
             f'<div class="recent-kda-assists" style="width:{assists_pct:.1f}%"></div>'
             "</div>"
             "</td>"
-            f'<td><div class="recent-stat-value">{row.kda_ratio:.1f}</div></td>'
-            f'<td><div class="recent-stat-value">{f"{round((row.net_worth or 0) / 1000, 1)}k" if row.net_worth else "-"}</div></td>'
-            f'<td><div class="recent-stat-value">{f"{round((row.hero_damage or 0) / 1000, 1)}k" if row.hero_damage else "-"}</div></td>'
-            f'<td><div class="recent-items-inline">{item_html}</div></td>'
-            f'<td><button type="button" class="recent-action-link" data-match-id="{int(row.match_id)}">Edit Tags</button></td>'
+            f'<td class="col-kda"><div class="recent-stat-value">{row.kda_ratio:.1f}</div></td>'
+            f'<td class="col-currency"><div class="recent-stat-value">{f"{round((row.net_worth or 0) / 1000, 1)}k" if row.net_worth else "-"}</div></td>'
+            f'<td class="col-damage"><div class="recent-stat-value">{f"{round((row.hero_damage or 0) / 1000, 1)}k" if row.hero_damage else "-"}</div></td>'
+            f'<td class="col-items"><div class="recent-items-inline">{item_html}</div></td>'
+            f'<td class="col-action"><button type="button" class="recent-action-link" data-match-id="{int(row.match_id)}">Edit Tags</button></td>'
             "</tr>"
         )
 
