@@ -2820,7 +2820,7 @@ if isinstance(matchup_rows, dict):
                 st.caption("Hero Teammates")
                 sorted_selected_with = matchup_utils.sort_matchup_summary_dataframe(selected_with, best_first=True)
                 if USE_HTML_TABLE_FALLBACK:
-                    _render_matchup_table_html(sorted_selected_with)
+                    _render_matchup_table_html(sorted_selected_with, table_id="matchups-selected-with")
                 else:
                     st.dataframe(
                         matchup_utils.build_matchup_styler(sorted_selected_with),
@@ -2836,7 +2836,7 @@ if isinstance(matchup_rows, dict):
                 st.caption("Hero Opponents")
                 sorted_selected_against = matchup_utils.sort_matchup_summary_dataframe(selected_against, best_first=False)
                 if USE_HTML_TABLE_FALLBACK:
-                    _render_matchup_table_html(sorted_selected_against)
+                    _render_matchup_table_html(sorted_selected_against, table_id="matchups-selected-against")
                 else:
                     st.dataframe(
                         matchup_utils.build_matchup_styler(sorted_selected_against),
@@ -2861,7 +2861,7 @@ if isinstance(matchup_rows, dict):
                 st.caption("Player Teammates")
                 sorted_global_with = matchup_utils.sort_matchup_summary_dataframe(global_with_summary, best_first=True)
                 if USE_HTML_TABLE_FALLBACK:
-                    _render_matchup_table_html(sorted_global_with)
+                    _render_matchup_table_html(sorted_global_with, table_id="matchups-global-with")
                 else:
                     st.dataframe(
                         matchup_utils.build_matchup_styler(sorted_global_with),
@@ -2877,7 +2877,7 @@ if isinstance(matchup_rows, dict):
                 st.caption("Player Opponents")
                 sorted_global_against = matchup_utils.sort_matchup_summary_dataframe(global_matchup_summary, best_first=False)
                 if USE_HTML_TABLE_FALLBACK:
-                    _render_matchup_table_html(sorted_global_against)
+                    _render_matchup_table_html(sorted_global_against, table_id="matchups-global-against")
                 else:
                     st.dataframe(
                         matchup_utils.build_matchup_styler(sorted_global_against),
