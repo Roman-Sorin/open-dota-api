@@ -14,7 +14,6 @@ def build_service():
     cache_module = importlib.import_module("utils.cache")
     exceptions_module = importlib.import_module("utils.exceptions")
     client_module = importlib.import_module("clients.opendota_client")
-    stratz_client_module = importlib.import_module("clients.stratz_client")
     match_store_module = importlib.import_module("utils.match_store")
     store_factory_module = importlib.import_module("utils.store_factory")
     analytics_module = importlib.import_module("services.analytics_service")
@@ -23,7 +22,6 @@ def build_service():
     cache_module = importlib.reload(cache_module)
     exceptions_module = importlib.reload(exceptions_module)
     client_module = importlib.reload(client_module)
-    stratz_client_module = importlib.reload(stratz_client_module)
     match_store_module = importlib.reload(match_store_module)
     store_factory_module = importlib.reload(store_factory_module)
     analytics_module = importlib.reload(analytics_module)
@@ -34,13 +32,6 @@ def build_service():
         timeout_seconds=settings.timeout_seconds,
         api_key=settings.api_key,
     )
-    stratz_client = None
-    if settings.stratz_token:
-        stratz_client = stratz_client_module.StratzClient(
-            token=settings.stratz_token,
-            base_url=settings.stratz_base_url,
-            timeout_seconds=settings.timeout_seconds,
-        )
     cache = cache_module.JsonFileCache(
         cache_dir=config_module.get_cache_dir(),
         ttl_hours=settings.cache_ttl_hours,
@@ -50,7 +41,6 @@ def build_service():
         client=client,
         cache=cache,
         match_store=match_store,
-        stratz_client=stratz_client,
     )
 
 

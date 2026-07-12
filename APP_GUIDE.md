@@ -36,10 +36,8 @@ The project includes two interfaces:
 - `Database` auto-fill is now driven by a tiny `st.fragment(run_every=...)` timer that requests a full app rerun; the next full page pass performs one sync cycle
 - `Database` `Sync History` now includes a `Source` column so you can distinguish `Manual`, `Auto`, and `Forced` runs
 - `Database` summary sync now still checks the newest OpenDota page during long-window incremental cooldowns, so newly played matches appear promptly instead of waiting up to 12 hours on a `365`-day window
-- `Database` now keeps a separate summary head-sync cooldown, so auto-fill can keep maintaining cached matches and STRATZ timing recovery without re-hitting the OpenDota summaries endpoint every cycle
+- `Database` now keeps a separate summary head-sync cooldown, so auto-fill can keep maintaining cached matches without re-hitting the OpenDota summaries endpoint every cycle
 - Those background head-sync checks no longer advance the dashboard `last_incremental_sync_at`; the main dashboard snapshot timestamp changes only on real dashboard syncs
-- `Database` now also keeps a separate STRATZ retry window, so a temporary STRATZ `429` no longer triggers hidden repeated Stats retries on every auto-fill cycle
-- `Database` auto-fill now avoids mixing OpenDota and STRATZ work in one cycle, so a rate limit from one provider does not immediately trigger a second provider attempt in that same run
 - Parse-only retry cycles no longer start the pending-parse quiet window, so freshly retried replay parses can be checked on the very next cycle instead of getting stuck behind repeated `Waiting...` messages
 - Default `Database` `Balanced` mode now uses `5` detail fetches, `5` parse requests, and a `15` second interval
 - Default `Database` cooldown after `HTTP 429` is now `50` seconds
@@ -86,7 +84,7 @@ The project includes two interfaces:
 - Recent match rows use a dedicated section-schema cache key for the manual-tag row shape, so pre-tag session payloads are not reused after deploy
 - Section caches are invalidated only by real dashboard sync timestamps; local enrichment writes do not count as a new snapshot and must not close already built sections
 - Cached day-based hero snapshots are anchored to the newest cached match in that snapshot, so a stale cached overview does not silently lose rows just because wall-clock time advanced between reruns
-- Cache-only selected-hero rebuilds now batch cached match-detail reads per section, so `Recent Matches`, item snapshots, hydration scans, and STRATZ timing recovery avoid per-match SQLite lookups on every rerun
+- Cache-only selected-hero rebuilds now batch cached match-detail reads per section, so `Recent Matches`, item snapshots, and hydration scans avoid per-match SQLite lookups on every rerun
 - If the dashboard was refreshed later than a section, the section shows a hint that it should be rebuilt from the current dashboard snapshot with `Refresh ...`
 - Overview snapshots with suspicious per-hero zero `NW`/`Dmg`/`Max Dmg` rows are treated as stale and rebuilt automatically
 - Most frequent final items
@@ -169,7 +167,7 @@ copy .env.example .env
 ```
 
 `OPENDOTA_API_KEY` is optional. Without a key, rate limits may be hit more often.
-`STRATZ_API_TOKEN` is also optional and only needed for timing fallback when OpenDota lacks item timings for a match.
+The app is now OpenDota-only. If `STRATZ_API_TOKEN` is still present in local env or Streamlit secrets, it is ignored.
 Recommended production persistence is Google Drive snapshot storage. Configure `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` and `GOOGLE_DRIVE_FOLDER_ID` so the app can restore `.cache/matches.sqlite3` from Drive at startup and upload fresh snapshots after cache writes. `DATABASE_URL` remains optional as a secondary backend path. If external persistence is invalid or unreachable, the UI shows an explicit warning and the app falls back to local SQLite.
 
 ## Run the web dashboard (recommended)
@@ -197,28 +195,19 @@ python main.py ask "show my winrate and kda on chaos knight 1233793238"
 - Match-detail-heavy fields are hydrated during the main dashboard refresh and then reused from local storage by all sections.
 - Some requested metrics may depend on detail payload fields that are not guaranteed in every parsed match. Lane-derived values are currently not shown in the UI until the data source is made reliable.
 - `purchase_log` is often incomplete; the dashboard uses it for recent-match timing repair only, not for `Item Winrates`.
-- If `STRATZ_API_TOKEN` is configured, the app can recover missing match item timings from STRATZ when OpenDota detail payloads have no `purchase_log` / `first_purchase_time`.
-- STRATZ fallback is timing-only. Match summaries and main detail payloads still come from OpenDota.
-- When STRATZ timing recovery succeeds for a match that was previously marked `Pending Parse`, the app now marks that pending OpenDota parse request as completed so the `Pending Parse` count can drop instead of staying artificially inflated.
 - The background sync cycle now prioritizes resolving existing pending parse jobs before enqueueing new OpenDota parse requests, so `Pending Parse` no longer grows forever while old jobs are still outstanding.
 - If old OpenDota parse jobs stay stuck for too long, the background sync cycle now re-submits a bounded batch of stale pending parses instead of logging another `0 requested / 150 pending` cycle forever.
 - `Sync History` notes now distinguish between actively waiting on existing parse jobs and retrying stale ones, so backlog runs explain what the app actually did.
 - Recently retried pending parse jobs are now checked first on later cycles, so completed OpenDota parses clear out of `Pending Parse` promptly instead of waiting behind the entire older backlog.
-- Fresh pending parse jobs are no longer force-polled against OpenDota every auto-refresh cycle; the app now waits a short poll delay, uses cached/STRATZ timing fallback first, and only then rechecks OpenDota so the dashboard does not lock itself into repeated `429` responses.
+- Fresh pending parse jobs are no longer force-polled against OpenDota every auto-refresh cycle; the app now waits a short poll delay before rechecking OpenDota so the dashboard does not lock itself into repeated `429` responses.
 - Pending OpenDota parse rows now persist the returned `jobId` and poll `request/{jobId}` before refreshing `matches/{id}`. This follows the async job flow more closely, reduces unnecessary detail calls, and avoids self-inflicted rate-limit loops on the `Database` page.
-- STRATZ timing fallback now prioritizes cached matches that are actually `pending` / missing timings, even when those matches are far down the window and the newest rows are already `Ready`. This prevents old timing backlogs from being starved forever by the newest match ordering.
 - After a cycle already spent OpenDota quota on summary sync, detail hydration, or parse requests, the app now enters a short quiet period before the next pending-parse check. This prevents the immediate follow-up auto cycle from hitting `429` just because the previous cycle already did real work.
 - Passive `Waiting on ... existing replay parse job(s)` cycles no longer rewrite `last_polled_at` on those pending rows. That preserves the stale-retry timer so old parse jobs can age into a bounded retry instead of being kept forever in the waiting state.
 - Recent Matches now show `Moon Shard`, `Aghanim's Scepter`, and `Aghanim's Shard` as `buff` only when the cached match details confirm a consumed/permanent-buff state. A normal inventory copy stays in the regular item list without a `buff` badge.
 - Parse-request storage now records `request_source` and `request_reason` on `match_parse_requests` rows. This is the first diagnostics step for the stuck `Pending Parse` backlog because it makes each queue transition traceable by provider and reason.
 - Pending retry eligibility is now based on the last parse-request submission time, not on the most recent status-check timestamp. This prevents stale jobs from being endlessly reclassified as `recently checked` and skipped for retry.
-- Database `Sync History` now includes provider provenance columns: `Requested Via` and `Data From`. This makes it visible whether a cycle touched `OpenDota`, `STRATZ`, or both, and whether any recovered timing data actually came from `STRATZ`.
+- Database `Sync History` now includes provider provenance columns: `Requested Via` and `Data From`.
 - Database backlog metrics now split `Pending Parse` into five local-cache buckets: `Pending Waiting`, `Pending Poll Due`, `Pending Retry Due`, `Pending Legacy`, and `Pending Ready-Stuck`. The page now computes these counts directly from cached summaries/details/parse rows so the stuck replay-parse backlog is diagnosable without issuing new network requests.
-- Pending replay-parse refresh no longer does implicit STRATZ timing recovery per row. STRATZ recovery now runs only in its own bounded maintenance stage, which avoids creating a hidden second rate-limit loop while the app is polling or retrying the OpenDota parse queue.
-- Waiting pending rows no longer stamp the cycle as `Requested Via: OpenDota` unless the cycle actually hit an OpenDota parse endpoint. This keeps provider provenance accurate and stops cache-only pending cycles from blocking later bounded STRATZ maintenance.
-- The bounded STRATZ maintenance stage may now run after successful OpenDota pending-queue work if the cycle is not OpenDota-rate-limited. Provider provenance remains accurate because `Requested Via: STRATZ` is only recorded when the stage actually made a STRATZ network attempt.
-- The `Database` scheduler now uses longer provider-specific retry windows after `429`s: pending OpenDota parse polling is held back for several minutes, and STRATZ timing recovery is held back for roughly fifteen minutes. This is intended to stop the repeating one-minute `OpenDota 429 -> STRATZ 429 -> repeat` loop while the backlog is stuck.
-- STRATZ `401/403` responses are now treated as provider auth/config blocks, not as generic empty fallback misses. The real provider error is persisted into background sync state and rendered on the `Database` page so token/IP failures are visible without reading server logs.
 - OpenDota transient upstream failures such as Cloudflare `522` are now retried once in the client and then treated like a temporary cooldown condition instead of a hard background-sync `error` state.
 - Streamlit Community Cloud local files are not durable storage. If neither Google Drive snapshot storage nor `DATABASE_URL` is configured, the app warns in the UI because a reboot/redeploy can reset the local `.cache/matches.sqlite3` file.
 
@@ -251,6 +240,6 @@ Use `--once` if you want exactly one cycle and then exit.
 
 - `ModuleNotFoundError`: activate `.venv` and reinstall requirements.
 - `OpenDotaRateLimitError`: wait and retry, reduce period, or use `OPENDOTA_API_KEY`.
-- Missing timings on a match that already has timings on Dotabuff can happen because Dotabuff and OpenDota use different data pipelines. With `STRATZ_API_TOKEN`, the app now tries STRATZ before leaving those timings as missing.
+- Missing timings on a match that already has timings on Dotabuff can happen because Dotabuff and OpenDota use different data pipelines.
 - Empty/partial item data: this can happen due to OpenDota coverage limits; app will still show available data.
 - After app updates, dashboard data schema is auto-refreshed; if values still look stale, click `Refresh Turbo Dashboard` again.

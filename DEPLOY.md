@@ -65,6 +65,7 @@ Use Streamlit Community Cloud:
    - optional: `GOOGLE_DRIVE_MIN_UPLOAD_INTERVAL_SECONDS`
    - `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` can be pasted as the full multiline service-account JSON blob inside triple quotes in Streamlit Secrets; the app now tolerates the literal newline formatting used by that UI
 6. (Optional) add `DATABASE_URL` only if you also want the secondary Postgres backend path.
+7. Remove any old `STRATZ_API_TOKEN` secret if it is still present. The app now runs OpenDota-only and ignores that secret.
 
 After deploy, you get a stable public HTTPS URL accessible from phone.
 

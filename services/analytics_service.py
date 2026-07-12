@@ -236,6 +236,7 @@ class BackgroundSyncCycleResult:
 
 
 class DotaAnalyticsService:
+    STRATZ_TIMING_FALLBACK_ENABLED = False
     CONSUMABLE_BUFF_ITEM_IDS: dict[str, int] = {
         "moon_shard": 247,
         "ultimate_scepter": 108,
@@ -259,7 +260,10 @@ class DotaAnalyticsService:
         self.client = client
         self.cache = cache
         self.match_store = match_store
-        self.stratz_client = stratz_client
+        # Keep the optional constructor parameter for compatibility with older
+        # tests/callers, but hard-disable the provider so runtime behavior stays
+        # OpenDota-only.
+        self.stratz_client = stratz_client if self.STRATZ_TIMING_FALLBACK_ENABLED else None
         self.references = self._load_references()
         self._match_details_memory_cache: dict[int, dict[str, Any]] = {}
         self._patch_starts, self._patch_names = self._load_patch_timeline()

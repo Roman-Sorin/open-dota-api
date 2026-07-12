@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import services.analytics_service as analytics_service_module
-from clients.stratz_client import StratzAuthError, StratzRateLimitError
 from models.dtos import MATCH_USER_TAG_HIGHLIGHT, MATCH_USER_TAG_MVP, MatchSummary, QueryFilters
 from services.analytics_service import DotaAnalyticsService
 from utils.exceptions import OpenDotaRateLimitError
@@ -1769,7 +1768,7 @@ def test_background_sync_cycle_skips_summary_head_sync_when_recent_summary_snaps
     assert "Using cached summary snapshot; next OpenDota head sync is not due yet." in result.note
 
 
-def test_background_sync_cycle_applies_stratz_retry_window_after_stratz_rate_limit() -> None:
+def test_background_sync_cycle_ignores_stratz_client_during_timing_recovery() -> None:
     class _StratzRateLimitedClient(_FakeClient):
         def get_player_matches(self, **kwargs):
             raise AssertionError("summary sync should have been skipped while recent cache exists")
@@ -1780,7 +1779,7 @@ def test_background_sync_cycle_applies_stratz_retry_window_after_stratz_rate_lim
 
         def get_match_item_purchases(self, match_id: int):
             self.calls += 1
-            raise StratzRateLimitError("STRATZ API rate limit reached")
+            raise AssertionError("STRATZ should not be queried in OpenDota-only mode")
 
     client = _StratzRateLimitedClient()
     stratz_client = _RateLimitedStratzClient()
@@ -1834,15 +1833,7 @@ def test_background_sync_cycle_applies_stratz_retry_window_after_stratz_rate_lim
         next_pending_parse_check_at=(datetime.now(tz=timezone.utc) + timedelta(minutes=10)).isoformat(),
     )
 
-    first = service.run_background_sync_cycle(
-        player_id=123,
-        window_days=365,
-        max_detail_fetches=0,
-        max_parse_requests=0,
-        rate_limit_cooldown_seconds=50,
-        force=False,
-    )
-    second = service.run_background_sync_cycle(
+    result = service.run_background_sync_cycle(
         player_id=123,
         window_days=365,
         max_detail_fetches=0,
@@ -1852,16 +1843,13 @@ def test_background_sync_cycle_applies_stratz_retry_window_after_stratz_rate_lim
     )
     state = service.get_background_sync_state(123, window_days=365)
 
-    assert "STRATZ rate limit was hit during timing recovery." in first.note
-    assert "Waiting for the next STRATZ retry window." in second.note
+    assert "STRATZ" not in result.note
     assert state is not None
-    assert state["next_stratz_retry_at"] is not None
-    retry_at = datetime.fromisoformat(str(state["next_stratz_retry_at"]))
-    assert retry_at >= datetime.now(tz=timezone.utc) + timedelta(minutes=14)
-    assert stratz_client.calls == 1
+    assert state["next_stratz_retry_at"] is None
+    assert stratz_client.calls == 0
 
 
-def test_background_sync_cycle_persists_real_stratz_auth_error_message() -> None:
+def test_background_sync_cycle_does_not_persist_stratz_auth_errors() -> None:
     class _AuthBlockedOpenDotaClient(_FakeClient):
         def get_player_matches(self, **kwargs):
             raise AssertionError("summary sync should have been skipped while recent cache exists")
@@ -1872,7 +1860,7 @@ def test_background_sync_cycle_persists_real_stratz_auth_error_message() -> None
 
         def get_match_item_purchases(self, match_id: int):
             self.calls += 1
-            raise StratzAuthError("STRATZ API auth error 403: You cannot use different IP Addresses when using the API.")
+            raise AssertionError("STRATZ should not be queried in OpenDota-only mode")
 
     client = _AuthBlockedOpenDotaClient()
     stratz_client = _AuthBlockedStratzClient()
@@ -1936,10 +1924,10 @@ def test_background_sync_cycle_persists_real_stratz_auth_error_message() -> None
     )
     state = service.get_background_sync_state(123, window_days=365)
 
-    assert "STRATZ timing recovery is blocked by token/IP configuration." in result.note
+    assert "STRATZ" not in result.note
     assert state is not None
-    assert state["last_error"] == "STRATZ API auth error 403: You cannot use different IP Addresses when using the API."
-    assert stratz_client.calls == 1
+    assert state["last_error"] is None
+    assert stratz_client.calls == 0
 
 
 def test_background_sync_cycle_skips_stratz_when_open_dota_rate_limits_same_cycle() -> None:
@@ -1972,7 +1960,7 @@ def test_background_sync_cycle_skips_stratz_when_open_dota_rate_limits_same_cycl
     assert result.status == "rate_limited"
     assert result.rate_limited is True
     assert "OpenDota rate limit was hit during summary sync." in result.note
-    assert "Skipping STRATZ timing recovery this cycle" not in result.note
+    assert "STRATZ" not in result.note
     assert stratz_client.calls == 0
     assert runs[0]["request_targets"] == "OpenDota"
 
@@ -2088,7 +2076,7 @@ def test_background_sync_cycle_pending_refresh_does_not_call_stratz_directly() -
 
         def get_match_item_purchases(self, match_id: int):
             self.calls += 1
-            raise StratzRateLimitError("STRATZ API rate limit reached")
+            raise AssertionError("STRATZ should not be queried in OpenDota-only mode")
 
     client = _NoopOpenDotaClient()
     stratz_client = _AlwaysRateLimitedStratzClient()
@@ -2144,14 +2132,13 @@ def test_background_sync_cycle_pending_refresh_does_not_call_stratz_directly() -
 
     assert result.status == "completed"
     assert result.rate_limited is False
-    assert "STRATZ rate limit was hit while checking pending replay parses." not in result.note
-    assert "STRATZ rate limit was hit during timing recovery." in result.note
+    assert "STRATZ" not in result.note
     assert state is not None
-    assert state["next_stratz_retry_at"] is not None
-    assert stratz_client.calls == 1
+    assert state["next_stratz_retry_at"] is None
+    assert stratz_client.calls == 0
 
 
-def test_background_sync_cycle_can_run_bounded_stratz_recovery_after_successful_opendota_pending_work() -> None:
+def test_background_sync_cycle_keeps_request_targets_opendota_only_after_pending_work() -> None:
     class _RetryingOpenDotaClient(_FakeClient):
         def get_player_matches(self, **kwargs):
             self.calls += 1
@@ -2183,7 +2170,7 @@ def test_background_sync_cycle_can_run_bounded_stratz_recovery_after_successful_
 
         def get_match_item_purchases(self, match_id: int):
             self.calls += 1
-            return []
+            raise AssertionError("STRATZ should not be queried in OpenDota-only mode")
 
     client = _RetryingOpenDotaClient()
     stratz_client = _TrackingStratzClient()
@@ -2239,8 +2226,8 @@ def test_background_sync_cycle_can_run_bounded_stratz_recovery_after_successful_
     runs = service.list_background_sync_runs(123, window_days=365, limit=1)
 
     assert result.status == "completed"
-    assert stratz_client.calls == 1
-    assert runs[0]["request_targets"] == "OpenDota, STRATZ"
+    assert stratz_client.calls == 0
+    assert runs[0]["request_targets"] == "OpenDota"
 
 
 def test_background_sync_cycle_refreshes_oldest_pending_parse_requests_first() -> None:
