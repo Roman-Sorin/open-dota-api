@@ -2676,6 +2676,75 @@ def test_background_sync_cycle_waiting_pending_rows_do_not_claim_opendota_work()
     assert "Waiting on 1 existing replay parse job(s); no additional parse requests were sent this cycle." in result.note
 
 
+def test_background_sync_cycle_tops_up_bounded_new_parse_requests_while_old_pending_remain() -> None:
+    class _PendingTopUpClient(_FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.parse_requested: list[int] = []
+
+        def get_player_matches(self, **kwargs):
+            self.calls += 1
+            return [
+                {
+                    "match_id": 9300 + offset,
+                    "start_time": 1771552800 - offset,
+                    "player_slot": 0,
+                    "radiant_win": True,
+                    "game_mode": 23,
+                    "kills": 8,
+                    "deaths": 3,
+                    "assists": 11,
+                    "duration": 1400,
+                    "hero_id": 1,
+                    "item_0": 1,
+                }
+                for offset in range(20)
+            ]
+
+        def request_match_parse(self, match_id: int) -> int | None:
+            self.parse_requested.append(match_id)
+            return 800000 + match_id
+
+    client = _PendingTopUpClient()
+    store = SQLiteMatchStore(":memory:")
+    service = DotaAnalyticsService(client=client, cache=_FakeCache(), match_store=store)
+    matches = client.get_player_matches()
+    store.upsert_player_matches(123, matches)
+    activity_at = datetime.now(tz=timezone.utc).isoformat()
+    for offset, match in enumerate(matches):
+        match_id = int(match["match_id"])
+        store.upsert_match_detail(
+            match_id,
+            {"match_id": match_id, "version": None, "players": [{"account_id": 123, "player_slot": 0, "item_0": 1}]},
+        )
+        if offset < 15:
+            store.upsert_match_parse_request(
+                match_id,
+                123,
+                status="pending",
+                parse_job_id=700000 + match_id,
+                requested_at=activity_at,
+                last_polled_at=activity_at,
+            )
+
+    result = service.run_background_sync_cycle(
+        player_id=123,
+        window_days=365,
+        max_detail_fetches=0,
+        max_parse_requests=5,
+        max_pending_parse_queue_size=25,
+        pending_parse_poll_after_seconds=300,
+        force=True,
+    )
+
+    assert result.status == "completed"
+    assert result.parse_requested == 5
+    assert result.coverage.pending_parse_count == 20
+    assert client.parse_requested == [9315, 9316, 9317, 9318, 9319]
+    assert "15 existing replay parse job(s) still remain; continuing with bounded new timing parse requests." in result.note
+    assert "Requested 5 replay parse job(s)." in result.note
+
+
 def test_background_sync_cycle_skips_pending_checks_during_quiet_period_after_recent_work() -> None:
     class _QuietPeriodClient(_FakeClient):
         def __init__(self) -> None:

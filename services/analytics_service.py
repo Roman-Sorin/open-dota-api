@@ -2494,6 +2494,7 @@ class DotaAnalyticsService:
         window_days: int = 365,
         max_detail_fetches: int = 8,
         max_parse_requests: int = 3,
+        max_pending_parse_queue_size: int = 25,
         rate_limit_cooldown_seconds: int = 600,
         pending_parse_retry_after_seconds: int = 3600,
         pending_parse_poll_after_seconds: int = 300,
@@ -2519,7 +2520,8 @@ class DotaAnalyticsService:
             started_at = self._utcnow_iso()
             finished_at = self._utcnow_iso()
             matches = self.get_cached_matches(filters)
-            stratz_retry_blocked = self._iso_is_future(str(state.get("next_stratz_retry_at") or ""))
+            stratz_enabled = self.stratz_client is not None
+            stratz_retry_blocked = stratz_enabled and self._iso_is_future(str(state.get("next_stratz_retry_at") or ""))
             stratz_result = (
                 self.backfill_item_timing_details_from_stratz(
                     player_id=player_id,
@@ -2644,7 +2646,7 @@ class DotaAnalyticsService:
         opendota_attempted_this_cycle = False
         rate_limited = False
         next_retry_at: str | None = None
-        next_stratz_retry_at: str | None = state.get("next_stratz_retry_at")
+        next_stratz_retry_at: str | None = state.get("next_stratz_retry_at") if self.stratz_client is not None else None
         next_pending_parse_check_at: str | None = state.get("next_pending_parse_check_at")
         note_parts: list[str] = []
         status = "completed"
@@ -2741,8 +2743,9 @@ class DotaAnalyticsService:
                         next_retry_at = self._iso_after_seconds(rate_limit_cooldown_seconds)
                         note_parts.append("OpenDota rate limit was hit during detail hydration.")
 
-            stratz_retry_blocked = self._iso_is_future(str(next_stratz_retry_at or ""))
-            allow_stratz_recovery = not rate_limited
+            stratz_enabled = self.stratz_client is not None
+            stratz_retry_blocked = stratz_enabled and self._iso_is_future(str(next_stratz_retry_at or ""))
+            allow_stratz_recovery = stratz_enabled and not rate_limited
             stratz_result = (
                 self.backfill_item_timing_details_from_stratz(
                     player_id=player_id,
@@ -2777,9 +2780,10 @@ class DotaAnalyticsService:
                     game_mode=game_mode,
                     window_days=window_days,
                 ).pending_parse_count
+                parse_queue_capacity = max(max_pending_parse_queue_size - pending_request_count, 0)
                 if pending_refresh.completed > 0:
                     note_parts.append(f"Resolved {pending_refresh.completed} pending replay parse job(s).")
-                if pending_request_count == 0 and max_parse_requests > 0:
+                if parse_queue_capacity > 0 and max_parse_requests > 0:
                     parse_candidates: list[int] = []
                     for match in matches:
                         details = self.get_match_details_if_cached(match.match_id)
@@ -2800,7 +2804,7 @@ class DotaAnalyticsService:
                         if str(parse_request.get("status") or "") == "pending":
                             continue
                         parse_candidates.append(int(match.match_id))
-                        if len(parse_candidates) >= max_parse_requests:
+                        if len(parse_candidates) >= min(max_parse_requests, parse_queue_capacity):
                             break
 
                     for match_id in parse_candidates:
@@ -2824,6 +2828,17 @@ class DotaAnalyticsService:
                             requested_at=self._utcnow_iso(),
                         )
                         parse_requested += 1
+                    new_parse_requests_submitted = parse_requested > pending_refresh.retried
+                    if pending_request_count > 0 and new_parse_requests_submitted:
+                        note_parts.append(
+                            f"{pending_request_count} existing replay parse job(s) still remain; "
+                            "continuing with bounded new timing parse requests."
+                        )
+                    elif pending_request_count > 0 and not parse_candidates:
+                        note_parts.append(
+                            f"Waiting on {pending_request_count} existing replay parse job(s); "
+                            "no additional parse requests were sent this cycle."
+                        )
                 else:
                     if pending_refresh.retried > 0:
                         note_parts.append(

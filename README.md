@@ -205,6 +205,7 @@ tests/
 - If an older parse backlog stays stuck, the sync cycle now re-requests a bounded batch of stale pending parses so the app does not sit on `150 pending` forever without submitting anything new.
 - `Database` `Sync History` notes now say whether the cycle was waiting on active parse jobs or retrying stale ones.
 - Recently retried pending parses are now rechecked before the rest of the older backlog, so `Pending Parse` drops as soon as OpenDota finishes those jobs instead of staying flat for many cycles.
+- Background sync no longer lets a small old pending-parse set block all fresh timing requests forever; it now tops up a bounded number of new OpenDota replay-parse requests while keeping the pending queue capped.
 - Fresh pending parses are no longer re-polled from OpenDota on every 15-second auto cycle. The app now waits before polling and only then rechecks OpenDota so the background page does not create self-inflicted rate limits.
 - Pending parse requests now store the OpenDota `jobId` and poll the lighter `request/{jobId}` status path before fetching `matches/{id}` again. This keeps the background queue aligned with OpenDota's async parse flow and cuts down needless detail polling.
 - After a sync cycle already performed OpenDota work, the next pending-parse check now waits through a short quiet period instead of immediately polling again. This reduces self-inflicted `429` responses on the auto-refreshing `Database` page.
