@@ -31,6 +31,7 @@ The project includes two interfaces:
 - Dashboard summary cards: Turbo matches, wins, losses, winrate; Turbo wins are green and Turbo losses are red
 - Separate multipage `Database` view tracks cache coverage for one player's Turbo matches over a rolling window (default `365` days)
 - `Database` shows match-level cache states, replay-parse backlog, recent sync-cycle history, cooldown state after 429s, and the contiguous date range that is already fully cached
+- `Database` Cached Matches shows a compact rectangular hero portrait immediately before the Hero name, matching the dashboard portrait treatment
 - `Database` can run one bounded cache-fill cycle per refresh and optionally auto-run while that page remains open
 - `Database` auto-fill now uses browser-bound page reruns for reliability on Streamlit Cloud, so the data section is always rendered even when fragment rendering is unstable
 - `Database` auto-fill is now driven by a tiny `st.fragment(run_every=...)` timer that requests a full app rerun; the next full page pass performs one sync cycle

@@ -21,7 +21,7 @@ from utils.exceptions import OpenDotaError, OpenDotaRateLimitError, ValidationEr
 from utils.config import is_persistent_match_store_configured
 from utils.helpers import format_duration, parse_player_id, unix_to_dt
 from webapp.app_runtime import build_service, get_app_version, get_google_drive_snapshot_status, get_store_warning
-from webapp.fallback_tables import build_shared_table_css, build_table_fragment
+from webapp.fallback_tables import build_hero_portrait_html, build_shared_table_css, build_table_fragment
 
 ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 DATABASE_UI_VERSION = "v3"
@@ -195,6 +195,7 @@ def _render_match_table(rows: list[Any], service) -> None:
     headers = [
         {"label": "Match ID", "type": "integer"},
         {"label": "Played", "type": "datetime"},
+        {"label": "Hero Icon", "type": "icon"},
         {"label": "Hero", "type": "hero"},
         {"label": "Result", "type": "result"},
         {"label": "K/D/A", "type": "kda_text"},
@@ -206,7 +207,9 @@ def _render_match_table(rows: list[Any], service) -> None:
     ]
     table_rows: list[str] = []
     for row in rows:
-        hero_name = html.escape(service.resolve_hero_name(row.hero_id))
+        hero_name_raw = service.resolve_hero_name(row.hero_id)
+        hero_name = html.escape(hero_name_raw)
+        hero_icon = build_hero_portrait_html(service.resolve_hero_image(row.hero_id), hero_name_raw)
         result = "Win" if ((row.player_slot < 128 and row.radiant_win) or (row.player_slot >= 128 and not row.radiant_win)) else "Loss"
         result_html = (
             f'<span style="font-weight:700;color:{"#23a55a" if result == "Win" else "#d9534f"};">{result}</span>'
@@ -215,6 +218,7 @@ def _render_match_table(rows: list[Any], service) -> None:
             "<tr>"
             f'<td class="col-num">{row.match_id}</td>'
             f'<td class="col-datetime">{html.escape(_format_match_time(row.start_time))}</td>'
+            f'<td class="col-icon">{hero_icon}</td>'
             f'<td class="col-hero">{hero_name}</td>'
             f'<td class="col-result">{result_html}</td>'
             f'<td class="col-kda-text">{row.kills}/{row.deaths}/{row.assists}</td>'
