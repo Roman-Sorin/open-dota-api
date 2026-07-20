@@ -15,6 +15,7 @@ Prevent cached match data from disappearing after Streamlit Cloud reboot, redepl
 - Use Google Drive as durable snapshot storage for the SQLite file.
 - Restore the latest SQLite snapshot on startup when available.
 - Upload refreshed SQLite snapshots after cache writes and at the end of sync cycles.
+- Before uploading, compare the Drive generation and file size with the local working copy. If Drive was changed outside the app or is materially larger, block the upload rather than overwriting a recovery snapshot with stale local data.
 - Keep `DATABASE_URL` support only as a secondary backend path, not the primary recommendation.
 
 ## Why Google Drive snapshot storage
@@ -38,3 +39,9 @@ Prevent cached match data from disappearing after Streamlit Cloud reboot, redepl
 
 - Add `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` and `GOOGLE_DRIVE_FOLDER_ID` to Streamlit app secrets.
 - After that, reboot/redeploy should no longer wipe the critical cache because the app can restore the last uploaded SQLite snapshot.
+
+## Recovery and overwrite safety
+
+- A Drive version restored manually does not change an already running Streamlit worker's local SQLite file. Reboot the app after selecting the intended Drive version so its fresh runtime downloads that version.
+- Do not press dashboard refresh before that reboot: a running worker can otherwise upload its stale local cache.
+- The Database page surfaces a blocked upload when Drive was changed elsewhere or holds a materially larger snapshot. This is intentional fail-closed behavior; keep both files and explicitly choose the recovery source.

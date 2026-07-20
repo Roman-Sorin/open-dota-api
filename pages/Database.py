@@ -140,6 +140,13 @@ def _render_snapshot_status() -> None:
             "A snapshot upload happens only after SQLite writes or an explicit forced flush. "
             "`Refresh Turbo Dashboard` now forces a snapshot upload after a successful refresh."
         )
+        upload_blocked_reason = str(status.get("upload_blocked_reason") or "")
+        if upload_blocked_reason:
+            st.error(
+                f"Snapshot upload blocked: {upload_blocked_reason} "
+                "The remote snapshot was preserved. Restore it explicitly by rebooting the app after confirming "
+                "the intended Google Drive version."
+            )
         st.code(
             "\n".join(
                 [
@@ -147,6 +154,8 @@ def _render_snapshot_status() -> None:
                     f"Local meta path: {status.get('meta_path')}",
                     f"Meta file present: {'yes' if bool(status.get('meta_exists')) else 'no'}",
                     f"Meta snapshot name: {status.get('meta_snapshot_name') or '-'}",
+                    f"Remote snapshot size: {int(status.get('remote_size_bytes') or 0):,} bytes",
+                    f"Remote snapshot modified: {status.get('remote_modified_time') or '-'}",
                     f"DATABASE_URL configured: {'yes' if bool(status.get('database_url_configured')) else 'no'}",
                 ]
             )

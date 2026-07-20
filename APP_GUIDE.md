@@ -59,6 +59,7 @@ The project includes two interfaces:
 - Mixed-runtime Streamlit reloads now still recognize temporary OpenDota exceptions during refresh, so cached-dashboard fallback remains active instead of showing a generic `Unexpected error`
 - If the player's Turbo cache already exists locally, dashboard refresh no longer requires a separate OpenDota player-profile lookup before rebuilding the view
 - If the current cached snapshot still lacks required match details for some heroes, the app does not render that overview as valid data and tells you to rebuild the snapshot
+- Google Drive snapshot uploads fail closed when the remote file was changed outside the running app or is materially larger than the local SQLite file; the Database page reports the block instead of silently overwriting the remote recovery copy
 - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild the selected hero sections from the currently loaded dashboard snapshot
 - Selected-hero refresh actions are grouped into one shared action bar above the detail sections, including `Refresh Matchups`
 - Selected-hero sections restore independently from cache across reruns; refreshing one section must not hide another already loaded section for the same hero snapshot

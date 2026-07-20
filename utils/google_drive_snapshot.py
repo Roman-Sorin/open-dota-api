@@ -56,6 +56,9 @@ class GoogleDriveSnapshotManager:
                 "file_id": str(remote["id"]),
                 "last_uploaded_at": datetime.now(tz=timezone.utc).isoformat(),
                 "snapshot_name": self._snapshot_name,
+                "remote_modified_time": str(remote.get("modifiedTime") or ""),
+                "remote_size_bytes": int(remote.get("size") or 0),
+                "remote_md5_checksum": str(remote.get("md5Checksum") or ""),
             }
         )
         return True
@@ -69,17 +72,31 @@ class GoogleDriveSnapshotManager:
         from googleapiclient.http import MediaFileUpload
 
         file_id = self._current_file_id()
+        remote = self._get_remote_file(file_id) if file_id else None
+        if remote and self._remote_snapshot_must_not_be_overwritten(remote):
+            return False
         media = MediaFileUpload(str(self._local_db_path), mimetype="application/x-sqlite3", resumable=True)
         if file_id:
-            response = self._service.files().update(fileId=file_id, media_body=media).execute()
+            response = self._service.files().update(
+                fileId=file_id,
+                media_body=media,
+                fields="id,modifiedTime,size,md5Checksum",
+            ).execute()
         else:
             metadata = {"name": self._snapshot_name, "parents": [self._folder_id]}
-            response = self._service.files().create(body=metadata, media_body=media, fields="id").execute()
+            response = self._service.files().create(
+                body=metadata,
+                media_body=media,
+                fields="id,modifiedTime,size,md5Checksum",
+            ).execute()
         self._write_meta(
             {
                 "file_id": str(response["id"]),
                 "last_uploaded_at": datetime.now(tz=timezone.utc).isoformat(),
                 "snapshot_name": self._snapshot_name,
+                "remote_modified_time": str(response.get("modifiedTime") or ""),
+                "remote_size_bytes": int(response.get("size") or 0),
+                "remote_md5_checksum": str(response.get("md5Checksum") or ""),
             }
         )
         return True
@@ -90,12 +107,57 @@ class GoogleDriveSnapshotManager:
         response = self._service.files().list(
             q=query,
             spaces="drive",
-            fields="files(id,name,modifiedTime)",
+            fields="files(id,name,modifiedTime,size,md5Checksum)",
             pageSize=1,
             orderBy="modifiedTime desc",
         ).execute()
         files = response.get("files") or []
         return files[0] if files else None
+
+    def _get_remote_file(self, file_id: str) -> dict[str, Any] | None:
+        try:
+            return self._service.files().get(
+                fileId=file_id,
+                fields="id,name,modifiedTime,size,md5Checksum",
+            ).execute()
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _remote_snapshot_must_not_be_overwritten(self, remote: dict[str, Any]) -> bool:
+        """Fail closed when Drive was changed elsewhere or contains materially more data.
+
+        A Streamlit worker can keep an old local SQLite file after a user restores a
+        newer Drive version.  Uploading that old file would immediately undo the
+        recovery, so preserve both versions and require an explicit restore/reboot.
+        """
+        meta = self._read_meta()
+        remote_modified = str(remote.get("modifiedTime") or "")
+        known_modified = str(meta.get("remote_modified_time") or "")
+        remote_size = int(remote.get("size") or 0)
+        local_size = self._local_db_path.stat().st_size
+        reason: str | None = None
+        if known_modified and remote_modified and known_modified != remote_modified:
+            reason = "Google Drive snapshot changed outside this app; upload was blocked to protect it."
+        elif remote_size > max(int(local_size * 1.2), local_size + 1_048_576):
+            reason = (
+                "Google Drive snapshot is materially larger than the local database; "
+                "upload was blocked to prevent data loss."
+            )
+        if reason is None:
+            return False
+        meta.update(
+            {
+                "file_id": str(remote.get("id") or meta.get("file_id") or ""),
+                "snapshot_name": self._snapshot_name,
+                "remote_modified_time": remote_modified,
+                "remote_size_bytes": remote_size,
+                "remote_md5_checksum": str(remote.get("md5Checksum") or ""),
+                "upload_blocked_reason": reason,
+                "upload_blocked_at": datetime.now(tz=timezone.utc).isoformat(),
+            }
+        )
+        self._write_meta(meta)
+        return True
 
     def _upload_is_due(self) -> bool:
         meta = self._read_meta()

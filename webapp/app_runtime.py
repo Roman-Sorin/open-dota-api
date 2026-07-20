@@ -76,6 +76,10 @@ def get_google_drive_snapshot_status() -> dict[str, object]:
         "meta_exists": meta_path.exists(),
         "file_id": str(meta.get("file_id") or ""),
         "last_uploaded_at": str(meta.get("last_uploaded_at") or ""),
+        "remote_modified_time": str(meta.get("remote_modified_time") or ""),
+        "remote_size_bytes": int(meta.get("remote_size_bytes") or 0),
+        "upload_blocked_reason": str(meta.get("upload_blocked_reason") or ""),
+        "upload_blocked_at": str(meta.get("upload_blocked_at") or ""),
         "meta_snapshot_name": str(meta.get("snapshot_name") or ""),
     }
 
