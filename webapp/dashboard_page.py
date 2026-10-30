@@ -2473,7 +2473,6 @@ top_html = "".join(
 )
 st.markdown(f'<div class="metrics-wrap">{top_html}</div>', unsafe_allow_html=True)
 
-st.markdown("### Hero Overview")
 filtered_overview = [row for row in overview if int(row["matches"]) >= min_hero_matches]
 
 if not filtered_overview:
@@ -2483,39 +2482,6 @@ if not filtered_overview:
 hero_table = [build_hero_overview_row(row) for row in filtered_overview]
 hero_rows_by_id = {int(row["hero_id"]): row for row in filtered_overview}
 hero_ids = list(hero_rows_by_id.keys())
-
-if USE_HTML_TABLE_FALLBACK:
-    _render_hero_overview_table_html(filtered_overview)
-else:
-    hero_table_df = pd.DataFrame(hero_table, columns=HERO_OVERVIEW_COLUMN_ORDER)
-    hero_table_styler = hero_table_df.style
-    if not hero_table_df.empty:
-        hero_table_styler = apply_cell_style(
-            hero_table_styler,
-            lambda _: "color: #23a55a; font-weight: 700;",
-            subset=[HERO_WINS_COLUMN],
-        )
-        hero_table_styler = apply_cell_style(
-            hero_table_styler,
-            lambda _: "color: #d9534f; font-weight: 700;",
-            subset=[HERO_LOSSES_COLUMN],
-        )
-        hero_table_styler = apply_cell_style(
-            hero_table_styler,
-            _style_winrate_cell,
-            subset=["WR", "Rad WR", "Dire WR"],
-        )
-
-    st.dataframe(
-        hero_table_styler,
-        width="stretch",
-        hide_index=True,
-        row_height=HERO_TABLE_ROW_HEIGHT_PX,
-        column_config={
-            "Icon": st.column_config.ImageColumn("Hero", help="Hero icon", width=HERO_PORTRAIT_COLUMN_WIDTH_PX),
-        },
-    )
-
 
 def _hero_option_label(hero_id: int) -> str:
     row = hero_rows_by_id[hero_id]
@@ -2548,6 +2514,39 @@ st.markdown(
     ),
     unsafe_allow_html=True,
 )
+
+st.markdown("### Hero Overview")
+if USE_HTML_TABLE_FALLBACK:
+    _render_hero_overview_table_html(filtered_overview)
+else:
+    hero_table_df = pd.DataFrame(hero_table, columns=HERO_OVERVIEW_COLUMN_ORDER)
+    hero_table_styler = hero_table_df.style
+    if not hero_table_df.empty:
+        hero_table_styler = apply_cell_style(
+            hero_table_styler,
+            lambda _: "color: #23a55a; font-weight: 700;",
+            subset=[HERO_WINS_COLUMN],
+        )
+        hero_table_styler = apply_cell_style(
+            hero_table_styler,
+            lambda _: "color: #d9534f; font-weight: 700;",
+            subset=[HERO_LOSSES_COLUMN],
+        )
+        hero_table_styler = apply_cell_style(
+            hero_table_styler,
+            _style_winrate_cell,
+            subset=["WR", "Rad WR", "Dire WR"],
+        )
+
+    st.dataframe(
+        hero_table_styler,
+        width="stretch",
+        hide_index=True,
+        row_height=HERO_TABLE_ROW_HEIGHT_PX,
+        column_config={
+            "Icon": st.column_config.ImageColumn("Hero", help="Hero icon", width=HERO_PORTRAIT_COLUMN_WIDTH_PX),
+        },
+    )
 
 dashboard_loaded_at = st.session_state.get("dashboard_loaded_at")
 current_hero_snapshot_key = build_hero_snapshot_request_key(
@@ -2599,6 +2598,9 @@ if not hero_matches_loaded:
         )
     except Exception:  # noqa: BLE001
         hero_matches_loaded = False
+
+recent_section_container = st.container()
+item_section_container = st.container()
 
 st.caption("Selected hero actions")
 action_col_0, action_col_1, action_col_2, action_col_3, action_col_4 = st.columns(5)
@@ -2878,378 +2880,380 @@ if isinstance(matchup_rows, dict):
 else:
     st.info("Matchups use cached match details only. Use the hero action bar above to build selected-hero and global With/Against tables from already cached matches.")
 
-if load_all_sections or load_item_winrates:
-    try:
-        _mark_section_visible("item", current_item_request_key)
-        matches = _load_selected_hero_matches(
-            service,
-            player_id,
-            selected_hero_id,
-            selected_hero_name,
-            days,
-            active_patches,
-            active_start_date,
-            current_hero_snapshot_key,
-        )
-        item_snapshot_payload = _get_item_winrate_snapshot_safe(
-            service,
-            player_id=player_id,
-            matches=matches,
-            top_n=50,
-            allow_detail_fetch=False,
-        )
-        item_wr_rows = [row for row in item_snapshot_payload["rows"] if int(row["matches_with_item"]) >= min_item_matches]
-        item_wr_rows.sort(
-            key=lambda row: (
-                -round(float(row.get("item_winrate", 0.0))),
-                -int(row.get("matches_with_item", 0)),
-                -int(row.get("wins_with_item", 0)),
-                str(row.get("item", "")),
+with item_section_container:
+    if load_all_sections or load_item_winrates:
+        try:
+            _mark_section_visible("item", current_item_request_key)
+            matches = _load_selected_hero_matches(
+                service,
+                player_id,
+                selected_hero_id,
+                selected_hero_name,
+                days,
+                active_patches,
+                active_start_date,
+                current_hero_snapshot_key,
             )
-        )
-        item_snapshot_payload["rows"] = item_wr_rows
-        _cache_set("item_rows_by_key", current_item_request_key, item_snapshot_payload)
-        _cache_set("item_loaded_at_by_key", current_item_request_key, _utcnow_iso())
-        _set_current_section_snapshot("item", current_item_request_key, item_snapshot_payload)
-    except Exception as exc:  # noqa: BLE001
-        show_error(exc)
+            item_snapshot_payload = _get_item_winrate_snapshot_safe(
+                service,
+                player_id=player_id,
+                matches=matches,
+                top_n=50,
+                allow_detail_fetch=False,
+            )
+            item_wr_rows = [row for row in item_snapshot_payload["rows"] if int(row["matches_with_item"]) >= min_item_matches]
+            item_wr_rows.sort(
+                key=lambda row: (
+                    -round(float(row.get("item_winrate", 0.0))),
+                    -int(row.get("matches_with_item", 0)),
+                    -int(row.get("wins_with_item", 0)),
+                    str(row.get("item", "")),
+                )
+            )
+            item_snapshot_payload["rows"] = item_wr_rows
+            _cache_set("item_rows_by_key", current_item_request_key, item_snapshot_payload)
+            _cache_set("item_loaded_at_by_key", current_item_request_key, _utcnow_iso())
+            _set_current_section_snapshot("item", current_item_request_key, item_snapshot_payload)
+        except Exception as exc:  # noqa: BLE001
+            show_error(exc)
 
-st.markdown("### Item Winrates")
-st.caption("Counts use final inventory only. Cached match details can add backpack items; summary-only matches fall back to final slots.")
-item_snapshot_payload = _cache_get("item_rows_by_key", current_item_request_key)
-if isinstance(item_snapshot_payload, dict) and _item_snapshot_uses_legacy_purchase_logic(item_snapshot_payload):
-    item_snapshot_payload = None
-if item_snapshot_payload is None:
-    item_snapshot_payload = _get_current_section_snapshot("item", current_item_request_key)
+    st.markdown("### Item Win Rates")
+    st.caption("Counts use final inventory only. Cached match details can add backpack items; summary-only matches fall back to final slots.")
+    item_snapshot_payload = _cache_get("item_rows_by_key", current_item_request_key)
     if isinstance(item_snapshot_payload, dict) and _item_snapshot_uses_legacy_purchase_logic(item_snapshot_payload):
         item_snapshot_payload = None
-    if item_snapshot_payload is not None:
-        _cache_set("item_rows_by_key", current_item_request_key, item_snapshot_payload)
-if item_snapshot_payload is None and _is_section_visible("item", current_item_request_key):
-    try:
-        matches = _load_selected_hero_matches(
-            service,
-            player_id,
-            selected_hero_id,
-            selected_hero_name,
-            days,
-            active_patches,
-            active_start_date,
-            current_hero_snapshot_key,
-        )
-        item_snapshot_payload = _get_item_winrate_snapshot_safe(
-            service,
-            player_id=player_id,
-            matches=matches,
-            top_n=50,
-            allow_detail_fetch=False,
-        )
-        item_wr_rows = [row for row in item_snapshot_payload["rows"] if int(row["matches_with_item"]) >= min_item_matches]
-        item_wr_rows.sort(
-            key=lambda row: (
-                -round(float(row.get("item_winrate", 0.0))),
-                -int(row.get("matches_with_item", 0)),
-                -int(row.get("wins_with_item", 0)),
-                str(row.get("item", "")),
+    if item_snapshot_payload is None:
+        item_snapshot_payload = _get_current_section_snapshot("item", current_item_request_key)
+        if isinstance(item_snapshot_payload, dict) and _item_snapshot_uses_legacy_purchase_logic(item_snapshot_payload):
+            item_snapshot_payload = None
+        if item_snapshot_payload is not None:
+            _cache_set("item_rows_by_key", current_item_request_key, item_snapshot_payload)
+    if item_snapshot_payload is None and _is_section_visible("item", current_item_request_key):
+        try:
+            matches = _load_selected_hero_matches(
+                service,
+                player_id,
+                selected_hero_id,
+                selected_hero_name,
+                days,
+                active_patches,
+                active_start_date,
+                current_hero_snapshot_key,
             )
-        )
-        item_snapshot_payload["rows"] = item_wr_rows
-        _cache_set("item_rows_by_key", current_item_request_key, item_snapshot_payload)
-        _set_current_section_snapshot("item", current_item_request_key, item_snapshot_payload)
-    except Exception:
-        item_snapshot_payload = None
-item_loaded_at = _cache_get("item_loaded_at_by_key", current_item_request_key)
-item_section_stale = _is_section_stale(
-    str(item_loaded_at) if item_loaded_at is not None else None,
-    str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
-)
-if isinstance(item_snapshot_payload, dict):
-    item_wr_rows = item_snapshot_payload.get("rows") if isinstance(item_snapshot_payload.get("rows"), list) else []
-    item_note = str(item_snapshot_payload.get("note") or "")
-    item_is_complete = bool(item_snapshot_payload.get("is_complete"))
-    if item_section_stale:
-        st.caption("Item stats were loaded before the latest dashboard refresh. Use the hero action bar above to rebuild this section from the current dashboard snapshot.")
-    if item_note:
-        if item_is_complete:
-            st.caption(item_note)
-        else:
-            st.warning(item_note)
-    if item_wr_rows:
-        item_table_html, item_table_height = _render_sortable_item_winrates_table(item_wr_rows)
-        components.html(
-            item_table_html,
-            height=item_table_height,
-            scrolling=False,
-        )
-    else:
-        st.info("No items satisfy current minimum matches threshold.")
-else:
-    st.info("Item stats stay cached per hero/filter during the session. Use the hero action bar above to build this section from the current dashboard snapshot.")
-
-recent_matches_key = recent_matches_state_key(selected_hero_id, days, active_patches, active_start_date)
-if recent_matches_key not in st.session_state:
-    st.session_state[recent_matches_key] = 10
-
-if load_all_sections or load_recent_matches:
-    try:
-        _mark_section_visible("recent", current_recent_request_key)
-        matches = _load_selected_hero_matches(
-            service,
-            player_id,
-            selected_hero_id,
-            selected_hero_name,
-            days,
-            active_patches,
-            active_start_date,
-            current_hero_snapshot_key,
-        )
-        visible_recent_matches = int(st.session_state[recent_matches_key])
-        recent_rows = service.build_recent_hero_matches(
-            player_id=player_id,
-            matches=matches,
-            limit=min(visible_recent_matches, len(matches)),
-            allow_detail_fetch=False,
-        )
-        recent_rows = _augment_recent_rows_with_cached_buffs(
-            service,
-            player_id=player_id,
-            matches=matches,
-            recent_rows=recent_rows,
-        )
-        _store_recent_section_snapshot(
-            current_recent_request_key,
-            recent_rows,
-            visible_recent_matches=visible_recent_matches,
-        )
-    except Exception as exc:  # noqa: BLE001
-        show_error(exc)
-
-st.markdown("### Hero Matches - Recent Matches for Hero")
-repair_recent_item_timings = st.button("Repair Missing Item Timings via OpenDota Parse")
-if repair_recent_item_timings:
-    try:
-        matches = _load_selected_hero_matches(
-            service,
-            player_id,
-            selected_hero_id,
-            selected_hero_name,
-            days,
-            active_patches,
-            active_start_date,
-            current_hero_snapshot_key,
-        )
-        visible_recent_matches = int(st.session_state[recent_matches_key])
-        repair_status = service.repair_recent_match_item_timings(
-            player_id=player_id,
-            matches=matches,
-            limit=min(visible_recent_matches, len(matches)),
-        )
-        recent_match_rows = service.build_recent_hero_matches(
-            player_id=player_id,
-            matches=matches,
-            limit=min(visible_recent_matches, len(matches)),
-            allow_detail_fetch=False,
-        )
-        recent_match_rows = _augment_recent_rows_with_cached_buffs(
-            service,
-            player_id=player_id,
-            matches=matches,
-            recent_rows=recent_match_rows,
-        )
-        _mark_section_visible("recent", current_recent_request_key)
-        _store_recent_section_snapshot(
-            current_recent_request_key,
-            recent_match_rows,
-            visible_recent_matches=visible_recent_matches,
-        )
-        if repair_status.completed > 0:
-            st.success(
-                f"Repaired item timings for {repair_status.completed} recent match(es)."
+            item_snapshot_payload = _get_item_winrate_snapshot_safe(
+                service,
+                player_id=player_id,
+                matches=matches,
+                top_n=50,
+                allow_detail_fetch=False,
             )
-        elif repair_status.pending > 0:
-            st.warning(
-                f"Submitted {repair_status.submitted} OpenDota parse request(s); {repair_status.pending} match(es) are still pending parse."
+            item_wr_rows = [row for row in item_snapshot_payload["rows"] if int(row["matches_with_item"]) >= min_item_matches]
+            item_wr_rows.sort(
+                key=lambda row: (
+                    -round(float(row.get("item_winrate", 0.0))),
+                    -int(row.get("matches_with_item", 0)),
+                    -int(row.get("wins_with_item", 0)),
+                    str(row.get("item", "")),
+                )
             )
-        else:
-            st.info("Visible recent matches already had all item timings available, or OpenDota has no parseable replay timing data yet.")
-    except Exception as exc:  # noqa: BLE001
-        show_error(exc)
-recent_match_rows = _cache_get("recent_rows_by_key", current_recent_request_key)
-if recent_match_rows is None:
-    recent_match_rows = _get_current_section_snapshot("recent", current_recent_request_key)
-    if recent_match_rows is not None:
-        _cache_set("recent_rows_by_key", current_recent_request_key, recent_match_rows)
-if (recent_match_rows is None or (load and _is_section_visible("recent", current_recent_request_key))) and _is_section_visible("recent", current_recent_request_key):
-    try:
-        matches = _load_selected_hero_matches(
-            service,
-            player_id,
-            selected_hero_id,
-            selected_hero_name,
-            days,
-            active_patches,
-            active_start_date,
-            current_hero_snapshot_key,
-        )
-        visible_recent_matches = int(st.session_state[recent_matches_key])
-        recent_match_rows = service.build_recent_hero_matches(
-            player_id=player_id,
-            matches=matches,
-            limit=min(visible_recent_matches, len(matches)),
-            allow_detail_fetch=False,
-        )
-        recent_match_rows = _augment_recent_rows_with_cached_buffs(
-            service,
-            player_id=player_id,
-            matches=matches,
-            recent_rows=recent_match_rows,
-        )
-        _store_recent_section_snapshot(
-            current_recent_request_key,
-            recent_match_rows,
-            visible_recent_matches=visible_recent_matches,
-        )
-    except Exception:
-        recent_match_rows = None
-recent_loaded_at = _cache_get("recent_loaded_at_by_key", current_recent_request_key)
-recent_matches_loaded = isinstance(recent_match_rows, list)
-visible_recent_matches = int(st.session_state[recent_matches_key])
-loaded_recent_matches = int(_cache_get("recent_limit_loaded_by_key", current_recent_request_key) or 0)
-recent_section_stale = _is_section_stale(
-    str(recent_loaded_at) if recent_loaded_at is not None else None,
-    str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
-)
-
-if recent_matches_loaded and loaded_recent_matches != visible_recent_matches:
-    try:
-        matches = hero_matches or []
-        recent_match_rows = service.build_recent_hero_matches(
-            player_id=player_id,
-            matches=matches,
-            limit=min(visible_recent_matches, len(matches)),
-            allow_detail_fetch=False,
-        )
-        recent_match_rows = _augment_recent_rows_with_cached_buffs(
-            service,
-            player_id=player_id,
-            matches=matches,
-            recent_rows=recent_match_rows,
-        )
-        _store_recent_section_snapshot(
-            current_recent_request_key,
-            recent_match_rows,
-            visible_recent_matches=visible_recent_matches,
-        )
-    except Exception as exc:  # noqa: BLE001
-        show_error(exc)
-        recent_matches_loaded = False
-
-if recent_matches_loaded:
-    recent_match_rows = recent_match_rows or []
-    if recent_section_stale:
-        st.caption("Recent matches were loaded before the latest dashboard refresh. Use the hero action bar above to rebuild this section from the current dashboard snapshot.")
-    recent_rows_by_id = {int(row.match_id): row for row in recent_match_rows}
-    st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches)} matches")
-
-    table_rows_html = ""
-    for row in recent_match_rows:
-        result_class = "win" if row.result == "Win" else "loss"
-        duration_percent = duration_bar_percent(row.duration_seconds)
-        kills_pct, deaths_pct, assists_pct = kda_bar_segments(row.kills, row.deaths, row.assists)
-        tag_badges_html = _render_match_tag_badges_html(tuple(getattr(row, "user_tags", ()) or ()))
-        regular_item_html = "".join(
-            _render_item_icon_html(
-                image_url=item.item_image,
-                item_name=item.item_name,
-                timing_min=item.purchase_time_min,
-                is_buff=bool(getattr(item, "is_buff", False)),
-            )
-            for item in row.items
-            if not bool(getattr(item, "is_buff", False))
-        )
-        buff_item_html = "".join(
-            _render_item_icon_html(
-                image_url=item.item_image,
-                item_name=item.item_name,
-                timing_min=item.purchase_time_min,
-                is_buff=True,
-            )
-            for item in row.items
-            if bool(getattr(item, "is_buff", False))
-        )
-        item_html = (
-            f'<div class="recent-items-main">{regular_item_html}</div>'
-            f'<div class="recent-items-buffs">{buff_item_html}</div>'
-        ) if (regular_item_html or buff_item_html) else '<div class="recent-items-inline empty">No item data</div>'
-        table_rows_html += (
-            "<tr>"
-            '<td class="col-hero recent-hero-cell">'
-            '<div class="recent-hero-wrap">'
-            '<div class="recent-hero-icon-wrap">'
-            f'<img src="{row.hero_image}" alt="{row.hero_name}"/>'
-            f'<div class="recent-hero-level">{row.hero_level or "?"}</div>'
-            f'<div class="recent-hero-variant">{row.hero_variant or "-"}</div>'
-            "</div>"
-            "<div>"
-            f'<div class="recent-hero-name">{row.hero_name}</div>'
-            f"{tag_badges_html}"
-            "</div>"
-            "</div>"
-            "</td>"
-            f'<td class="col-result"><div class="recent-result {result_class}">{row.result} Match</div><div class="recent-when">{format_time_ago(row.started_at)}</div></td>'
-            '<td class="col-duration">'
-            f'<div class="recent-duration-value">{row.duration}</div>'
-            f'<div class="recent-bar"><div class="recent-bar-fill" style="width:{duration_percent:.1f}%"></div></div>'
-            "</td>"
-            '<td class="col-kda-text">'
-            f'<div class="recent-kda-value">{row.kills}/{row.deaths}/{row.assists}</div>'
-            '<div class="recent-kda-bar">'
-            f'<div class="recent-kda-kills" style="width:{kills_pct:.1f}%"></div>'
-            f'<div class="recent-kda-deaths" style="width:{deaths_pct:.1f}%"></div>'
-            f'<div class="recent-kda-assists" style="width:{assists_pct:.1f}%"></div>'
-            "</div>"
-            "</td>"
-            f'<td class="col-kda"><div class="recent-stat-value">{row.kda_ratio:.1f}</div></td>'
-            f'<td class="col-currency"><div class="recent-stat-value">{f"{round((row.net_worth or 0) / 1000, 1)}k" if row.net_worth else "-"}</div></td>'
-            f'<td class="col-damage"><div class="recent-stat-value">{f"{round((row.hero_damage or 0) / 1000, 1)}k" if row.hero_damage else "-"}</div></td>'
-            f'<td class="col-items"><div class="recent-items-inline">{item_html}</div></td>'
-            f'<td class="col-action"><button type="button" class="recent-action-link" data-match-id="{int(row.match_id)}">Edit Tags</button></td>'
-            "</tr>"
-        )
-
-    recent_matches_component = RECENT_MATCHES_TABLE_COMPONENT(
-        key=f"recent_matches_table_{current_recent_request_key}",
-        data={"table_rows_html": table_rows_html},
-        on_clicked_change=lambda: None,
-        height="content",
+            item_snapshot_payload["rows"] = item_wr_rows
+            _cache_set("item_rows_by_key", current_item_request_key, item_snapshot_payload)
+            _set_current_section_snapshot("item", current_item_request_key, item_snapshot_payload)
+        except Exception:
+            item_snapshot_payload = None
+    item_loaded_at = _cache_get("item_loaded_at_by_key", current_item_request_key)
+    item_section_stale = _is_section_stale(
+        str(item_loaded_at) if item_loaded_at is not None else None,
+        str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
     )
-    clicked_match_id_raw = getattr(recent_matches_component, "clicked", None)
-    try:
-        clicked_match_id = int(clicked_match_id_raw) if clicked_match_id_raw is not None else None
-    except (TypeError, ValueError):
-        clicked_match_id = None
-    if clicked_match_id is not None and clicked_match_id in recent_rows_by_id:
-        selected_recent_row = recent_rows_by_id[clicked_match_id]
-        _edit_match_tags_dialog(
-            player_id=player_id,
-            match_id=int(selected_recent_row.match_id),
-            hero_label=f"{selected_recent_row.hero_name} | Match {selected_recent_row.match_id}",
-            current_tag_labels=tuple(getattr(selected_recent_row, "user_tags", ()) or ()),
-            days=days,
-            active_patches=active_patches,
-            active_start_date=active_start_date,
-            selected_hero_id=selected_hero_id,
-            selected_hero_name=selected_hero_name,
-            current_hero_snapshot_key=current_hero_snapshot_key,
-            current_recent_request_key=current_recent_request_key,
-        )
+    if isinstance(item_snapshot_payload, dict):
+        item_wr_rows = item_snapshot_payload.get("rows") if isinstance(item_snapshot_payload.get("rows"), list) else []
+        item_note = str(item_snapshot_payload.get("note") or "")
+        item_is_complete = bool(item_snapshot_payload.get("is_complete"))
+        if item_section_stale:
+            st.caption("Item stats were loaded before the latest dashboard refresh. Use the hero action bar below to rebuild this section from the current dashboard snapshot.")
+        if item_note:
+            if item_is_complete:
+                st.caption(item_note)
+            else:
+                st.warning(item_note)
+        if item_wr_rows:
+            item_table_html, item_table_height = _render_sortable_item_winrates_table(item_wr_rows)
+            components.html(
+                item_table_html,
+                height=item_table_height,
+                scrolling=False,
+            )
+        else:
+            st.info("No items satisfy current minimum matches threshold.")
+    else:
+        st.info("Item stats stay cached per hero/filter during the session. Use the hero action bar below to build this section from the current dashboard snapshot.")
 
-    if visible_recent_matches < len(matches):
-        if st.button("Load 10 more matches", key=f"{recent_matches_key}_load_more"):
-            st.session_state[recent_matches_key] = min(visible_recent_matches + 10, len(matches))
-            st.rerun()
-else:
-    st.info("Recent matches stay cached per hero/filter during the session. Use the hero action bar above to build this section from the current dashboard snapshot.")
+with recent_section_container:
+    recent_matches_key = recent_matches_state_key(selected_hero_id, days, active_patches, active_start_date)
+    if recent_matches_key not in st.session_state:
+        st.session_state[recent_matches_key] = 10
+
+    if load_all_sections or load_recent_matches:
+        try:
+            _mark_section_visible("recent", current_recent_request_key)
+            matches = _load_selected_hero_matches(
+                service,
+                player_id,
+                selected_hero_id,
+                selected_hero_name,
+                days,
+                active_patches,
+                active_start_date,
+                current_hero_snapshot_key,
+            )
+            visible_recent_matches = int(st.session_state[recent_matches_key])
+            recent_rows = service.build_recent_hero_matches(
+                player_id=player_id,
+                matches=matches,
+                limit=min(visible_recent_matches, len(matches)),
+                allow_detail_fetch=False,
+            )
+            recent_rows = _augment_recent_rows_with_cached_buffs(
+                service,
+                player_id=player_id,
+                matches=matches,
+                recent_rows=recent_rows,
+            )
+            _store_recent_section_snapshot(
+                current_recent_request_key,
+                recent_rows,
+                visible_recent_matches=visible_recent_matches,
+            )
+        except Exception as exc:  # noqa: BLE001
+            show_error(exc)
+
+    st.markdown("### Hero Recent Matches")
+    repair_recent_item_timings = st.button("Repair Missing Item Timings via OpenDota Parse")
+    if repair_recent_item_timings:
+        try:
+            matches = _load_selected_hero_matches(
+                service,
+                player_id,
+                selected_hero_id,
+                selected_hero_name,
+                days,
+                active_patches,
+                active_start_date,
+                current_hero_snapshot_key,
+            )
+            visible_recent_matches = int(st.session_state[recent_matches_key])
+            repair_status = service.repair_recent_match_item_timings(
+                player_id=player_id,
+                matches=matches,
+                limit=min(visible_recent_matches, len(matches)),
+            )
+            recent_match_rows = service.build_recent_hero_matches(
+                player_id=player_id,
+                matches=matches,
+                limit=min(visible_recent_matches, len(matches)),
+                allow_detail_fetch=False,
+            )
+            recent_match_rows = _augment_recent_rows_with_cached_buffs(
+                service,
+                player_id=player_id,
+                matches=matches,
+                recent_rows=recent_match_rows,
+            )
+            _mark_section_visible("recent", current_recent_request_key)
+            _store_recent_section_snapshot(
+                current_recent_request_key,
+                recent_match_rows,
+                visible_recent_matches=visible_recent_matches,
+            )
+            if repair_status.completed > 0:
+                st.success(
+                    f"Repaired item timings for {repair_status.completed} recent match(es)."
+                )
+            elif repair_status.pending > 0:
+                st.warning(
+                    f"Submitted {repair_status.submitted} OpenDota parse request(s); {repair_status.pending} match(es) are still pending parse."
+                )
+            else:
+                st.info("Visible recent matches already had all item timings available, or OpenDota has no parseable replay timing data yet.")
+        except Exception as exc:  # noqa: BLE001
+            show_error(exc)
+    recent_match_rows = _cache_get("recent_rows_by_key", current_recent_request_key)
+    if recent_match_rows is None:
+        recent_match_rows = _get_current_section_snapshot("recent", current_recent_request_key)
+        if recent_match_rows is not None:
+            _cache_set("recent_rows_by_key", current_recent_request_key, recent_match_rows)
+    if (recent_match_rows is None or (load and _is_section_visible("recent", current_recent_request_key))) and _is_section_visible("recent", current_recent_request_key):
+        try:
+            matches = _load_selected_hero_matches(
+                service,
+                player_id,
+                selected_hero_id,
+                selected_hero_name,
+                days,
+                active_patches,
+                active_start_date,
+                current_hero_snapshot_key,
+            )
+            visible_recent_matches = int(st.session_state[recent_matches_key])
+            recent_match_rows = service.build_recent_hero_matches(
+                player_id=player_id,
+                matches=matches,
+                limit=min(visible_recent_matches, len(matches)),
+                allow_detail_fetch=False,
+            )
+            recent_match_rows = _augment_recent_rows_with_cached_buffs(
+                service,
+                player_id=player_id,
+                matches=matches,
+                recent_rows=recent_match_rows,
+            )
+            _store_recent_section_snapshot(
+                current_recent_request_key,
+                recent_match_rows,
+                visible_recent_matches=visible_recent_matches,
+            )
+        except Exception:
+            recent_match_rows = None
+    recent_loaded_at = _cache_get("recent_loaded_at_by_key", current_recent_request_key)
+    recent_matches_loaded = isinstance(recent_match_rows, list)
+    visible_recent_matches = int(st.session_state[recent_matches_key])
+    loaded_recent_matches = int(_cache_get("recent_limit_loaded_by_key", current_recent_request_key) or 0)
+    recent_section_stale = _is_section_stale(
+        str(recent_loaded_at) if recent_loaded_at is not None else None,
+        str(dashboard_loaded_at) if dashboard_loaded_at is not None else None,
+    )
+
+    if recent_matches_loaded and loaded_recent_matches != visible_recent_matches:
+        try:
+            matches = hero_matches or []
+            recent_match_rows = service.build_recent_hero_matches(
+                player_id=player_id,
+                matches=matches,
+                limit=min(visible_recent_matches, len(matches)),
+                allow_detail_fetch=False,
+            )
+            recent_match_rows = _augment_recent_rows_with_cached_buffs(
+                service,
+                player_id=player_id,
+                matches=matches,
+                recent_rows=recent_match_rows,
+            )
+            _store_recent_section_snapshot(
+                current_recent_request_key,
+                recent_match_rows,
+                visible_recent_matches=visible_recent_matches,
+            )
+        except Exception as exc:  # noqa: BLE001
+            show_error(exc)
+            recent_matches_loaded = False
+
+    if recent_matches_loaded:
+        recent_match_rows = recent_match_rows or []
+        if recent_section_stale:
+            st.caption("Recent matches were loaded before the latest dashboard refresh. Use the hero action bar below to rebuild this section from the current dashboard snapshot.")
+        recent_rows_by_id = {int(row.match_id): row for row in recent_match_rows}
+        st.caption(f"Showing {min(visible_recent_matches, len(matches))} of {len(matches)} matches")
+
+        table_rows_html = ""
+        for row in recent_match_rows:
+            result_class = "win" if row.result == "Win" else "loss"
+            duration_percent = duration_bar_percent(row.duration_seconds)
+            kills_pct, deaths_pct, assists_pct = kda_bar_segments(row.kills, row.deaths, row.assists)
+            tag_badges_html = _render_match_tag_badges_html(tuple(getattr(row, "user_tags", ()) or ()))
+            regular_item_html = "".join(
+                _render_item_icon_html(
+                    image_url=item.item_image,
+                    item_name=item.item_name,
+                    timing_min=item.purchase_time_min,
+                    is_buff=bool(getattr(item, "is_buff", False)),
+                )
+                for item in row.items
+                if not bool(getattr(item, "is_buff", False))
+            )
+            buff_item_html = "".join(
+                _render_item_icon_html(
+                    image_url=item.item_image,
+                    item_name=item.item_name,
+                    timing_min=item.purchase_time_min,
+                    is_buff=True,
+                )
+                for item in row.items
+                if bool(getattr(item, "is_buff", False))
+            )
+            item_html = (
+                f'<div class="recent-items-main">{regular_item_html}</div>'
+                f'<div class="recent-items-buffs">{buff_item_html}</div>'
+            ) if (regular_item_html or buff_item_html) else '<div class="recent-items-inline empty">No item data</div>'
+            table_rows_html += (
+                "<tr>"
+                '<td class="col-hero recent-hero-cell">'
+                '<div class="recent-hero-wrap">'
+                '<div class="recent-hero-icon-wrap">'
+                f'<img src="{row.hero_image}" alt="{row.hero_name}"/>'
+                f'<div class="recent-hero-level">{row.hero_level or "?"}</div>'
+                f'<div class="recent-hero-variant">{row.hero_variant or "-"}</div>'
+                "</div>"
+                "<div>"
+                f'<div class="recent-hero-name">{row.hero_name}</div>'
+                f"{tag_badges_html}"
+                "</div>"
+                "</div>"
+                "</td>"
+                f'<td class="col-result"><div class="recent-result {result_class}">{row.result} Match</div><div class="recent-when">{format_time_ago(row.started_at)}</div></td>'
+                '<td class="col-duration">'
+                f'<div class="recent-duration-value">{row.duration}</div>'
+                f'<div class="recent-bar"><div class="recent-bar-fill" style="width:{duration_percent:.1f}%"></div></div>'
+                "</td>"
+                '<td class="col-kda-text">'
+                f'<div class="recent-kda-value">{row.kills}/{row.deaths}/{row.assists}</div>'
+                '<div class="recent-kda-bar">'
+                f'<div class="recent-kda-kills" style="width:{kills_pct:.1f}%"></div>'
+                f'<div class="recent-kda-deaths" style="width:{deaths_pct:.1f}%"></div>'
+                f'<div class="recent-kda-assists" style="width:{assists_pct:.1f}%"></div>'
+                "</div>"
+                "</td>"
+                f'<td class="col-kda"><div class="recent-stat-value">{row.kda_ratio:.1f}</div></td>'
+                f'<td class="col-currency"><div class="recent-stat-value">{f"{round((row.net_worth or 0) / 1000, 1)}k" if row.net_worth else "-"}</div></td>'
+                f'<td class="col-damage"><div class="recent-stat-value">{f"{round((row.hero_damage or 0) / 1000, 1)}k" if row.hero_damage else "-"}</div></td>'
+                f'<td class="col-items"><div class="recent-items-inline">{item_html}</div></td>'
+                f'<td class="col-action"><button type="button" class="recent-action-link" data-match-id="{int(row.match_id)}">Edit Tags</button></td>'
+                "</tr>"
+            )
+
+        recent_matches_component = RECENT_MATCHES_TABLE_COMPONENT(
+            key=f"recent_matches_table_{current_recent_request_key}",
+            data={"table_rows_html": table_rows_html},
+            on_clicked_change=lambda: None,
+            height="content",
+        )
+        clicked_match_id_raw = getattr(recent_matches_component, "clicked", None)
+        try:
+            clicked_match_id = int(clicked_match_id_raw) if clicked_match_id_raw is not None else None
+        except (TypeError, ValueError):
+            clicked_match_id = None
+        if clicked_match_id is not None and clicked_match_id in recent_rows_by_id:
+            selected_recent_row = recent_rows_by_id[clicked_match_id]
+            _edit_match_tags_dialog(
+                player_id=player_id,
+                match_id=int(selected_recent_row.match_id),
+                hero_label=f"{selected_recent_row.hero_name} | Match {selected_recent_row.match_id}",
+                current_tag_labels=tuple(getattr(selected_recent_row, "user_tags", ()) or ()),
+                days=days,
+                active_patches=active_patches,
+                active_start_date=active_start_date,
+                selected_hero_id=selected_hero_id,
+                selected_hero_name=selected_hero_name,
+                current_hero_snapshot_key=current_hero_snapshot_key,
+                current_recent_request_key=current_recent_request_key,
+            )
+
+        if visible_recent_matches < len(matches):
+            if st.button("Load 10 more matches", key=f"{recent_matches_key}_load_more"):
+                st.session_state[recent_matches_key] = min(visible_recent_matches + 10, len(matches))
+                st.rerun()
+    else:
+        st.info("Recent matches stay cached per hero/filter during the session. Use the hero action bar below to build this section from the current dashboard snapshot.")
 
 with st.expander("Experimental: Hero Trends", expanded=False):
     st.caption("Daily trend view for the selected hero. Kept at the bottom because this section is still experimental.")

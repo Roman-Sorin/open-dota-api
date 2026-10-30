@@ -62,7 +62,8 @@ The project includes two interfaces:
 - If the current cached snapshot still lacks required match details for some heroes, the app does not render that overview as valid data and tells you to rebuild the snapshot
 - Google Drive snapshot uploads fail closed when the remote file was changed outside the running app or is materially larger than the local SQLite file; the Database page reports the block instead of silently overwriting the remote recovery copy
 - `Refresh Hero Details`, `Refresh Item Winrates`, and `Refresh Recent Matches` rebuild the selected hero sections from the currently loaded dashboard snapshot
-- Selected-hero refresh actions are grouped into one shared action bar above the detail sections, including `Refresh Matchups`
+- Dashboard section order is `Select Hero`, `Hero Overview`, `Hero Recent Matches`, `Item Win Rates`, then the selected-hero refresh action bar, followed by detailed stats and matchups
+- Selected-hero refresh actions are grouped into one shared action bar below the recent-match and item sections, including `Refresh Matchups`
 - Selected-hero sections restore independently from cache across reruns; refreshing one section must not hide another already loaded section for the same hero snapshot
 - The action bar also includes `Refresh All Hero Sections` so all four selected-hero sections can be rebuilt in one Streamlit rerun
 - `Refresh Hero Details`, `Refresh Matchups`, `Refresh Item Winrates`, and `Refresh Recent Matches` are cache-only section rebuilds and do not issue hidden OpenDota detail fetches
