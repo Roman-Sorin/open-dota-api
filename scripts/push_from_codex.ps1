@@ -10,10 +10,11 @@ if ($LASTEXITCODE -ne 0 -or $actualRemote -ne $expectedRemote) {
     throw "This push helper only supports $expectedRemote."
 }
 
-$token = (& gh auth token).Trim()
+$token = & gh auth token
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($token)) {
     throw "GitHub CLI is not authenticated in Windows PowerShell."
 }
+$token = $token.Trim()
 
 try {
     $basicAuth = [Convert]::ToBase64String(
