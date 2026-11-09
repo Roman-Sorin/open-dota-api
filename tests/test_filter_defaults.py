@@ -1,4 +1,16 @@
-from webapp.filter_defaults import default_patch_selection, expand_selected_patch_names
+from datetime import date
+
+from webapp.filter_defaults import (
+    DEFAULT_FILTER_BASELINE_DATE,
+    DEFAULT_TIME_FILTER_MODE,
+    default_patch_selection,
+    expand_selected_patch_names,
+)
+
+
+def test_dashboard_defaults_to_september_15_start_date() -> None:
+    assert DEFAULT_TIME_FILTER_MODE == "Start Date"
+    assert DEFAULT_FILTER_BASELINE_DATE == date(2026, 9, 15)
 
 
 def test_default_patch_selection_prefers_741_family() -> None:

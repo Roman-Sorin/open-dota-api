@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from datetime import date
+
 
 DEFAULT_PATCH_BASE = "7.41"
+DEFAULT_TIME_FILTER_MODE = "Start Date"
+DEFAULT_FILTER_BASELINE_DATE = date(2026, 9, 15)
 
 
 def _patch_base(name: str) -> str:

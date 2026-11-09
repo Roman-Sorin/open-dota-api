@@ -28,7 +28,12 @@ from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateL
 from utils import helpers as helpers_module
 from webapp.app_runtime import build_service, get_app_version, get_store_warning
 from webapp.dashboard_state import build_hero_snapshot_request_key
-from webapp.filter_defaults import default_patch_selection, expand_selected_patch_names
+from webapp.filter_defaults import (
+    DEFAULT_FILTER_BASELINE_DATE,
+    DEFAULT_TIME_FILTER_MODE,
+    default_patch_selection,
+    expand_selected_patch_names,
+)
 from webapp.error_classification import (
     is_opendota_error,
     is_opendota_not_found_error,
@@ -93,7 +98,6 @@ PERMANENT_BUFF_ITEM_KEYS: dict[int, str] = {
     2: "ultimate_scepter",
     12: "aghanims_shard",
 }
-DEFAULT_FILTER_BASELINE_DATE = date(2026, 3, 24)
 USE_HTML_TABLE_FALLBACK = sys.version_info >= (3, 14)
 
 st.markdown(
@@ -2172,7 +2176,7 @@ with st.sidebar:
         value=st.session_state.get("player_raw", "1233793238"),
     )
     time_mode_options = ["Days", "Patches", "Start Date"]
-    default_mode = st.session_state.get("time_filter_mode", "Patches")
+    default_mode = st.session_state.get("time_filter_mode", DEFAULT_TIME_FILTER_MODE)
     time_filter_mode = st.radio(
         "Time filter mode",
         options=time_mode_options,
