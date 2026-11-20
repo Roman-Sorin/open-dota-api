@@ -2180,13 +2180,6 @@ if st.session_state.get("start_date") == date(2026, 9, 15):
         st.session_state["active_start_date"] = DEFAULT_FILTER_BASELINE_DATE
         _clear_detail_sections()
 
-prior_filter_state = (
-    st.session_state.get("min_match_filter_defaults_version"),
-    st.session_state.get("min_hero_matches"),
-    st.session_state.get("min_item_matches"),
-    st.session_state.get("min_hero_matches_widget"),
-    st.session_state.get("min_item_matches_widget"),
-)
 if st.session_state.get("min_match_filter_defaults_version") != 4:
     for min_matches_key in ("min_hero_matches", "min_item_matches"):
         widget_key = f"{min_matches_key}_widget"
@@ -2205,7 +2198,6 @@ for min_matches_key in ("min_hero_matches", "min_item_matches"):
 with st.sidebar:
     st.header("Filters")
     st.caption(f"Version: `{app_version}`")
-    st.caption(f"Filter state: {prior_filter_state} -> {(st.session_state.get('min_hero_matches'), st.session_state.get('min_item_matches'), st.session_state.get('min_hero_matches_widget'), st.session_state.get('min_item_matches_widget'))}")
     player_raw = st.text_input(
         "Player ID or OpenDota URL",
         value=st.session_state.get("player_raw", "1233793238"),

@@ -11,10 +11,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
+dashboard_page_path = Path(__file__).with_name("dashboard_page.py")
+
 navigation = st.navigation(
     [
         st.Page(
-            Path(__file__).with_name("dashboard_page.py"),
+            dashboard_page_path,
             title="Dashboard",
             url_path="",
             default=True,
