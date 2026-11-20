@@ -112,6 +112,7 @@ The project includes two interfaces:
 - Item winrate table is sorted by highest item winrate first (ties by larger sample)
 - Dashboard filter `Min matches per hero` defaults to `1`; sessions still holding the previous default `6` move to `1`
 - Dashboard filter `Min matches per item` defaults to `1`; sessions still holding the previous default `6` move to `1`
+- After dashboard-page deployments, check the visible filter values as well as the `Build` hash; Streamlit Cloud can report the latest commit while still serving an older page process until a dependency-file rebuild.
 - Recent hero matches are displayed as a compact table below the item table
 - Recent hero matches show saved manual match tags inline and include an in-table native `Edit Tags` button on each visible match row
 - `Recent Matches` uses the shared compact table density too, so headers stay visually attached to row values instead of drifting apart on wide screens

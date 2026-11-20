@@ -4,7 +4,7 @@
 - On this Windows Codex machine, `origin` uses the `github-open-dota-api` SSH alias with a write-enabled deploy key scoped to this repository. Repository-local `core.sshCommand` selects Windows OpenSSH, so plain `git push origin main` works from Codex without GitHub CLI credential prompts. Verify the remote hash afterward.
 - Do not leave completed code changes only in the local working tree.
 - If a change adds a new import or runtime dependency, update `requirements.txt` in the same commit before pushing.
-- After each push, verify the deployed UI shows the new `Build` hash before assuming the change is live.
+- After each push, verify the deployed UI shows the new `Build` hash and the requested behavior before assuming the change is live. A page process can remain stale even when the hash updates.
 - For user-reported stats bugs, add or update a regression test with the exact reported numbers before calling the fix complete.
 - When changing overview/stat formulas, bump the UI overview schema/version so stale Streamlit session data is forcibly refreshed.
 - After any app/UI/filter/behavior change, update the relevant `MD` documentation in the same task so the repository docs stay current.
