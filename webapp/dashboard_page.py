@@ -31,7 +31,6 @@ from webapp.dashboard_state import build_hero_snapshot_request_key
 from webapp.filter_defaults import (
     DEFAULT_FILTER_BASELINE_DATE,
     DEFAULT_TIME_FILTER_MODE,
-    PREVIOUS_FILTER_BASELINE_DATE,
     default_patch_selection,
     expand_selected_patch_names,
 )
@@ -2169,9 +2168,9 @@ def _render_sortable_item_winrates_table(item_wr_rows: list[dict[str, object]]) 
     </html>
     """, table_height
 
-if st.session_state.get("start_date") == PREVIOUS_FILTER_BASELINE_DATE:
+if st.session_state.get("start_date") == date(2026, 9, 15):
     st.session_state["start_date"] = DEFAULT_FILTER_BASELINE_DATE
-    if st.session_state.get("active_start_date") == PREVIOUS_FILTER_BASELINE_DATE:
+    if st.session_state.get("active_start_date") == date(2026, 9, 15):
         st.session_state.pop("overview", None)
         st.session_state.pop("patch_filtered_matches", None)
         st.session_state["active_start_date"] = DEFAULT_FILTER_BASELINE_DATE
