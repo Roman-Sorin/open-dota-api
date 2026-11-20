@@ -2,6 +2,7 @@ from pathlib import Path
 from bisect import bisect_right
 from datetime import date, datetime, timedelta, timezone
 import html
+import importlib
 import inspect
 import re
 import sys
@@ -28,6 +29,9 @@ from utils.exceptions import OpenDotaError, OpenDotaNotFoundError, OpenDotaRateL
 from utils import helpers as helpers_module
 from webapp.app_runtime import build_service, get_app_version, get_store_warning
 from webapp.dashboard_state import build_hero_snapshot_request_key
+from webapp import filter_defaults as filter_defaults_module
+
+importlib.reload(filter_defaults_module)
 from webapp.filter_defaults import (
     DEFAULT_FILTER_BASELINE_DATE,
     DEFAULT_TIME_FILTER_MODE,
