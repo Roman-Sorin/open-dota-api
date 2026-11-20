@@ -2180,11 +2180,15 @@ if st.session_state.get("start_date") == date(2026, 9, 15):
         st.session_state["active_start_date"] = DEFAULT_FILTER_BASELINE_DATE
         _clear_detail_sections()
 
-if st.session_state.get("min_match_filter_defaults_version") != 3:
+if st.session_state.get("min_match_filter_defaults_version") != 4:
     for min_matches_key in ("min_hero_matches", "min_item_matches"):
-        if st.session_state.get(min_matches_key) == 6:
-            st.session_state[min_matches_key] = 1
-    st.session_state["min_match_filter_defaults_version"] = 3
+        widget_key = f"{min_matches_key}_widget"
+        saved_value = st.session_state.get(min_matches_key, st.session_state.get(widget_key, 1))
+        if saved_value == 6:
+            saved_value = 1
+        st.session_state[min_matches_key] = saved_value
+        st.session_state[widget_key] = saved_value
+    st.session_state["min_match_filter_defaults_version"] = 4
 
 for min_matches_key in ("min_hero_matches", "min_item_matches"):
     widget_key = f"{min_matches_key}_widget"
@@ -2250,6 +2254,9 @@ with st.sidebar:
         key="min_item_matches_widget",
     )
     load = st.button("Refresh Turbo Dashboard", type="primary")
+
+st.session_state["min_hero_matches"] = min_hero_matches
+st.session_state["min_item_matches"] = min_item_matches
 
 if "overview" in st.session_state and st.session_state.get("overview_schema_version") != OVERVIEW_SCHEMA_VERSION:
     st.session_state.pop("overview", None)
