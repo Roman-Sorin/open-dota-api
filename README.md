@@ -13,7 +13,7 @@ Turbo-only dashboard for your account:
   - period in days, or
   - multi-select patches (e.g. `7.40`, `7.40c`, `7.39b`)
   - explicit `Start Date` mode
-  - default mode is `Start Date`, beginning `2026-09-15`; the `Days` default period uses the same baseline
+  - default mode is `Start Date`, beginning `2026-11-19`; the `Days` default period uses the same baseline
   - selecting `Patches` preselects patch family `7.41` (`7.41` plus any available `7.41x` letter patches)
 - Hero overview in Turbo (matches, won matches, lost matches, WR, avg K/D/A, avg duration, avg net worth, avg damage, KDA, max kills, max hero damage)
 - Hero overview highlights won matches in green and lost matches in red

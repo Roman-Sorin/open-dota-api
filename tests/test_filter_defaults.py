@@ -8,9 +8,9 @@ from webapp.filter_defaults import (
 )
 
 
-def test_dashboard_defaults_to_september_15_start_date() -> None:
+def test_dashboard_defaults_to_november_19_start_date() -> None:
     assert DEFAULT_TIME_FILTER_MODE == "Start Date"
-    assert DEFAULT_FILTER_BASELINE_DATE == date(2026, 9, 15)
+    assert DEFAULT_FILTER_BASELINE_DATE == date(2026, 11, 19)
 
 
 def test_default_patch_selection_prefers_741_family() -> None:

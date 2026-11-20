@@ -47,7 +47,7 @@ The project includes two interfaces:
 - `Database` exposes `Sync Speed` presets (`Safe`, `Balanced`, `Fast`) for normal use; raw detail/parse batch controls remain under `Advanced settings`
 - `Database` Postgres/Neon reads now run in autocommit mode so fresh sync runs and newly cached matches appear immediately instead of sticking to an older transaction snapshot inside a long-lived Streamlit session
 - Time filter modes: `Days`, `Patches`, `Start Date`
-- Default time filter mode is `Start Date`, beginning `2026-09-15`. The `Days` default period is calculated from the same date. Existing session filter selections remain in place until changed by the user.
+- Default time filter mode is `Start Date`, beginning `2026-11-19`. The `Days` default period is calculated from the same date. Sessions still using the previous `2026-09-15` default move to the new date; other manually selected dates remain in place.
 - When `Patches` is selected, patch family `7.41` is preselected (`7.41` plus any available `7.41x` letter patches)
 - In the `Patches` filter, the newest patch family stays letter-granular in the dropdown, while older dropdown entries stay collapsed to the base patch name but still filter across all hidden lettered subpatches in that completed family
 - Dashboard sections load manually and independently to reduce one-shot API work on page open

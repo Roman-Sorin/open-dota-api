@@ -5,7 +5,8 @@ from datetime import date
 
 DEFAULT_PATCH_BASE = "7.41"
 DEFAULT_TIME_FILTER_MODE = "Start Date"
-DEFAULT_FILTER_BASELINE_DATE = date(2026, 9, 15)
+PREVIOUS_FILTER_BASELINE_DATE = date(2026, 9, 15)
+DEFAULT_FILTER_BASELINE_DATE = date(2026, 11, 19)
 
 
 def _patch_base(name: str) -> str:
