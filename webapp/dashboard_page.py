@@ -2180,11 +2180,16 @@ if st.session_state.get("start_date") == date(2026, 9, 15):
         st.session_state["active_start_date"] = DEFAULT_FILTER_BASELINE_DATE
         _clear_detail_sections()
 
-if st.session_state.get("min_match_filter_defaults_version") != 2:
+if st.session_state.get("min_match_filter_defaults_version") != 3:
     for min_matches_key in ("min_hero_matches", "min_item_matches"):
         if st.session_state.get(min_matches_key) == 6:
             st.session_state[min_matches_key] = 1
-    st.session_state["min_match_filter_defaults_version"] = 2
+    st.session_state["min_match_filter_defaults_version"] = 3
+
+for min_matches_key in ("min_hero_matches", "min_item_matches"):
+    widget_key = f"{min_matches_key}_widget"
+    if widget_key not in st.session_state:
+        st.session_state[widget_key] = st.session_state.get(min_matches_key, 1)
 
 with st.sidebar:
     st.header("Filters")
@@ -2234,15 +2239,15 @@ with st.sidebar:
         "Min matches per hero",
         min_value=1,
         max_value=50,
-        value=st.session_state.get("min_hero_matches", 1),
         step=1,
+        key="min_hero_matches_widget",
     )
     min_item_matches = st.slider(
         "Min matches per item",
         min_value=1,
         max_value=30,
-        value=st.session_state.get("min_item_matches", 1),
         step=1,
+        key="min_item_matches_widget",
     )
     load = st.button("Refresh Turbo Dashboard", type="primary")
 
