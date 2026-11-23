@@ -904,3 +904,9 @@ CLI remains available as a secondary interface.
 - Regression coverage:
   - added `tests/test_error_classification.py`
   - test reloads `utils.exceptions` and verifies fresh exception instances are still recognized by the new classifier helpers
+
+## 2026-11-23 default hero preset update
+
+- The hero dropdown now defaults to `Wraith King` when present in the loaded overview, with the first available hero as fallback.
+- Updated the default-hero regression test and the README and app guide to match.
+

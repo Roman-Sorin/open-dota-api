@@ -45,7 +45,7 @@ Turbo-only dashboard for your account:
 - Default `Database` `Balanced` mode now uses `5` detail fetches, `5` parse requests, and a `15` second interval
 - `Cached Matches` now supports pagination with configurable page size and direct navigation to first/previous/next/last pages
 - `Database` times are shown in Israel time and the page now exposes user-facing `Sync Speed` presets (`Safe`, `Balanced`, `Fast`) instead of only raw batch knobs
-- Default selected hero is `Spectre` when that hero exists in the current overview snapshot; otherwise the first available hero is used
+- Default selected hero is `Wraith King` when that hero exists in the current overview snapshot; otherwise the first available hero is used
 - Dashboard loading is manual by section:
   - cached overview data can auto-open from local SQLite storage when available
   - `Refresh Turbo Dashboard` and the dedicated `Database` page are the only UI flows allowed to talk to OpenDota for cache sync/detail hydration

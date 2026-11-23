@@ -51,7 +51,7 @@ The project includes two interfaces:
 - When `Patches` is selected, patch family `7.41` is preselected (`7.41` plus any available `7.41x` letter patches)
 - In the `Patches` filter, the newest patch family stays letter-granular in the dropdown, while older dropdown entries stay collapsed to the base patch name but still filter across all hidden lettered subpatches in that completed family
 - Dashboard sections load manually and independently to reduce one-shot API work on page open
-- Default selected hero in the hero dropdown is `Spectre` when present in the loaded overview; otherwise the first available hero is used
+- Default selected hero in the hero dropdown is `Wraith King` when present in the loaded overview; otherwise the first available hero is used
 - If matching dashboard data already exists in local SQLite storage, the app restores Hero Overview automatically on page load for the current filters
 - `Refresh Turbo Dashboard` is cache-first: it rebuilds the hero overview from the local cache and then does one bounded OpenDota head-sync only to check whether newer matches exist
 - `Refresh Turbo Dashboard` and the dedicated `Database` page are the only UI actions that may talk to OpenDota
